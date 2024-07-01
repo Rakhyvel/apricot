@@ -3,6 +3,7 @@ const SDL = @import("sdl2");
 const Scene_Object = @import("scene.zig").Scene_Object;
 
 pub const App = struct {
+    // TODO: Actually split these up into resource structs
     // Window stuff
     title: [:0]const u8,
     width: usize,

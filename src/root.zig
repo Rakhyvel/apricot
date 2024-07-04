@@ -1,4 +1,5 @@
 pub usingnamespace @import("app.zig");
+pub usingnamespace @import("font.zig");
 pub const gui = @import("gui.zig");
 pub const scene = @import("scene.zig");
 pub const texture = @import("texture.zig");

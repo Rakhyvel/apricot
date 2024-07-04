@@ -41,6 +41,9 @@ pub const App = struct {
         });
         errdefer SDL.quit();
 
+        try SDL.ttf.init();
+        errdefer SDL.ttf.quit();
+
         var window = try SDL.createWindow(
             title,
             .{ .centered = {} },
@@ -84,6 +87,7 @@ pub const App = struct {
     pub fn deinit(self: *App) void {
         self.renderer.destroy();
         self.window.destroy();
+        SDL.ttf.quit();
         SDL.quit();
     }
 

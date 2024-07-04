@@ -27,16 +27,23 @@ pub const inactive_text_color = SDL.Color.rgb(200, 200, 200);
 pub const Gui_Component = struct {
     pos: Vector,
     size: Vector,
-    shown: bool,
+    shown: bool = true,
+    is_hovered: bool = false,
+    clicked_in: bool = false,
+    active: bool = true,
 };
 
 pub const Image_Component = struct {
     texture: SDL.Texture,
-    angle: f32,
+    angle: f32 = 0.0,
 };
 
 pub const Progress_Bar_Component = struct {
-    value: f32,
+    value: f32 = 0.0,
+};
+
+pub const Check_Box_Component = struct {
+    value: bool = false,
 };
 
 /// Registers components that are used in GUI systems.
@@ -47,6 +54,44 @@ pub fn register_components(world: *World) void {
     world.register_component(Gui_Component);
     world.register_component(Image_Component);
     world.register_component(Progress_Bar_Component);
+    world.register_component(Check_Box_Component);
+}
+
+pub fn update(world: *World) void {
+    update_check_box(world);
+}
+
+pub fn update_check_box(world: *World) void {
+    const app = world.get_resource(App);
+    var iter = world.iter(struct {
+        gui: *Gui_Component,
+        check_box: *Check_Box_Component,
+    });
+    while (iter.next()) |entity| {
+        const prev_is_hovered = entity.gui.is_hovered;
+        entity.gui.is_hovered = entity.gui.shown and
+            app.mouse_x > @as(i32, @intFromFloat(entity.gui.pos.x)) and
+            app.mouse_x <= @as(i32, @intFromFloat(entity.gui.pos.x + entity.gui.size.x)) and
+            app.mouse_y > @as(i32, @intFromFloat(entity.gui.pos.y)) and
+            app.mouse_y <= @as(i32, @intFromFloat(entity.gui.pos.y + entity.gui.size.y));
+        if (!prev_is_hovered and entity.gui.is_hovered and entity.gui.active) {
+            // Play a sound?
+            // Idk, you don't typically hear a sound when you hover over a checkbox in a form
+            // Maybe games and forms are different?
+        }
+        if (entity.gui.is_hovered and app.mouse_left_down) {
+            entity.gui.clicked_in = true;
+        }
+        if (!app.mouse_left_down) {
+            if (entity.gui.clicked_in and entity.gui.is_hovered) {
+                entity.check_box.value = !entity.check_box.value;
+                if (entity.gui.active) {
+                    // Play a sound?
+                }
+            }
+            entity.gui.clicked_in = false;
+        }
+    }
 }
 
 pub fn render(world: *World) void {

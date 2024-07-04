@@ -45,26 +45,32 @@ const Entity = struct {
     mask: Component_Mask,
 };
 
+/// A struct that allows deferred addition of entities into a world with components. This is useful in the middle of a
+/// system, where adding entities has the potential to invalidate component data pointers.
 const Lazy_Entity_Builder = struct {
     world: *World,
     id: Entity_Id,
     pool: Component_Data_Pool,
     components: std.ArrayList(Component_Pair),
-    pub const Component_Pair = struct { component_id: Component_Id, data_idx: usize };
+    const Component_Pair = struct { component_id: Component_Id, data_idx: usize };
 
-    pub fn init(self: *Lazy_Entity_Builder, world: *World, id: Entity_Id) void {
+    fn init(self: *Lazy_Entity_Builder, world: *World, id: Entity_Id) void {
         self.world = world;
         self.id = id;
         self.pool = Component_Data_Pool.init(1, world.alloc);
         self.components = std.ArrayList(Component_Pair).init(world.alloc);
+
+        self.world.lazy_entity_builders.append(self) catch @panic("whoa!");
     }
 
-    pub fn deinit(self: *Lazy_Entity_Builder) void {
+    fn deinit(self: *Lazy_Entity_Builder) void {
         self.pool.deinit();
         self.components.deinit();
         self.world.alloc.destroy(self);
     }
 
+    /// Specifies component data that should be associated with the entity when it is created. Returns the pointer to
+    /// the builder, for a nice pipeline pattern
     pub fn with(self: *Lazy_Entity_Builder, data: anytype) *Lazy_Entity_Builder {
         const component_id = self.world.get_component_id(@TypeOf(data));
         var mut_data = data;
@@ -79,17 +85,16 @@ const Lazy_Entity_Builder = struct {
         return self;
     }
 
-    pub fn build(self: *Lazy_Entity_Builder) Entity_Id {
-        const retval = self.id;
-        self.world.lazy_entity_builders.append(self) catch @panic("whoa");
-        return retval;
+    /// Returns the ID of the entity being constructed
+    pub fn entity_id(self: *Lazy_Entity_Builder) Entity_Id {
+        return self.id;
     }
 };
 
 /// Provides:
 /// - Contiguous storage
 /// - Fast O(1) access of data pointer given Entity_Id
-/// - Unlikely to invalidate pointers on resize
+/// - Unlikely to invalidate pointers on resize (impossible when using lazy entity builders)
 /// - Not a fixed buffer size
 const Component_Data_Pool = struct {
     data: std.ArrayList(u8),
@@ -218,7 +223,7 @@ pub const World = struct {
         return @alignCast(@ptrCast(self.resource_map.get(resource_type_uid).?));
     }
 
-    pub fn new_entity(self: *World) Entity_Id {
+    fn new_entity(self: *World) Entity_Id {
         if (self.free_indices.items.len != 0) {
             const index = self.free_indices.pop();
             var entity = &self.entities.items[index];

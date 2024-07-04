@@ -10,7 +10,7 @@ const font_ = @import("font.zig");
 // x Progress bar
 // x Check box
 // x Label
-// - Rocker switch
+// x Rocker switch
 // - Slider
 // - Radio button group
 // - Container
@@ -28,13 +28,15 @@ pub const error_color = SDL.Color.rgb(250, 80, 80);
 pub const inactive_background_color = SDL.Color.rgba(77, 82, 88, 64);
 pub const inactive_text_color = SDL.Color.rgb(200, 200, 200);
 
+const Gui_Event_Callback = *const fn (world: *World, id: Entity_Id) void;
+
 const Gui_Component = struct {
     pos: Vector,
     size: Vector,
     shown: bool = true,
+    // TODO: Move these to a Click_Component
     is_hovered: bool = false,
     clicked_in: bool = false,
-    active: bool = true,
 };
 
 const Font_Id_Component = struct {
@@ -58,6 +60,11 @@ const Label_Component = struct {
     text: []const u8,
 };
 
+const Rocker_Switch_Component = struct {
+    value: bool = false,
+    onchange: Gui_Event_Callback,
+};
+
 pub fn init() void {
     string_alloc = std.heap.page_allocator;
 }
@@ -73,6 +80,7 @@ pub fn register_components(world: *World) !void {
     try world.register_component(Progress_Bar_Component);
     try world.register_component(Checkbox_Component);
     try world.register_component(Label_Component);
+    try world.register_component(Rocker_Switch_Component);
 }
 
 pub fn create_image(world: *World, image: SDL.Texture, position: Vector) !Entity_Id {
@@ -135,7 +143,20 @@ pub fn create_label(world: *World, text: []const u8, position: Vector, font_id: 
     return label_id;
 }
 
-pub fn pos(world: *World, entity_id: Entity_Id) Vector {
+pub fn create_rocker_switch(world: *World, value: bool, onchange: Gui_Event_Callback, pos: Vector) Entity_Id {
+    const label_id = world.create_entity().with(
+        Gui_Component{
+            .pos = pos,
+            .size = .{ .x = 44, .y = 20 },
+        },
+    ).with(
+        Rocker_Switch_Component{ .value = value, .onchange = onchange },
+    ).entity_id();
+
+    return label_id;
+}
+
+pub fn get_pos(world: *World, entity_id: Entity_Id) Vector {
     const gui = world.get_component(Gui_Component, entity_id);
     return gui.pos;
 }
@@ -143,6 +164,29 @@ pub fn pos(world: *World, entity_id: Entity_Id) Vector {
 pub fn set_pos(world: *World, entity_id: Entity_Id, position: Vector) void {
     const gui = world.get_component(Gui_Component, entity_id);
     gui.pos = position;
+    // TODO: Trigger re-flow
+}
+
+pub fn get_dimensions(world: *World, entity_id: Entity_Id) Vector {
+    const gui = world.get_component(Gui_Component, entity_id);
+    return gui.size;
+}
+
+pub fn set_dimensions(world: *World, entity_id: Entity_Id, size: Vector) void {
+    const gui = world.get_component(Gui_Component, entity_id);
+    gui.pos = size;
+    // TODO: Trigger re-flow
+}
+
+pub fn is_shown(world: *World, entity_id: Entity_Id) bool {
+    const gui = world.get_component(Gui_Component, entity_id);
+    return gui.shown;
+}
+
+pub fn set_shown(world: *World, entity_id: Entity_Id, shown: bool) void {
+    const gui = world.get_component(Gui_Component, entity_id);
+    gui.shown = shown;
+    // TODO: Trigger re-flow
 }
 
 pub fn set_font_id(world: *World, font_entity_id: Entity_Id, font_id: font_.Font_Manager_Resource.Font_Id) void {
@@ -150,7 +194,7 @@ pub fn set_font_id(world: *World, font_entity_id: Entity_Id, font_id: font_.Font
     font.font_id = font_id;
 }
 
-pub fn image_angle(world: *World, image_id: Entity_Id) f32 {
+pub fn get_image_angle(world: *World, image_id: Entity_Id) f32 {
     const image = world.get_component(Image_Component, image_id);
     return image.angle;
 }
@@ -160,7 +204,7 @@ pub fn set_image_angle(world: *World, image_id: Entity_Id, angle: f32) void {
     image.angle = angle;
 }
 
-pub fn progress_bar_value(world: *World, progress_bar_id: Entity_Id) f32 {
+pub fn get_progress_bar_value(world: *World, progress_bar_id: Entity_Id) f32 {
     const progress_bar = world.get_component(Progress_Bar_Component, progress_bar_id);
     return progress_bar.value;
 }
@@ -170,7 +214,7 @@ pub fn set_progress_bar_value(world: *World, progress_bar_id: Entity_Id, value: 
     progress_bar.value = value;
 }
 
-pub fn checkbox_value(world: *World, checkbox_id: Entity_Id) bool {
+pub fn get_checkbox_value(world: *World, checkbox_id: Entity_Id) bool {
     const progress_bar = world.get_component(Checkbox_Component, checkbox_id);
     return progress_bar.value;
 }
@@ -191,37 +235,65 @@ pub fn set_label_text(
     label.text = try std.fmt.allocPrint(string_alloc, fmt, args);
 }
 
-pub fn update(world: *World) void {
-    update_checkbox(world);
+pub fn get_rocker_switch_value(world: *World, rocker_switch_id: Entity_Id) bool {
+    const rocker_switch = world.get_component(Rocker_Switch_Component, rocker_switch_id);
+    return rocker_switch.value;
 }
 
-pub fn update_checkbox(world: *World) void {
+pub fn set_rocker_switch_value(world: *World, rocker_switch_id: Entity_Id, value: bool) void {
+    const rocker_switch = world.get_component(Rocker_Switch_Component, rocker_switch_id);
+    rocker_switch.value = value;
+}
+
+pub fn update(world: *World) void {
+    update_checkbox(world);
+    update_rocker_switch(world);
+}
+
+fn update_checkbox(world: *World) void {
     const app = world.get_resource(App);
     var iter = world.iter(struct {
         gui: *Gui_Component,
         checkbox: *Checkbox_Component,
     });
     while (iter.next()) |entity| {
-        const prev_is_hovered = entity.gui.is_hovered;
         entity.gui.is_hovered = entity.gui.shown and
             app.mouse_x > @as(i32, @intFromFloat(entity.gui.pos.x)) and
             app.mouse_x <= @as(i32, @intFromFloat(entity.gui.pos.x + entity.gui.size.x)) and
             app.mouse_y > @as(i32, @intFromFloat(entity.gui.pos.y)) and
             app.mouse_y <= @as(i32, @intFromFloat(entity.gui.pos.y + entity.gui.size.y));
-        if (!prev_is_hovered and entity.gui.is_hovered and entity.gui.active) {
-            // Play a sound?
-            // Idk, you don't typically hear a sound when you hover over a checkbox in a form
-            // Maybe games and forms are different?
-        }
         if (entity.gui.is_hovered and app.mouse_left_down) {
             entity.gui.clicked_in = true;
         }
         if (!app.mouse_left_down) {
             if (entity.gui.clicked_in and entity.gui.is_hovered) {
                 entity.checkbox.value = !entity.checkbox.value;
-                if (entity.gui.active) {
-                    // Play a sound?
-                }
+            }
+            entity.gui.clicked_in = false;
+        }
+    }
+}
+
+fn update_rocker_switch(world: *World) void {
+    const app = world.get_resource(App);
+    var iter = world.iter(struct {
+        id: Entity_Id,
+        gui: *Gui_Component,
+        rocker_switch: *Rocker_Switch_Component,
+    });
+    while (iter.next()) |entity| {
+        entity.gui.is_hovered = entity.gui.shown and
+            app.mouse_x > @as(i32, @intFromFloat(entity.gui.pos.x)) and
+            app.mouse_x <= @as(i32, @intFromFloat(entity.gui.pos.x + entity.gui.size.x)) and
+            app.mouse_y > @as(i32, @intFromFloat(entity.gui.pos.y)) and
+            app.mouse_y <= @as(i32, @intFromFloat(entity.gui.pos.y + entity.gui.size.y));
+        if (entity.gui.is_hovered and app.mouse_left_down) {
+            entity.gui.clicked_in = true;
+        }
+        if (!app.mouse_left_down) {
+            if (entity.gui.clicked_in and entity.gui.is_hovered) {
+                entity.rocker_switch.value = !entity.rocker_switch.value;
+                entity.rocker_switch.onchange(world, entity.id);
             }
             entity.gui.clicked_in = false;
         }
@@ -233,6 +305,7 @@ pub fn render(world: *World) !void {
     try render_progress_bar(world);
     try render_checkbox(world);
     try render_label(world);
+    try render_rocker_switch(world);
 }
 
 fn render_image(world: *World) !void {
@@ -272,7 +345,7 @@ fn render_progress_bar(world: *World) !void {
         if (!entity.gui.shown) {
             continue;
         }
-        try app.renderer.setColorRGB(border_color.r, border_color.g, border_color.b);
+        try app.renderer.setColor(border_color);
         var rect = SDL.Rectangle{
             .x = @intFromFloat(entity.gui.pos.x),
             .y = @intFromFloat(entity.gui.pos.y),
@@ -280,7 +353,7 @@ fn render_progress_bar(world: *World) !void {
             .height = 6,
         };
         try app.renderer.fillRect(rect);
-        try app.renderer.setColorRGB(active_color.r, active_color.g, active_color.b);
+        try app.renderer.setColor(active_color);
         rect = SDL.Rectangle{
             .x = @intFromFloat(entity.gui.pos.x),
             .y = @intFromFloat(entity.gui.pos.y),
@@ -338,5 +411,56 @@ fn render_label(world: *World) !void {
             @intFromFloat(entity.gui.pos.y),
             entity.label.text,
         );
+    }
+}
+
+fn render_rocker_switch(world: *World) !void {
+    const app = world.get_resource(App);
+    var iter = world.iter(struct {
+        gui: *const Gui_Component,
+        rocker_switch: *const Rocker_Switch_Component,
+    });
+    while (iter.next()) |entity| {
+        if (!entity.gui.shown) {
+            continue;
+        }
+
+        var rect = SDL.Rectangle{
+            .x = @intFromFloat(entity.gui.pos.x),
+            .y = @intFromFloat(entity.gui.pos.y),
+            .width = 44,
+            .height = 20,
+        };
+        var switch_rect = SDL.Rectangle{
+            .x = @intFromFloat(entity.gui.pos.x + 4),
+            .y = @intFromFloat(entity.gui.pos.y + 4),
+            .width = 8,
+            .height = 12,
+        };
+        if (entity.rocker_switch.value) {
+            try app.renderer.setColor(active_color);
+            try app.renderer.fillRect(rect);
+            try app.renderer.setColor(text_color);
+            switch_rect.x += 28;
+            try app.renderer.fillRect(switch_rect);
+        } else {
+            try app.renderer.setColor(text_color);
+            try app.renderer.fillRect(switch_rect);
+        }
+
+        if (entity.gui.is_hovered) {
+            try app.renderer.setColor(text_color);
+        } else if (entity.rocker_switch.value) {
+            try app.renderer.setColor(active_color);
+        } else {
+            try app.renderer.setColor(border_color);
+        }
+
+        try app.renderer.drawRect(rect);
+        rect.x += 1;
+        rect.y += 1;
+        rect.width -= 2;
+        rect.height -= 2;
+        try app.renderer.drawRect(rect);
     }
 }

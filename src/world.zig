@@ -1,7 +1,6 @@
 const std = @import("std");
 
 /// A unique identifier for an entity
-/// TODO: Maybe move to own file?
 pub const Entity_Id: type = struct {
     idx: Entity_Index,
     vers: Entity_Version,
@@ -29,8 +28,8 @@ const INVALID_ENTITY_INDEX: Entity_Index = ~@as(Entity_Index, @intCast(0x0));
 pub const Entity_Version: type = u16;
 
 /// A random universal key that corresponds to a component.
-const Component_Key: type = usize;
-const INVALID_COMPONENT_KEY: Component_Key = ~@as(Component_Key, @intCast(0x0));
+const Type_Uid: type = usize;
+const INVALID_COMPONENT_KEY: Type_Uid = ~@as(Type_Uid, @intCast(0x0));
 
 /// Actual ID of the component as mapped in the world
 const Component_Id: type = u6;
@@ -46,25 +45,44 @@ const Entity = struct {
     mask: Component_Mask,
 };
 
-// TODO: Add a lazy version
-//       - Captures `with` data, and puts it in a data pool
-//       - Captures a list of Component_Key's, maps to index in data along with data size
-//       - Provides a deferred way to add an entity, mitigating pointer invalidation on pool resize
-const Entity_Builder = struct {
+const Lazy_Entity_Builder = struct {
     world: *World,
     id: Entity_Id,
+    pool: Component_Data_Pool,
+    components: std.ArrayList(Component_Pair),
+    pub const Component_Pair = struct { component_id: Component_Id, data_idx: usize };
 
-    pub fn init(world: *World, id: Entity_Id) Entity_Builder {
-        return .{ .world = world, .id = id };
+    pub fn init(self: *Lazy_Entity_Builder, world: *World, id: Entity_Id) void {
+        self.world = world;
+        self.id = id;
+        self.pool = Component_Data_Pool.init(1, world.alloc);
+        self.components = std.ArrayList(Component_Pair).init(world.alloc);
     }
 
-    pub fn with(self: Entity_Builder, data: anytype) Entity_Builder {
-        self.world.assign_component(@TypeOf(data), self.id, data);
+    pub fn deinit(self: *Lazy_Entity_Builder) void {
+        self.pool.deinit();
+        self.components.deinit();
+        self.world.alloc.destroy(self);
+    }
+
+    pub fn with(self: *Lazy_Entity_Builder, data: anytype) *Lazy_Entity_Builder {
+        const component_id = self.world.get_component_id(@TypeOf(data));
+        var mut_data = data;
+        const idx = self.pool.data.items.len;
+        const size = @sizeOf(@TypeOf(data));
+        self.components.append(.{ .component_id = component_id, .data_idx = idx }) catch @panic("whoa!");
+        self.pool.assert_size(idx + size);
+        @memcpy(
+            self.pool.data.items[idx .. idx + size],
+            @as([*]u8, @ptrCast(&mut_data))[0..size],
+        );
         return self;
     }
 
-    pub fn build(self: Entity_Builder) Entity_Id {
-        return self.id;
+    pub fn build(self: *Lazy_Entity_Builder) Entity_Id {
+        const retval = self.id;
+        self.world.lazy_entity_builders.append(self) catch @panic("whoa");
+        return retval;
     }
 };
 
@@ -123,20 +141,21 @@ const Component_Data_Pool = struct {
     }
 };
 
-// TODO: Add dispatchers, to allow for better decoupling of systems and scenes
 pub const World = struct {
     /// Lookup table used to map component keys to their actual index in this particular scene
-    lookup_table: [MAX_COMPONENTS]Component_Key,
+    lookup_table: [MAX_COMPONENTS]Type_Uid,
     /// Array of arraylists of bytes, represents the actual data for each component
     components: [MAX_COMPONENTS]?Component_Data_Pool,
     /// Data used to hold resources
-    resource_map: std.AutoArrayHashMap(u64, *void), // TODO: Create Type_Uid type
+    resource_map: std.AutoArrayHashMap(Type_Uid, *void),
     /// List of all entities in the scene
     entities: std.ArrayList(Entity),
     /// List of entities marked to be purged
     purged_entities: std.ArrayList(Entity_Index),
     /// List of newly free indices that can be overwritten
     free_indices: std.ArrayList(Entity_Index),
+    /// List of lazy entity builders to maintain
+    lazy_entity_builders: std.ArrayList(*Lazy_Entity_Builder),
     /// Number of entities in the scene. Not necessarily the length of the entities list
     num_entities: usize,
     /// Number of components registered to this scene
@@ -146,12 +165,13 @@ pub const World = struct {
 
     pub fn init(alloc: std.mem.Allocator) World {
         return .{
-            .lookup_table = [_]Component_Key{INVALID_COMPONENT_KEY} ** MAX_COMPONENTS,
+            .lookup_table = [_]Type_Uid{INVALID_COMPONENT_KEY} ** MAX_COMPONENTS,
             .components = [_]?Component_Data_Pool{null} ** MAX_COMPONENTS,
-            .resource_map = std.AutoArrayHashMap(u64, *void).init(alloc),
+            .resource_map = std.AutoArrayHashMap(Type_Uid, *void).init(alloc),
             .entities = std.ArrayList(Entity).init(alloc),
             .purged_entities = std.ArrayList(Entity_Index).init(alloc),
             .free_indices = std.ArrayList(Entity_Index).init(alloc),
+            .lazy_entity_builders = std.ArrayList(*Lazy_Entity_Builder).init(alloc),
             .num_entities = 0,
             .num_components = 0,
             .alloc = alloc,
@@ -167,6 +187,10 @@ pub const World = struct {
                 pool.deinit();
             }
         }
+        for (self.lazy_entity_builders.items) |lazy_builder| {
+            lazy_builder.deinit();
+        }
+        self.lazy_entity_builders.deinit();
         self.resource_map.deinit();
     }
 
@@ -194,7 +218,6 @@ pub const World = struct {
         return @alignCast(@ptrCast(self.resource_map.get(resource_type_uid).?));
     }
 
-    // TODO: Make lazy builder
     pub fn new_entity(self: *World) Entity_Id {
         if (self.free_indices.items.len != 0) {
             const index = self.free_indices.pop();
@@ -217,10 +240,13 @@ pub const World = struct {
         }
     }
 
-    // TODO: Make lazy builder
-    pub fn create_entity(self: *World) Entity_Builder {
+    /// Constructs a Lazy Entity Builder struct, which can be used to defer adding new entities into the world until
+    /// `World.maintain` is called.
+    pub fn create_entity(self: *World) *Lazy_Entity_Builder {
         const id = self.new_entity();
-        return Entity_Builder.init(self, id);
+        const retval = self.alloc.create(Lazy_Entity_Builder) catch @panic("whoa!");
+        retval.init(self, id);
+        return retval;
     }
 
     pub fn assign_component(self: *World, comptime C: type, id: Entity_Id, data: ?C) void {
@@ -249,8 +275,7 @@ pub const World = struct {
         self.purged_entities.append(index) catch @panic("out of memory!");
     }
 
-    // TODO: Rename to `maintain`, add deferred entities, and also purge entities marked for purging too
-    pub fn purge(self: *World) void {
+    pub fn maintain(self: *World) void {
         while (self.purged_entities.items.len > 0) {
             const index = self.purged_entities.pop();
             var purged_entity = &self.entities.items[index];
@@ -268,6 +293,18 @@ pub const World = struct {
             if (!contains) {
                 self.free_indices.append(index) catch @panic("out of memory!");
             }
+        }
+
+        while (self.lazy_entity_builders.items.len > 0) {
+            const lazy_builder = self.lazy_entity_builders.pop();
+            for (lazy_builder.components.items) |comp| {
+                const component_id = comp.component_id;
+                const data_idx = comp.data_idx;
+                std.debug.assert(self.components[component_id] != null);
+                self.get_entity(lazy_builder.id).mask |= create_component_mask(component_id);
+                self.components[component_id].?.memcpy(lazy_builder.id.index(), @ptrCast(lazy_builder.pool.get_data(data_idx)));
+            }
+            lazy_builder.deinit();
         }
     }
 
@@ -394,7 +431,7 @@ pub const World = struct {
 };
 
 /// Returns a unique 64-bit identifier for any type
-fn type_uid(comptime T: type) u64 {
+fn type_uid(comptime T: type) Type_Uid {
     const H = struct {
         var byte: u8 = 0;
         var hmm: T = undefined;

@@ -54,13 +54,13 @@ const Lazy_Entity_Builder = struct {
     components: std.ArrayList(Component_Pair),
     const Component_Pair = struct { component_id: Component_Id, data_idx: usize };
 
-    fn init(self: *Lazy_Entity_Builder, world: *World, id: Entity_Id) void {
+    fn init(self: *Lazy_Entity_Builder, world: *World, id: Entity_Id) !void {
         self.world = world;
         self.id = id;
-        self.pool = Component_Data_Pool.init(1, world.alloc);
+        self.pool = try Component_Data_Pool.init(1, world.alloc);
         self.components = std.ArrayList(Component_Pair).init(world.alloc);
 
-        self.world.lazy_entity_builders.append(self) catch @panic("whoa!");
+        try self.world.lazy_entity_builders.append(self);
     }
 
     fn deinit(self: *Lazy_Entity_Builder) void {
@@ -76,8 +76,8 @@ const Lazy_Entity_Builder = struct {
         var mut_data = data;
         const idx = self.pool.data.items.len;
         const size = @sizeOf(@TypeOf(data));
-        self.components.append(.{ .component_id = component_id, .data_idx = idx }) catch @panic("whoa!");
-        self.pool.assert_size(idx + size);
+        self.components.append(.{ .component_id = component_id, .data_idx = idx }) catch @panic("memory error!");
+        self.pool.assert_size(idx + size) catch @panic("memory error!");
         @memcpy(
             self.pool.data.items[idx .. idx + size],
             @as([*]u8, @ptrCast(&mut_data))[0..size],
@@ -103,9 +103,9 @@ const Component_Data_Pool = struct {
     // The address of this is returned whenever the stride-length is 0
     var empty_byte: u8 = 0;
 
-    pub fn init(stride_length: usize, alloc: std.mem.Allocator) Component_Data_Pool {
+    pub fn init(stride_length: usize, alloc: std.mem.Allocator) !Component_Data_Pool {
         return .{
-            .data = std.ArrayList(u8).initCapacity(alloc, 64) catch @panic("memory error"),
+            .data = try std.ArrayList(u8).initCapacity(alloc, 64),
             .stride_length = stride_length,
         };
     }
@@ -121,7 +121,7 @@ const Component_Data_Pool = struct {
         return &self.data.items[index * self.stride_length];
     }
 
-    pub fn assert_size(self: *Component_Data_Pool, element_size: usize) void {
+    pub fn assert_size(self: *Component_Data_Pool, element_size: usize) !void {
         if (self.stride_length == 0) {
             return;
         }
@@ -130,9 +130,9 @@ const Component_Data_Pool = struct {
             return;
         }
 
-        const new_capacity = std.math.ceilPowerOfTwo(usize, byte_size) catch @panic("too big");
+        const new_capacity = try std.math.ceilPowerOfTwo(usize, byte_size);
         // This has the chance to invalidate pointers, unless
-        self.data.appendNTimes(0, new_capacity - self.data.items.len) catch @panic("memory error");
+        try self.data.appendNTimes(0, new_capacity - self.data.items.len);
     }
 
     pub fn memcpy(self: *Component_Data_Pool, index: usize, data: [*]u8) void {
@@ -199,14 +199,14 @@ pub const World = struct {
         self.resource_map.deinit();
     }
 
-    pub fn register_component(self: *World, comptime C: type) void {
+    pub fn register_component(self: *World, comptime C: type) !void {
         const key = type_uid(C);
         self.lookup_table[self.num_components] = key;
-        self.components[self.num_components] = Component_Data_Pool.init(@sizeOf(C), self.alloc);
+        self.components[self.num_components] = try Component_Data_Pool.init(@sizeOf(C), self.alloc);
         self.num_components += 1;
     }
 
-    pub fn register_resource(self: *World, resource: anytype) void {
+    pub fn register_resource(self: *World, resource: anytype) !void {
         const Resource_Type = @TypeOf(resource);
         if (@typeInfo(Resource_Type) != .Pointer) {
             std.debug.panic("Resource type is not a pointer", .{});
@@ -215,7 +215,7 @@ pub const World = struct {
         if (self.resource_map.get(resource_type_uid)) |_| {
             std.debug.panic("The resource type `{}` is already registered in this world", .{@typeInfo(Resource_Type).Pointer.child});
         }
-        self.resource_map.put(resource_type_uid, @ptrCast(resource)) catch @panic("memory error");
+        try self.resource_map.put(resource_type_uid, @ptrCast(resource));
     }
 
     pub fn get_resource(self: *World, comptime R: type) *R {
@@ -223,7 +223,7 @@ pub const World = struct {
         return @alignCast(@ptrCast(self.resource_map.get(resource_type_uid).?));
     }
 
-    fn new_entity(self: *World) Entity_Id {
+    fn new_entity(self: *World) !Entity_Id {
         if (self.free_indices.items.len != 0) {
             const index = self.free_indices.pop();
             var entity = &self.entities.items[index];
@@ -234,11 +234,11 @@ pub const World = struct {
         } else {
             const index: Entity_Index = @intCast(self.entities.items.len);
             const entity = Entity{ .id = Entity_Id.init(index, 0), .mask = 0 };
-            self.entities.append(entity) catch @panic("memory error adding entity");
+            try self.entities.append(entity);
             self.num_entities += 1;
             for (0..self.num_components) |i| {
                 if (self.components[i]) |*pool| {
-                    pool.assert_size(index + 1);
+                    try pool.assert_size(index + 1);
                 }
             }
             return entity.id;
@@ -248,9 +248,9 @@ pub const World = struct {
     /// Constructs a Lazy Entity Builder struct, which can be used to defer adding new entities into the world until
     /// `World.maintain` is called.
     pub fn create_entity(self: *World) *Lazy_Entity_Builder {
-        const id = self.new_entity();
-        const retval = self.alloc.create(Lazy_Entity_Builder) catch @panic("whoa!");
-        retval.init(self, id);
+        const id = self.new_entity() catch @panic("memory error!");
+        const retval = self.alloc.create(Lazy_Entity_Builder) catch @panic("memory error!");
+        retval.init(self, id) catch @panic("memory error!");
         return retval;
     }
 
@@ -273,14 +273,14 @@ pub const World = struct {
         self.get_entity(id).mask &= ~create_component_mask(component_id);
     }
 
-    pub fn mark_purged(self: *World, id: Entity_Id) void {
+    pub fn mark_purged(self: *World, id: Entity_Id) !void {
         const index = id.index();
         std.debug.assert(id.index() != INVALID_ENTITY_INDEX);
         std.debug.assert(self.entities.items[id.index()].id.version() == id.version());
-        self.purged_entities.append(index) catch @panic("out of memory!");
+        try self.purged_entities.append(index);
     }
 
-    pub fn maintain(self: *World) void {
+    pub fn maintain(self: *World) !void {
         while (self.purged_entities.items.len > 0) {
             const index = self.purged_entities.pop();
             var purged_entity = &self.entities.items[index];
@@ -296,7 +296,7 @@ pub const World = struct {
                 }
             }
             if (!contains) {
-                self.free_indices.append(index) catch @panic("out of memory!");
+                try self.free_indices.append(index);
             }
         }
 
@@ -370,7 +370,7 @@ pub const World = struct {
         };
     }
 
-    pub inline fn get_component(self: *World, comptime C: type, id: Entity_Id) *C {
+    pub fn get_component(self: *World, comptime C: type, id: Entity_Id) *C {
         const component_id = self.get_component_id(C);
         std.debug.assert(id.index() != INVALID_ENTITY_INDEX);
         std.debug.assert(self.entities.items[id.index()].id.version() == id.version());

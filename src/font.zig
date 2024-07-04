@@ -3,7 +3,18 @@ const SDL = @import("sdl2");
 
 const Glyph = struct {
     rect: SDL.Rectangle,
+    advance: usize,
 };
+
+extern fn TTF_GlyphMetrics32(
+    font: *SDL.c.TTF_Font,
+    ch: c_uint,
+    minx: *c_int,
+    maxx: *c_int,
+    miny: *c_int,
+    maxy: *c_int,
+    advance: *c_int,
+) c_int;
 
 pub const Font = struct {
     ttf_font: SDL.ttf.Font,
@@ -14,7 +25,7 @@ pub const Font = struct {
     style: SDL.ttf.Font.Style,
     alloc: std.mem.Allocator,
 
-    pub fn init(filename: [:0]const u8, point_size: i32, style: SDL.ttf.Font.Style, renderer: SDL.Renderer, alloc: std.mem.Allocator) !Font {
+    fn init(filename: [:0]const u8, point_size: i32, style: SDL.ttf.Font.Style, renderer: SDL.Renderer, alloc: std.mem.Allocator) !Font {
         const ttf_font = try SDL.ttf.openFont(filename, @intCast(point_size));
         var retval: Font = .{
             .ttf_font = ttf_font,
@@ -31,8 +42,8 @@ pub const Font = struct {
 
     pub fn deinit() void {}
 
-    pub fn draw(
-        self: *Font,
+    pub inline fn draw(
+        self: *const Font,
         renderer: SDL.Renderer,
         x: usize,
         y: usize,
@@ -40,6 +51,9 @@ pub const Font = struct {
     ) !void {
         var cursor_x = x;
         for (text) |c| {
+            if (c < 32 or c > 127) {
+                continue;
+            }
             const glyph = self.get_glyph(c);
             const dest_rect = SDL.Rectangle{
                 .x = @intCast(cursor_x),
@@ -48,8 +62,21 @@ pub const Font = struct {
                 .height = glyph.rect.height,
             };
             try renderer.copy(self.cache_texture, dest_rect, glyph.rect);
-            cursor_x += @intCast(glyph.rect.width);
+            cursor_x += @intCast(glyph.advance);
         }
+    }
+
+    /// Returns how wide the text will be if drawn
+    pub fn width(self: *const Font, text: []const u8) usize {
+        var retval: usize = 0;
+        for (text) |c| {
+            if (c < 32 or c > 127) {
+                continue;
+            }
+            const glyph = self.get_glyph(c);
+            retval += @intCast(glyph.advance);
+        }
+        return retval;
     }
 
     /// Packs the glyphs into the cache texture. Uses a basic lightning-fast scanline packing algorithm
@@ -96,7 +123,15 @@ pub const Font = struct {
             _ = SDL.c.SDL_SetSurfaceBlendMode(surf.ptr, SDL.c.SDL_BLENDMODE_NONE);
             try SDL.blitScaled(surf, &src_rect, mega_surface, &dest_rect);
             x_offset += @intCast(surf.ptr.w);
-            self.set_glyph(c, Glyph{ .rect = dest_rect });
+
+            var minx: c_int = 0;
+            var maxx: c_int = 0;
+            var miny: c_int = 0;
+            var maxy: c_int = 0;
+            var advance: c_int = 0;
+            _ = TTF_GlyphMetrics32(self.ttf_font.ptr, c, &minx, &maxx, &miny, &maxy, &advance);
+
+            self.set_glyph(c, Glyph{ .rect = dest_rect, .advance = @intCast(advance) });
         }
         self.cache_texture = try SDL.createTextureFromSurface(self.renderer, mega_surface);
     }
@@ -107,5 +142,36 @@ pub const Font = struct {
 
     inline fn get_glyph(self: *const Font, char: u8) Glyph {
         return self.glyphs[char - 32];
+    }
+};
+
+pub const Font_Manager_Resource = struct {
+    pub const Font_Id: type = u8; // An index into the `fonts` array
+    pub const MAX_FONTS: usize = 255;
+    fonts: [MAX_FONTS]Font,
+    num_fonts: u8 = 0,
+
+    pub fn create(alloc: std.mem.Allocator) !*Font_Manager_Resource {
+        const retval = try alloc.create(Font_Manager_Resource);
+        retval.* = .{ .fonts = [_]Font{undefined} ** MAX_FONTS, .num_fonts = 0 };
+        return retval;
+    }
+
+    pub fn add_font(
+        self: *Font_Manager_Resource,
+        filename: [:0]const u8,
+        point_size: i32,
+        style: SDL.ttf.Font.Style,
+        renderer: SDL.Renderer,
+        alloc: std.mem.Allocator,
+    ) !Font_Id {
+        self.fonts[self.num_fonts] = try Font.init(filename, point_size, style, renderer, alloc);
+        self.num_fonts += 1;
+        return self.num_fonts - 1;
+    }
+
+    pub inline fn get_font(self: *const Font_Manager_Resource, id: Font_Id) *const Font {
+        std.debug.assert(id < self.num_fonts);
+        return &self.fonts[id];
     }
 };

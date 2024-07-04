@@ -12,7 +12,7 @@ pub const App = struct {
     // Gameloop stuff
     running: bool,
     seconds: i64,
-    ticks: i64,
+    ticks: u64,
 
     // Scene stack stuff
     scene_stack: std.ArrayList(Scene_Object),
@@ -104,7 +104,7 @@ pub const App = struct {
         var lag: i64 = 0;
         var elapsed: i64 = 0;
         var frames: i64 = 0;
-        const DELTA_T: i64 = 16;
+        const DELTA_T: i64 = 50;
 
         while (self.running) {
             self.seconds = std.time.timestamp();

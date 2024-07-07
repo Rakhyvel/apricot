@@ -42,7 +42,7 @@ const Gui_Component = struct {
     pos: Vector,
     size: Vector,
     shown: bool = true,
-    // TODO: Move these to a Click_Component
+    // TODO: Move these to a Click_Component, and run through the whole gui lot with the python script
     is_hovered: bool = false,
     clicked_in: bool = false,
 };
@@ -424,25 +424,30 @@ fn update_slider(world: *World) void {
         if (!entity.gui.shown) {
             continue;
         }
-
         entity.gui.is_hovered = entity.gui.shown and
             app.mouse_x > @as(i32, @intFromFloat(entity.gui.pos.x)) and
             app.mouse_x <= @as(i32, @intFromFloat(entity.gui.pos.x + entity.gui.size.x)) and
             app.mouse_y > @as(i32, @intFromFloat(entity.gui.pos.y)) and
             app.mouse_y <= @as(i32, @intFromFloat(entity.gui.pos.y + entity.gui.size.y));
+
         if ((entity.gui.is_hovered or entity.gui.clicked_in) and app.mouse_left_down) {
-            const val = (@as(f32, @floatFromInt(app.mouse_x)) - entity.gui.pos.x) / entity.gui.size.x;
+            const val = std.math.clamp(
+                (@as(f32, @floatFromInt(app.mouse_x)) - entity.gui.pos.x) / entity.gui.size.x,
+                0.0,
+                1.0,
+            );
             if (entity.slider.n_notches == 0) { // Notchless behavior
                 entity.slider.value = @max(0.0, @min(1.0, val));
             } else {
-                const notched_value = @round(val * (@as(f32, @floatFromInt(entity.slider.n_notches)) - 1)) + 1;
-                entity.slider.value = @max(0.0, @min(@as(f32, @floatFromInt(entity.slider.n_notches)) - 1, notched_value));
+                const float_n_notches: f32 = @floatFromInt(entity.slider.n_notches - 1);
+                entity.slider.value = @round(val * float_n_notches);
             }
             entity.gui.clicked_in = true;
             if (entity.slider.onchange) |onchange| {
                 onchange(world, entity.id);
             }
         }
+
         if (entity.gui.clicked_in and !app.mouse_left_down) {
             entity.gui.clicked_in = false;
         }
@@ -714,7 +719,7 @@ fn render_slider(world: *World) !void {
         try app.renderer.fillRectF(rect);
 
         // Draw notches
-        const notch_width = entity.gui.size.x / @as(f32, @floatFromInt(entity.slider.n_notches)) - 1.0;
+        const notch_width = entity.gui.size.x / (@as(f32, @floatFromInt(entity.slider.n_notches)) - 1.0);
         try app.renderer.setColor(border_color);
         for (0..entity.slider.n_notches) |i| {
             const f = @as(f32, @floatFromInt(i));
@@ -731,5 +736,15 @@ fn render_slider(world: *World) !void {
                 entity.gui.pos.y + 7 + 16 + 5 + 18,
             );
         }
+
+        // Draw knob
+        const knob_rect = SDL.RectangleF{
+            .x = entity.gui.pos.x + entity.gui.size.x * (entity.slider.value) / slider_value_denom - 4,
+            .y = entity.gui.pos.y + 11 + 12,
+            .width = 8,
+            .height = 24,
+        };
+        try app.renderer.setColor(active_color);
+        try app.renderer.fillRectF(knob_rect);
     }
 }

@@ -19,11 +19,19 @@ const font_ = @import("font.zig");
 
 var string_alloc: std.mem.Allocator = undefined;
 
-pub const background_color = SDL.Color.rgb(54, 56, 62);
+pub const white_color = SDL.Color.rgb(255, 255, 255);
+
+pub const background_color = SDL.Color.rgb(153, 153, 153);
 pub const text_color = SDL.Color.rgb(255, 255, 255);
-pub const border_color = SDL.Color.rgb(114, 117, 126);
-pub const hover_color = SDL.Color.rgb(255, 255, 255);
-pub const active_color = SDL.Color.rgb(60, 100, 250);
+
+pub const border_color = SDL.Color.rgb(122, 122, 122);
+pub const hovered_border_color = SDL.Color.rgb(51, 51, 51);
+
+pub const active_color = SDL.Color.rgb(0, 120, 215);
+pub const hovered_active_color = SDL.Color.rgb(77, 161, 227);
+
+pub const clicked_color = SDL.Color.rgb(102, 102, 102);
+
 pub const error_color = SDL.Color.rgb(250, 80, 80);
 pub const inactive_background_color = SDL.Color.rgba(77, 82, 88, 64);
 pub const inactive_text_color = SDL.Color.rgb(200, 200, 200);
@@ -41,6 +49,20 @@ const Gui_Component = struct {
 
 const Font_Id_Component = struct {
     font_id: font_.Font_Manager_Resource.Font_Id,
+};
+
+const Animation_Component = struct {
+    value: f32,
+};
+
+const Linear_Component = struct {
+    vel: f32,
+};
+
+const Ease_Out_Component = struct {
+    t: f32,
+    vel: f32,
+    inverted: bool,
 };
 
 const Image_Component = struct {
@@ -65,6 +87,12 @@ const Rocker_Switch_Component = struct {
     onchange: Gui_Event_Callback,
 };
 
+const Slider_Component = struct {
+    onchange: ?Gui_Event_Callback,
+    value: f32, // Will be [0, n_nothces - 1] when n_notches != 0, otherwise will be [0.0, 1.0]
+    n_notches: usize, // The number of discrete nothces on the slider. If 0, slider will be continuous
+};
+
 pub fn init() void {
     string_alloc = std.heap.page_allocator;
 }
@@ -76,11 +104,15 @@ pub fn init() void {
 pub fn register_components(world: *World) !void {
     try world.register_component(Gui_Component);
     try world.register_component(Font_Id_Component);
+    try world.register_component(Animation_Component);
+    try world.register_component(Linear_Component);
+    try world.register_component(Ease_Out_Component);
     try world.register_component(Image_Component);
     try world.register_component(Progress_Bar_Component);
     try world.register_component(Checkbox_Component);
     try world.register_component(Label_Component);
     try world.register_component(Rocker_Switch_Component);
+    try world.register_component(Slider_Component);
 }
 
 pub fn create_image(world: *World, image: SDL.Texture, position: Vector) !Entity_Id {
@@ -151,9 +183,40 @@ pub fn create_rocker_switch(world: *World, value: bool, onchange: Gui_Event_Call
         },
     ).with(
         Rocker_Switch_Component{ .value = value, .onchange = onchange },
+    ).with(
+        Animation_Component{ .value = if (value) 1.0 else 0.0 },
     ).entity_id();
 
     return label_id;
+}
+
+pub fn create_slider(world: *World, value: f32, pos: Vector, width: usize, n_notches: usize, onchange: ?Gui_Event_Callback) Entity_Id {
+    const label_id = world.create_entity().with(
+        Gui_Component{
+            .pos = pos,
+            .size = .{ .x = @floatFromInt(width), .y = 52 },
+        },
+    ).with(
+        Slider_Component{
+            .value = value,
+            .onchange = onchange,
+            .n_notches = n_notches,
+        },
+    ).entity_id();
+
+    return label_id;
+}
+
+fn apply_linear(world: *World, entity_id: Entity_Id, anim_speed: f32) void {
+    world.assign_component(Linear_Component, entity_id, Linear_Component{ .vel = anim_speed });
+}
+
+fn apply_ease_out(world: *World, entity_id: Entity_Id, anim_speed: f32, inverted: bool) void {
+    world.assign_component(Ease_Out_Component, entity_id, Ease_Out_Component{
+        .t = 0.0,
+        .vel = anim_speed,
+        .inverted = inverted,
+    });
 }
 
 pub fn get_pos(world: *World, entity_id: Entity_Id) Vector {
@@ -245,9 +308,57 @@ pub fn set_rocker_switch_value(world: *World, rocker_switch_id: Entity_Id, value
     rocker_switch.value = value;
 }
 
+pub fn get_slider_value(world: *World, slider_id: Entity_Id) f32 {
+    const slider = world.get_component(Slider_Component, slider_id);
+    return slider.value;
+}
+
+pub fn set_slider_value(world: *World, slider_id: Entity_Id, value: f32) void {
+    const slider = world.get_component(Slider_Component, slider_id);
+    slider.value = value;
+}
+
 pub fn update(world: *World) void {
+    update_linear(world);
+    update_ease_out(world);
     update_checkbox(world);
     update_rocker_switch(world);
+    update_slider(world);
+}
+
+fn update_linear(world: *World) void {
+    var iter = world.iter(struct { id: Entity_Id, animation: *Animation_Component, linear: *Linear_Component });
+    while (iter.next()) |entity| {
+        entity.animation.value += entity.linear.vel;
+        if (entity.animation.value < 0.0) {
+            entity.animation.value = 0.0;
+            world.unassign_component(Linear_Component, entity.id);
+        }
+        if (entity.animation.value > 1.0) {
+            entity.animation.value = 1.0;
+            world.unassign_component(Linear_Component, entity.id);
+        }
+    }
+}
+
+fn update_ease_out(world: *World) void {
+    var iter = world.iter(struct { id: Entity_Id, animation: *Animation_Component, ease_out: *Ease_Out_Component });
+    while (iter.next()) |entity| {
+        entity.ease_out.t += entity.ease_out.vel;
+        entity.animation.value = 1 - std.math.pow(
+            f32,
+            entity.ease_out.t - @as(f32, @floatFromInt(@intFromBool(entity.ease_out.inverted))),
+            2,
+        ) + 0.01 * @as(f32, if (entity.ease_out.inverted) 1.0 else -1.0);
+        if (entity.animation.value < 0.0) {
+            entity.animation.value = 0.0;
+            world.unassign_component(Ease_Out_Component, entity.id);
+        }
+        if (entity.animation.value > 1.0) {
+            entity.animation.value = 1.0;
+            world.unassign_component(Ease_Out_Component, entity.id);
+        }
+    }
 }
 
 fn update_checkbox(world: *World) void {
@@ -276,6 +387,7 @@ fn update_checkbox(world: *World) void {
 
 fn update_rocker_switch(world: *World) void {
     const app = world.get_resource(App);
+    const anim_speed: f32 = 0.08;
     var iter = world.iter(struct {
         id: Entity_Id,
         gui: *Gui_Component,
@@ -294,7 +406,44 @@ fn update_rocker_switch(world: *World) void {
             if (entity.gui.clicked_in and entity.gui.is_hovered) {
                 entity.rocker_switch.value = !entity.rocker_switch.value;
                 entity.rocker_switch.onchange(world, entity.id);
+                apply_ease_out(world, entity.id, anim_speed, entity.rocker_switch.value);
             }
+            entity.gui.clicked_in = false;
+        }
+    }
+}
+
+fn update_slider(world: *World) void {
+    const app = world.get_resource(App);
+    var iter = world.iter(struct {
+        id: Entity_Id,
+        gui: *Gui_Component,
+        slider: *Slider_Component,
+    });
+    while (iter.next()) |entity| {
+        if (!entity.gui.shown) {
+            continue;
+        }
+
+        entity.gui.is_hovered = entity.gui.shown and
+            app.mouse_x > @as(i32, @intFromFloat(entity.gui.pos.x)) and
+            app.mouse_x <= @as(i32, @intFromFloat(entity.gui.pos.x + entity.gui.size.x)) and
+            app.mouse_y > @as(i32, @intFromFloat(entity.gui.pos.y)) and
+            app.mouse_y <= @as(i32, @intFromFloat(entity.gui.pos.y + entity.gui.size.y));
+        if ((entity.gui.is_hovered or entity.gui.clicked_in) and app.mouse_left_down) {
+            const val = (@as(f32, @floatFromInt(app.mouse_x)) - entity.gui.pos.x) / entity.gui.size.x;
+            if (entity.slider.n_notches == 0) { // Notchless behavior
+                entity.slider.value = @max(0.0, @min(1.0, val));
+            } else {
+                const notched_value = @round(val * (@as(f32, @floatFromInt(entity.slider.n_notches)) - 1)) + 1;
+                entity.slider.value = @max(0.0, @min(@as(f32, @floatFromInt(entity.slider.n_notches)) - 1, notched_value));
+            }
+            entity.gui.clicked_in = true;
+            if (entity.slider.onchange) |onchange| {
+                onchange(world, entity.id);
+            }
+        }
+        if (entity.gui.clicked_in and !app.mouse_left_down) {
             entity.gui.clicked_in = false;
         }
     }
@@ -306,6 +455,7 @@ pub fn render(world: *World) !void {
     try render_checkbox(world);
     try render_label(world);
     try render_rocker_switch(world);
+    try render_slider(world);
 }
 
 fn render_image(world: *World) !void {
@@ -375,20 +525,66 @@ fn render_checkbox(world: *World) !void {
             continue;
         }
 
-        // Draw the box
-        if (entity.checkbox.value) {
+        var rect = SDL.RectangleF{
+            .x = entity.gui.pos.x,
+            .y = entity.gui.pos.y,
+            .width = 20,
+            .height = 20,
+        };
+
+        // Fill in box with color
+        if (entity.gui.clicked_in) {
+            try app.renderer.setColor(clicked_color);
+            try app.renderer.fillRectF(rect);
+        } else if (entity.checkbox.value) {
             try app.renderer.setColor(active_color);
-        } else if (entity.gui.is_hovered) {
-            try app.renderer.setColor(border_color);
-        } else {
-            try app.renderer.setColor(background_color);
+            try app.renderer.fillRectF(rect);
         }
-        try app.renderer.fillRect(SDL.Rectangle{
-            .x = @intFromFloat(entity.gui.pos.x),
-            .y = @intFromFloat(entity.gui.pos.y),
-            .width = @intFromFloat(entity.gui.size.x),
-            .height = @intFromFloat(entity.gui.size.y),
-        });
+
+        // Draw border
+        if (entity.gui.clicked_in) {
+            try app.renderer.setColor(clicked_color);
+        } else if (entity.gui.is_hovered) {
+            try app.renderer.setColor(hovered_border_color);
+        } else if (!entity.checkbox.value) {
+            try app.renderer.setColor(border_color);
+        }
+        try app.renderer.drawRectF(rect);
+        rect.x += 1;
+        rect.y += 1;
+        rect.width -= 2;
+        rect.height -= 2;
+        try app.renderer.drawRectF(rect);
+
+        // Draw check
+        if (entity.checkbox.value) {
+            try app.renderer.setColor(text_color);
+            try app.renderer.drawLineF(
+                entity.gui.pos.x + 2,
+                entity.gui.pos.y + 10,
+                entity.gui.pos.x + 7,
+                entity.gui.pos.y + 15,
+            );
+            try app.renderer.drawLineF(
+                entity.gui.pos.x + 2,
+                entity.gui.pos.y + 11,
+                entity.gui.pos.x + 7,
+                entity.gui.pos.y + 16,
+            );
+            try app.renderer.drawLineF(
+                entity.gui.pos.x + 7,
+                entity.gui.pos.y + 15,
+                entity.gui.pos.x + 17,
+                entity.gui.pos.y + 5,
+            );
+
+            try app.renderer.drawLineF(
+                entity.gui.pos.x + 7,
+                entity.gui.pos.y + 16,
+                entity.gui.pos.x + 17,
+                entity.gui.pos.y + 6,
+            );
+        }
     }
 }
 
@@ -419,48 +615,121 @@ fn render_rocker_switch(world: *World) !void {
     var iter = world.iter(struct {
         gui: *const Gui_Component,
         rocker_switch: *const Rocker_Switch_Component,
+        animation: *const Animation_Component,
     });
     while (iter.next()) |entity| {
         if (!entity.gui.shown) {
             continue;
         }
-
-        var rect = SDL.Rectangle{
-            .x = @intFromFloat(entity.gui.pos.x),
-            .y = @intFromFloat(entity.gui.pos.y),
+        // Draw border
+        var rect = SDL.RectangleF{
+            .x = entity.gui.pos.x,
+            .y = entity.gui.pos.y,
             .width = 44,
             .height = 20,
         };
-        var switch_rect = SDL.Rectangle{
-            .x = @intFromFloat(entity.gui.pos.x + 4),
-            .y = @intFromFloat(entity.gui.pos.y + 4),
-            .width = 8,
-            .height = 12,
+        if (entity.gui.clicked_in) {
+            try app.renderer.setColor(clicked_color);
+        } else if (entity.gui.is_hovered) {
+            if (entity.rocker_switch.value) {
+                try app.renderer.setColor(hovered_active_color);
+            } else {
+                try app.renderer.setColor(hovered_border_color);
+            }
+        } else {
+            if (entity.rocker_switch.value) {
+                try app.renderer.setColor(active_color);
+            } else {
+                try app.renderer.setColor(border_color);
+            }
+        }
+        if (entity.rocker_switch.value or entity.gui.clicked_in) {
+            try app.renderer.fillRectF(rect);
+        } else {
+            try app.renderer.drawRectF(rect);
+            rect.x += 1;
+            rect.y += 1;
+            rect.width -= 2;
+            rect.height -= 2;
+            try app.renderer.drawRectF(rect);
+        }
+
+        // Draw switch
+        const switch_rect = SDL.RectangleF{
+            .x = entity.gui.pos.x + 5 + 24 * entity.animation.value,
+            .y = entity.gui.pos.y + 5,
+            .width = 10,
+            .height = 10,
         };
         if (entity.rocker_switch.value) {
-            try app.renderer.setColor(active_color);
-            try app.renderer.fillRect(rect);
-            try app.renderer.setColor(text_color);
-            switch_rect.x += 28;
-            try app.renderer.fillRect(switch_rect);
+            try app.renderer.setColor(white_color);
+        } else if (entity.gui.clicked_in) {
+            try app.renderer.setColor(white_color);
         } else {
-            try app.renderer.setColor(text_color);
-            try app.renderer.fillRect(switch_rect);
+            if (entity.gui.is_hovered) {
+                try app.renderer.setColor(hovered_border_color);
+            } else {
+                try app.renderer.setColor(border_color);
+            }
         }
+        try app.renderer.fillRectF(switch_rect);
+    }
+}
 
+fn render_slider(world: *World) !void {
+    const app = world.get_resource(App);
+    var iter = world.iter(struct {
+        gui: *const Gui_Component,
+        slider: *const Slider_Component,
+    });
+    while (iter.next()) |entity| {
+        if (!entity.gui.shown) {
+            continue;
+        }
+        const slider_offset = 6 + 12 + 16;
+        const slider_value_denom = if (entity.slider.n_notches == 0) 1 else @as(f32, @floatFromInt(entity.slider.n_notches - 1));
+
+        // Draw full slider track
         if (entity.gui.is_hovered) {
-            try app.renderer.setColor(text_color);
-        } else if (entity.rocker_switch.value) {
-            try app.renderer.setColor(active_color);
-        } else {
             try app.renderer.setColor(border_color);
+        } else {
+            try app.renderer.setColor(background_color);
         }
+        var rect = SDL.RectangleF{
+            .x = entity.gui.pos.x,
+            .y = entity.gui.pos.y + slider_offset,
+            .width = entity.gui.size.x,
+            .height = 2,
+        };
+        try app.renderer.fillRectF(rect);
 
-        try app.renderer.drawRect(rect);
-        rect.x += 1;
-        rect.y += 1;
-        rect.width -= 2;
-        rect.height -= 2;
-        try app.renderer.drawRect(rect);
+        // Draw filled slider track
+        try app.renderer.setColor(active_color);
+        rect = .{
+            .x = entity.gui.pos.x,
+            .y = entity.gui.pos.y + slider_offset,
+            .width = entity.gui.size.x * (entity.slider.value) / slider_value_denom,
+            .height = 2,
+        };
+        try app.renderer.fillRectF(rect);
+
+        // Draw notches
+        const notch_width = entity.gui.size.x / @as(f32, @floatFromInt(entity.slider.n_notches)) - 1.0;
+        try app.renderer.setColor(border_color);
+        for (0..entity.slider.n_notches) |i| {
+            const f = @as(f32, @floatFromInt(i));
+            try app.renderer.drawLineF(
+                entity.gui.pos.x + f * notch_width,
+                entity.gui.pos.y + 7 + 16,
+                entity.gui.pos.x + f * notch_width,
+                entity.gui.pos.y + 7 + 16 + 5,
+            );
+            try app.renderer.drawLineF(
+                entity.gui.pos.x + f * notch_width,
+                entity.gui.pos.y + 7 + 16 + 18,
+                entity.gui.pos.x + f * notch_width,
+                entity.gui.pos.y + 7 + 16 + 5 + 18,
+            );
+        }
     }
 }

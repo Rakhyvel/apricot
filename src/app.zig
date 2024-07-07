@@ -104,7 +104,7 @@ pub const App = struct {
         var lag: i64 = 0;
         var elapsed: i64 = 0;
         var frames: i64 = 0;
-        const DELTA_T: i64 = 50;
+        const DELTA_T: i64 = 16;
 
         while (self.running) {
             self.seconds = std.time.timestamp();
@@ -126,7 +126,7 @@ pub const App = struct {
                 }
 
                 // render
-                try self.renderer.setColorRGB(0xF7, 0xA4, 0x1D);
+                try self.renderer.setColorRGB(0xFF, 0xFF, 0xFF);
                 try self.renderer.clear();
                 top.vtable.render(top.self);
                 frames += 1;

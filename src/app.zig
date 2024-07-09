@@ -126,7 +126,7 @@ pub const App = struct {
                 }
 
                 // render
-                try self.renderer.setColorRGB(0xFF, 0xFF, 0xFF);
+                try self.renderer.setColorRGB(0x15, 0x16, 0x17);
                 try self.renderer.clear();
                 top.vtable.render(top.self);
                 frames += 1;

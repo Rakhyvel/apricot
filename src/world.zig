@@ -18,6 +18,10 @@ pub const Entity_Id: type = struct {
     pub inline fn version(self: Entity_Id) Entity_Version {
         return self.vers;
     }
+
+    pub inline fn is_valid(self: Entity_Id) bool {
+        return self.idx != INVALID_ENTITY_INDEX;
+    }
 };
 
 /// The index of an entity in a scene's component and bitmask arrays
@@ -383,7 +387,7 @@ pub const World = struct {
     /// Checks that an Entity_Id refers to a valid and current entity
     pub fn entity_is_valid(self: *World, id: Entity_Id) bool {
         const entity = self.entities.items[id.index()];
-        return entity.mask != 0 and entity.id == id;
+        return entity.mask != 0 and entity.id.idx == id.idx and entity.id.vers == id.vers;
     }
 
     pub fn entity_has_all_components(self: *World, comptime Components: type, id: Entity_Id) bool {

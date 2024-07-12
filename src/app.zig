@@ -1,6 +1,34 @@
 const std = @import("std");
 const SDL = @import("sdl2");
 const Scene_Object = @import("scene.zig").Scene_Object;
+const gl = @import("zgl");
+
+const vertexShaderSource: []const u8 =
+    \\#version 450 core
+    \\layout(location = 0) in vec2 LVertexPos2D; // Attribute input for vertex position
+    \\void main() {
+    \\    gl_Position = vec4( LVertexPos2D, 0, 1 );
+    \\}
+;
+
+const fragmentShaderSource: []const u8 =
+    \\#version 450 core
+    \\out vec4 FragColor; // Output variable for fragment color
+    \\void main() {
+    \\    FragColor = vec4(1.0, 0.0, 0.0, 1.0);
+    \\}
+;
+
+const vertices = [_]f32{
+    -0.5, -0.5, 0.0, // top right
+    0.5, -0.5, 0.0, // bottom right
+    0.5, 0.5, 0.0, // bottom left
+    -0.5, 0.5, 0.0, // top left
+};
+const indices = [_]gl.UInt{
+    0, 1, 3, // first triangle
+    1, 2, 3, // second triangle
+};
 
 pub const App = struct {
     // TODO: Actually split these up into resource structs
@@ -31,7 +59,10 @@ pub const App = struct {
 
     // SDL stuff
     window: SDL.Window,
-    renderer: SDL.Renderer,
+    // renderer: SDL.Renderer,
+
+    program: gl.Program,
+    vao: gl.VertexArray,
 
     pub fn init(title: [:0]const u8, width: usize, height: usize, alloc: std.mem.Allocator) !@This() {
         try SDL.init(.{
@@ -44,18 +75,74 @@ pub const App = struct {
         try SDL.ttf.init();
         errdefer SDL.ttf.quit();
 
+        try SDL.gl.setAttribute(.{ .context_major_version = 4 });
+        try SDL.gl.setAttribute(.{ .context_minor_version = 5 });
+        try SDL.gl.setAttribute(.{ .context_profile_mask = .core });
+
         var window = try SDL.createWindow(
             title,
             .{ .centered = {} },
             .{ .centered = {} },
             width,
             height,
-            .{ .vis = .shown },
+            .{ .vis = .shown, .resizable = true, .context = .opengl },
         );
         errdefer window.destroy();
 
-        const renderer = try SDL.createRenderer(window, null, .{ .accelerated = true });
-        errdefer renderer.destroy();
+        // Create gl context for SDL
+        const glctx = try SDL.gl.createContext(window);
+        errdefer glctx.delete();
+
+        // Load OpenGL function pointers from dynamic library
+        gl.binding.load(glctx, load_fn) catch {}; // Most are loaded
+
+        // Create the program
+        const program = gl.createProgram();
+        errdefer program.delete();
+
+        // Create vertex shader
+        const vShader = gl.createShader(.vertex);
+        errdefer vShader.delete();
+        vShader.source(1, &.{vertexShaderSource});
+        gl.compileShader(vShader);
+        gl.attachShader(program, vShader);
+
+        // Create fragment shader
+        const fShader = gl.createShader(.fragment);
+        errdefer fShader.delete();
+        fShader.source(1, &.{fragmentShaderSource});
+        gl.compileShader(fShader);
+        gl.attachShader(program, fShader);
+
+        // Link the program's pipeline up
+        gl.linkProgram(program);
+
+        const gVertexPos2DLocation = gl.getAttribLocation(program, "LVertexPos2D") orelse unreachable;
+        _ = gVertexPos2DLocation; // autofix
+
+        // VAO and VBO and ebo
+        var vao: gl.VertexArray = undefined;
+        var vbo: gl.Buffer = undefined;
+        var ebo: gl.Buffer = undefined;
+
+        // Create and bind VAO, VBO, and EBO
+        vao = gl.createVertexArray();
+        gl.bindVertexArray(vao);
+
+        vbo = gl.createBuffer();
+        gl.bindBuffer(vbo, .array_buffer);
+        gl.bufferData(.array_buffer, f32, &vertices, .static_draw);
+
+        ebo = gl.createBuffer();
+        gl.bindBuffer(ebo, .element_array_buffer);
+        gl.bufferData(.element_array_buffer, gl.UInt, &indices, .static_draw);
+
+        // Set vertex attribute pointers
+        gl.vertexAttribPointer(0, 3, .float, false, 3 * @sizeOf(f32), 0);
+        gl.enableVertexAttribArray(0);
+
+        // Unbind VAO
+        gl.bindVertexArray(.invalid);
 
         return .{
             // Window stuff
@@ -79,13 +166,15 @@ pub const App = struct {
             // Keyboard stuff
             .keys = [_]bool{false} ** 256,
             // SDL stuff
-            .renderer = renderer,
+            // .renderer = renderer,
             .window = window,
+            // OpenGL stuff
+            .program = program,
+            .vao = vao,
         };
     }
 
     pub fn deinit(self: *App) void {
-        self.renderer.destroy();
         self.window.destroy();
         SDL.ttf.quit();
         SDL.quit();
@@ -126,11 +215,17 @@ pub const App = struct {
                 }
 
                 // render
-                try self.renderer.setColorRGB(0x15, 0x16, 0x17);
-                try self.renderer.clear();
-                top.vtable.render(top.self);
+                gl.clearColor(0.2, 0.3, 0.3, 1.0);
+                gl.clear(.{ .color = true });
+
+                gl.useProgram(self.program);
+                gl.bindVertexArray(self.vao);
+                gl.drawElements(.triangles, indices.len, .unsigned_int, 0);
+
+                // top.vtable.render(top.self);
                 frames += 1;
-                self.renderer.present();
+
+                SDL.gl.swapWindow(self.window);
             }
 
             const now_seconds = std.time.timestamp();
@@ -186,3 +281,8 @@ pub const App = struct {
         }
     }
 };
+
+fn load_fn(load_ctx: SDL.gl.Context, name: [:0]const u8) ?*align(@alignOf(fn (u32) callconv(.C) u32)) const anyopaque {
+    _ = load_ctx; // autofix
+    return SDL.gl.getProcAddress(name);
+}

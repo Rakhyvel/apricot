@@ -8,6 +8,10 @@
             .url = "https://github.com/ziglibs/zgl/archive/f04d08def7ab221dd6a907c824067b362ca443e6.tar.gz",
             .hash = "1220a64a925ced61755f0f3b56bc4f6540b1cd5605b9f8ae82f6d57bcda78e5db7df",
         },
+        .zlm = .{
+            .url = "https://github.com/ziglibs/zlm/archive/35b76fae19f9d0a1ed541db621d7c4b3e266087e.tar.gz",
+            .hash = "1220342ac333965de915f74a8425e4848ffe46852da0e4789103f9ec650c3cd22456",
+        },
     },
 
     .paths = .{

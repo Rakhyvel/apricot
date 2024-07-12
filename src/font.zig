@@ -1,10 +1,11 @@
 const std = @import("std");
 const SDL = @import("sdl2");
 const gl = @import("zgl");
+const glm = @import("zlm");
 const graphics = @import("graphics.zig");
 
 const Glyph = struct {
-    rect: SDL.Rectangle,
+    rect: SDL.RectangleF,
     advance: usize,
 };
 
@@ -44,9 +45,10 @@ pub const Font = struct {
 
     pub inline fn draw(
         self: *const Font,
-        x: usize,
-        y: usize,
+        x: f32,
+        y: f32,
         text: []const u8,
+        program: gl.Program,
     ) !void {
         var cursor_x = x;
         for (text) |c| {
@@ -54,15 +56,31 @@ pub const Font = struct {
                 continue;
             }
             const glyph = self.get_glyph(c);
-            const dest_rect = SDL.Rectangle{
-                .x = @intCast(cursor_x),
-                .y = @intCast(y),
-                .width = glyph.rect.width,
-                .height = glyph.rect.height,
-            };
-            _ = dest_rect; // autofix
-            // TODO: Draw the quad with the proper texture
-            cursor_x += @intCast(glyph.advance);
+            var glyph_vertices = graphics.quad_vertices;
+            const model = glm.Mat4.createScale(glyph.rect.width, glyph.rect.height, 1.0).mul(
+                glm.Mat4.createTranslationXYZ(cursor_x, y, 0.0),
+            );
+            var glyph_uv = graphics.quad_uv;
+            for (0..4) |i| {
+                if (glyph_uv[2 * i] == 0) {
+                    glyph_uv[2 * i] = glyph.rect.x / 240.0;
+                } else {
+                    glyph_uv[2 * i] = (glyph.rect.x + glyph.rect.width) / 240.0;
+                }
+                if (glyph_uv[2 * i + 1] == 0) {
+                    glyph_uv[2 * i + 1] = glyph.rect.y / 240.0;
+                } else {
+                    glyph_uv[2 * i + 1] = (glyph.rect.y + glyph.rect.height) / 240.0;
+                }
+            }
+            for (0..8) |i| {
+                glyph_vertices[i + 12] = glyph_uv[i];
+            }
+            const quad = graphics.Mesh.from_data(&glyph_vertices, &graphics.quad_indices);
+            const view = glm.Mat4.identity;
+            const proj = glm.Mat4.createOrthogonal(0.0, 640.0, 480.0, 0.0, -0.1, 10.0);
+            quad.draw(model, view, proj, program, self.cache_texture);
+            cursor_x += @floatFromInt(glyph.advance);
         }
     }
 
@@ -121,6 +139,12 @@ pub const Font = struct {
                 .width = surf.ptr.w,
                 .height = surf.ptr.h,
             };
+            const glyph_rect = SDL.RectangleF{
+                .x = @floatFromInt(dest_rect.x),
+                .y = @floatFromInt(dest_rect.y),
+                .width = @floatFromInt(dest_rect.width),
+                .height = @floatFromInt(dest_rect.height),
+            };
             _ = SDL.c.SDL_SetSurfaceBlendMode(surf.ptr, SDL.c.SDL_BLENDMODE_NONE);
             try SDL.blitScaled(surf, &src_rect, mega_surface, &dest_rect);
             x_offset += @intCast(surf.ptr.w);
@@ -132,7 +156,7 @@ pub const Font = struct {
             var advance: c_int = 0;
             _ = TTF_GlyphMetrics32(self.ttf_font.ptr, c, &minx, &maxx, &miny, &maxy, &advance);
 
-            self.set_glyph(c, Glyph{ .rect = dest_rect, .advance = @intCast(advance) });
+            self.set_glyph(c, Glyph{ .rect = glyph_rect, .advance = @intCast(advance) });
         }
         self.cache_texture = graphics.texture_from_surface(mega_surface);
     }

@@ -3,33 +3,6 @@ const SDL = @import("sdl2");
 const Scene_Object = @import("scene.zig").Scene_Object;
 const gl = @import("zgl");
 
-const vertexShaderSource: []const u8 =
-    \\#version 450 core
-    \\layout(location = 0) in vec2 LVertexPos2D; // Attribute input for vertex position
-    \\void main() {
-    \\    gl_Position = vec4( LVertexPos2D, 0, 1 );
-    \\}
-;
-
-const fragmentShaderSource: []const u8 =
-    \\#version 450 core
-    \\out vec4 FragColor; // Output variable for fragment color
-    \\void main() {
-    \\    FragColor = vec4(1.0, 0.0, 0.0, 1.0);
-    \\}
-;
-
-const vertices = [_]f32{
-    -0.5, -0.5, 0.0, // top right
-    0.5, -0.5, 0.0, // bottom right
-    0.5, 0.5, 0.0, // bottom left
-    -0.5, 0.5, 0.0, // top left
-};
-const indices = [_]gl.UInt{
-    0, 1, 3, // first triangle
-    1, 2, 3, // second triangle
-};
-
 pub const App = struct {
     // TODO: Actually split these up into resource structs
     // Window stuff
@@ -59,10 +32,6 @@ pub const App = struct {
 
     // SDL stuff
     window: SDL.Window,
-    // renderer: SDL.Renderer,
-
-    program: gl.Program,
-    vao: gl.VertexArray,
 
     pub fn init(title: [:0]const u8, width: usize, height: usize, alloc: std.mem.Allocator) !@This() {
         try SDL.init(.{
@@ -96,53 +65,8 @@ pub const App = struct {
         // Load OpenGL function pointers from dynamic library
         gl.binding.load(glctx, load_fn) catch {}; // Most are loaded
 
-        // Create the program
-        const program = gl.createProgram();
-        errdefer program.delete();
-
-        // Create vertex shader
-        const vShader = gl.createShader(.vertex);
-        errdefer vShader.delete();
-        vShader.source(1, &.{vertexShaderSource});
-        gl.compileShader(vShader);
-        gl.attachShader(program, vShader);
-
-        // Create fragment shader
-        const fShader = gl.createShader(.fragment);
-        errdefer fShader.delete();
-        fShader.source(1, &.{fragmentShaderSource});
-        gl.compileShader(fShader);
-        gl.attachShader(program, fShader);
-
-        // Link the program's pipeline up
-        gl.linkProgram(program);
-
-        const gVertexPos2DLocation = gl.getAttribLocation(program, "LVertexPos2D") orelse unreachable;
-        _ = gVertexPos2DLocation; // autofix
-
-        // VAO and VBO and ebo
-        var vao: gl.VertexArray = undefined;
-        var vbo: gl.Buffer = undefined;
-        var ebo: gl.Buffer = undefined;
-
-        // Create and bind VAO, VBO, and EBO
-        vao = gl.createVertexArray();
-        gl.bindVertexArray(vao);
-
-        vbo = gl.createBuffer();
-        gl.bindBuffer(vbo, .array_buffer);
-        gl.bufferData(.array_buffer, f32, &vertices, .static_draw);
-
-        ebo = gl.createBuffer();
-        gl.bindBuffer(ebo, .element_array_buffer);
-        gl.bufferData(.element_array_buffer, gl.UInt, &indices, .static_draw);
-
-        // Set vertex attribute pointers
-        gl.vertexAttribPointer(0, 3, .float, false, 3 * @sizeOf(f32), 0);
-        gl.enableVertexAttribArray(0);
-
-        // Unbind VAO
-        gl.bindVertexArray(.invalid);
+        gl.enable(.blend);
+        gl.blendFunc(.src_alpha, .one_minus_src_alpha);
 
         return .{
             // Window stuff
@@ -166,11 +90,7 @@ pub const App = struct {
             // Keyboard stuff
             .keys = [_]bool{false} ** 256,
             // SDL stuff
-            // .renderer = renderer,
             .window = window,
-            // OpenGL stuff
-            .program = program,
-            .vao = vao,
         };
     }
 
@@ -218,11 +138,7 @@ pub const App = struct {
                 gl.clearColor(0.2, 0.3, 0.3, 1.0);
                 gl.clear(.{ .color = true });
 
-                gl.useProgram(self.program);
-                gl.bindVertexArray(self.vao);
-                gl.drawElements(.triangles, indices.len, .unsigned_int, 0);
-
-                // top.vtable.render(top.self);
+                top.vtable.render(top.self);
                 frames += 1;
 
                 SDL.gl.swapWindow(self.window);

@@ -1,5 +1,7 @@
 const std = @import("std");
 const SDL = @import("sdl2");
+const gl = @import("zgl");
+const graphics = @import("graphics.zig");
 
 const Glyph = struct {
     rect: SDL.Rectangle,
@@ -18,20 +20,18 @@ extern fn TTF_GlyphMetrics32(
 
 pub const Font = struct {
     ttf_font: SDL.ttf.Font,
-    cache_texture: SDL.Texture,
+    cache_texture: gl.Texture,
     glyphs: [95]Glyph, // All 95 printable ASCII glyphs
-    renderer: SDL.Renderer, // Maybe don't keep this
     height: usize,
     style: SDL.ttf.Font.Style,
     alloc: std.mem.Allocator,
 
-    fn init(filename: [:0]const u8, point_size: i32, style: SDL.ttf.Font.Style, renderer: SDL.Renderer, alloc: std.mem.Allocator) !Font {
+    fn init(filename: [:0]const u8, point_size: i32, style: SDL.ttf.Font.Style, alloc: std.mem.Allocator) !Font {
         const ttf_font = try SDL.ttf.openFont(filename, @intCast(point_size));
         var retval: Font = .{
             .ttf_font = ttf_font,
             .cache_texture = undefined,
             .glyphs = [_]Glyph{undefined} ** 95,
-            .renderer = renderer,
             .height = @intCast(ttf_font.height()),
             .style = style,
             .alloc = alloc,
@@ -44,7 +44,6 @@ pub const Font = struct {
 
     pub inline fn draw(
         self: *const Font,
-        renderer: SDL.Renderer,
         x: usize,
         y: usize,
         text: []const u8,
@@ -61,7 +60,8 @@ pub const Font = struct {
                 .width = glyph.rect.width,
                 .height = glyph.rect.height,
             };
-            try renderer.copy(self.cache_texture, dest_rect, glyph.rect);
+            _ = dest_rect; // autofix
+            // TODO: Draw the quad with the proper texture
             cursor_x += @intCast(glyph.advance);
         }
     }
@@ -86,8 +86,9 @@ pub const Font = struct {
         const mega_surface = try SDL.createRgbSurfaceWithFormat(
             @intCast(self.height * 10),
             @intCast(self.height * 10),
-            SDL.PixelFormatEnum.rgba8888,
+            SDL.PixelFormatEnum.argb8888,
         );
+        std.debug.print("height: {}\n", .{self.height * 10});
         defer mega_surface.destroy();
         for (32..127) |i| {
             const c: u8 = @intCast(i);
@@ -133,7 +134,7 @@ pub const Font = struct {
 
             self.set_glyph(c, Glyph{ .rect = dest_rect, .advance = @intCast(advance) });
         }
-        self.cache_texture = try SDL.createTextureFromSurface(self.renderer, mega_surface);
+        self.cache_texture = graphics.texture_from_surface(mega_surface);
     }
 
     inline fn set_glyph(self: *Font, char: u8, glyph: Glyph) void {
@@ -145,8 +146,9 @@ pub const Font = struct {
     }
 };
 
+pub const Font_Id: type = u8; // An index into the `fonts` array
+
 pub const Font_Manager_Resource = struct {
-    pub const Font_Id: type = u8; // An index into the `fonts` array
     pub const MAX_FONTS: usize = 255;
     fonts: [MAX_FONTS]Font,
     num_fonts: u8 = 0,
@@ -162,10 +164,9 @@ pub const Font_Manager_Resource = struct {
         filename: [:0]const u8,
         point_size: i32,
         style: SDL.ttf.Font.Style,
-        renderer: SDL.Renderer,
         alloc: std.mem.Allocator,
     ) !Font_Id {
-        self.fonts[self.num_fonts] = try Font.init(filename, point_size, style, renderer, alloc);
+        self.fonts[self.num_fonts] = try Font.init(filename, point_size, style, alloc);
         self.num_fonts += 1;
         return self.num_fonts - 1;
     }

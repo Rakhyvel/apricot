@@ -11,13 +11,13 @@ const font_ = @import("font.zig");
 // x Check box
 // x Label
 // x Rocker switch
-// x Slider
+// - Slider
+// - Radio button group
 // - Container
 // - Button
 // - Text box
-// - Radio button group (requires circles)
 
-var gui_alloc: std.mem.Allocator = undefined;
+var string_alloc: std.mem.Allocator = undefined;
 
 pub const white_color = SDL.Color.rgb(255, 255, 255);
 
@@ -45,11 +45,6 @@ const Gui_Component = struct {
     // TODO: Move these to a Click_Component, and run through the whole gui lot with the python script
     is_hovered: bool = false,
     clicked_in: bool = false,
-    parent: Entity_Id = Entity_Id.INVALID_ENTITY_ID,
-    // TODO: Move to layout component?
-    margin: f32 = 0,
-    border: f32 = 0,
-    padding: f32 = 0,
 };
 
 const Font_Id_Component = struct {
@@ -98,13 +93,8 @@ const Slider_Component = struct {
     n_notches: usize, // The number of discrete nothces on the slider. If 0, slider will be continuous
 };
 
-const Container_Component = struct {
-    children: std.ArrayList(Entity_Id),
-    max_size: Vector,
-};
-
 pub fn init() void {
-    gui_alloc = std.heap.page_allocator;
+    string_alloc = std.heap.page_allocator;
 }
 
 /// Registers components that are used in GUI systems.
@@ -123,7 +113,6 @@ pub fn register_components(world: *World) !void {
     try world.register_component(Label_Component);
     try world.register_component(Rocker_Switch_Component);
     try world.register_component(Slider_Component);
-    try world.register_component(Container_Component);
 }
 
 pub fn create_image(world: *World, image: SDL.Texture, position: Vector) !Entity_Id {
@@ -171,7 +160,7 @@ pub fn create_label(world: *World, text: []const u8, position: Vector, font_id: 
     var font = font_mgr.get_font(font_id);
     const width = font.width(text);
     const height = font.height;
-    const duped_text = try gui_alloc.dupe(u8, text);
+    const duped_text = try string_alloc.dupe(u8, text);
     const label_id = world.create_entity().with(
         Gui_Component{
             .pos = position,
@@ -212,22 +201,6 @@ pub fn create_slider(world: *World, value: f32, pos: Vector, width: usize, n_not
             .value = value,
             .onchange = onchange,
             .n_notches = n_notches,
-        },
-    ).entity_id();
-
-    return label_id;
-}
-
-pub fn create_container(world: *World, pos: Vector, max_size: Vector) Entity_Id {
-    const label_id = world.create_entity().with(
-        Gui_Component{
-            .pos = pos,
-            .size = .{ .x = 0, .y = 0 },
-        },
-    ).with(
-        Container_Component{
-            .children = std.ArrayList(Entity_Id).init(gui_alloc),
-            .max_size = max_size,
         },
     ).entity_id();
 
@@ -321,8 +294,8 @@ pub fn set_label_text(
     args: anytype,
 ) !void {
     var label = world.get_component(Label_Component, label_id);
-    gui_alloc.free(label.text); // TODO: I don't like this...
-    label.text = try std.fmt.allocPrint(gui_alloc, fmt, args);
+    string_alloc.free(label.text); // TODO: I don't like this...
+    label.text = try std.fmt.allocPrint(string_alloc, fmt, args);
 }
 
 pub fn get_rocker_switch_value(world: *World, rocker_switch_id: Entity_Id) bool {
@@ -343,62 +316,6 @@ pub fn get_slider_value(world: *World, slider_id: Entity_Id) f32 {
 pub fn set_slider_value(world: *World, slider_id: Entity_Id, value: f32) void {
     const slider = world.get_component(Slider_Component, slider_id);
     slider.value = value;
-}
-
-pub fn get_root(world: *World, id: Entity_Id) Entity_Id {
-    var curr_id = id;
-    while (true) {
-        const gui = world.get_component(Gui_Component, curr_id);
-        if (!gui.parent.is_valid()) {
-            return curr_id;
-        } else {
-            curr_id = gui.parent;
-        }
-    }
-}
-
-pub fn add_element(world: *World, container_id: Entity_Id, element_id: Entity_Id) !void {
-    const container = world.get_component(Container_Component, container_id);
-    try container.children.append(element_id);
-    const container_gui = world.get_component(Gui_Component, container_id);
-    const element_gui = world.get_component(Gui_Component, element_id);
-    element_gui.parent = container_id;
-    _ = update_layout(world, get_root(world, container_id), container_gui.pos);
-}
-
-pub fn update_layout(world: *World, id: Entity_Id, parent_pos: Vector) Vector {
-    const gui = world.get_component(Gui_Component, id);
-    if (!gui.shown) {
-        return Vector{ .x = 0, .y = 0 };
-    }
-
-    if (gui.parent.is_valid()) {
-        gui.pos.x = parent_pos.x + gui.margin + gui.padding;
-        gui.pos.y = parent_pos.y + gui.margin + gui.padding;
-    } else {
-        gui.pos = parent_pos;
-    }
-    if (world.entity_has_all_components(struct { c: Container_Component }, id)) {
-        const container = world.get_component(Container_Component, id);
-        var working_size = Vector{ .x = gui.padding, .y = gui.padding };
-        var placement = Vector{ .x = gui.margin, .y = gui.margin };
-        for (0..container.children.items.len) |i| {
-            const child_id = container.children.items[i];
-            const child_gui = world.get_component(Gui_Component, child_id);
-            const new_size = update_layout(world, child_id, gui.pos.add(placement));
-            std.debug.print("({d}, {d})!\n", .{ new_size.x, new_size.y });
-            if (child_gui.shown and new_size.x > 0) {
-                placement.y += new_size.y + gui.padding;
-                working_size.x = @max(working_size.x, placement.x + new_size.x);
-                working_size.y = @max(working_size.y, placement.y + new_size.y + gui.padding);
-            }
-        }
-        working_size.x += 2 * gui.padding + gui.margin;
-        gui.size = working_size;
-        return working_size;
-    } else {
-        return gui.size;
-    }
 }
 
 pub fn update(world: *World) void {

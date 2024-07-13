@@ -135,9 +135,8 @@ pub const App = struct {
                 }
 
                 // render
-                gl.clearColor(0.2, 0.3, 0.3, 1.0);
-                gl.clear(.{ .color = true });
-
+                try self.renderer.setColorRGB(0xFF, 0xFF, 0xFF);
+                try self.renderer.clear();
                 top.vtable.render(top.self);
                 frames += 1;
 

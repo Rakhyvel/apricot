@@ -1,7 +1,6 @@
 const std = @import("std");
 const SDL = @import("sdl2");
 const Scene_Object = @import("scene.zig").Scene_Object;
-const gl = @import("zgl");
 
 pub const App = struct {
     // TODO: Actually split these up into resource structs
@@ -32,6 +31,7 @@ pub const App = struct {
 
     // SDL stuff
     window: SDL.Window,
+    renderer: SDL.Renderer,
 
     pub fn init(title: [:0]const u8, width: usize, height: usize, alloc: std.mem.Allocator) !@This() {
         try SDL.init(.{
@@ -44,29 +44,18 @@ pub const App = struct {
         try SDL.ttf.init();
         errdefer SDL.ttf.quit();
 
-        try SDL.gl.setAttribute(.{ .context_major_version = 4 });
-        try SDL.gl.setAttribute(.{ .context_minor_version = 5 });
-        try SDL.gl.setAttribute(.{ .context_profile_mask = .core });
-
         var window = try SDL.createWindow(
             title,
             .{ .centered = {} },
             .{ .centered = {} },
             width,
             height,
-            .{ .vis = .shown, .resizable = true, .context = .opengl },
+            .{ .vis = .shown },
         );
         errdefer window.destroy();
 
-        // Create gl context for SDL
-        const glctx = try SDL.gl.createContext(window);
-        errdefer glctx.delete();
-
-        // Load OpenGL function pointers from dynamic library
-        gl.binding.load(glctx, load_fn) catch {}; // Most are loaded
-
-        gl.enable(.blend);
-        gl.blendFunc(.src_alpha, .one_minus_src_alpha);
+        const renderer = try SDL.createRenderer(window, null, .{ .accelerated = true });
+        errdefer renderer.destroy();
 
         return .{
             // Window stuff
@@ -90,11 +79,13 @@ pub const App = struct {
             // Keyboard stuff
             .keys = [_]bool{false} ** 256,
             // SDL stuff
+            .renderer = renderer,
             .window = window,
         };
     }
 
     pub fn deinit(self: *App) void {
+        self.renderer.destroy();
         self.window.destroy();
         SDL.ttf.quit();
         SDL.quit();
@@ -135,12 +126,11 @@ pub const App = struct {
                 }
 
                 // render
-                try self.renderer.setColorRGB(0xFF, 0xFF, 0xFF);
+                try self.renderer.setColorRGB(0x33, 0x4C, 0x65);
                 try self.renderer.clear();
                 top.vtable.render(top.self);
                 frames += 1;
-
-                SDL.gl.swapWindow(self.window);
+                self.renderer.present();
             }
 
             const now_seconds = std.time.timestamp();
@@ -196,8 +186,3 @@ pub const App = struct {
         }
     }
 };
-
-fn load_fn(load_ctx: SDL.gl.Context, name: [:0]const u8) ?*align(@alignOf(fn (u32) callconv(.C) u32)) const anyopaque {
-    _ = load_ctx; // autofix
-    return SDL.gl.getProcAddress(name);
-}

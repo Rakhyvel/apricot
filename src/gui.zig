@@ -11,13 +11,13 @@ const font_ = @import("font.zig");
 // x Check box
 // x Label
 // x Rocker switch
-// - Slider
-// - Radio button group
+// x Slider
 // - Container
 // - Button
 // - Text box
+// - Radio button group (requires circles)
 
-var string_alloc: std.mem.Allocator = undefined;
+var gui_alloc: std.mem.Allocator = undefined;
 
 pub const white_color = SDL.Color.rgb(255, 255, 255);
 
@@ -45,10 +45,15 @@ const Gui_Component = struct {
     // TODO: Move these to a Click_Component, and run through the whole gui lot with the python script
     is_hovered: bool = false,
     clicked_in: bool = false,
+    parent: Entity_Id = Entity_Id.INVALID_ENTITY_ID,
+    // TODO: Move to layout component?
+    margin: f32 = 0,
+    border: f32 = 0,
+    padding: f32 = 0,
 };
 
 const Font_Id_Component = struct {
-    font_id: font_.Font_Manager_Resource.Font_Id,
+    font_id: font_.Font_Id,
 };
 
 const Animation_Component = struct {
@@ -93,8 +98,19 @@ const Slider_Component = struct {
     n_notches: usize, // The number of discrete nothces on the slider. If 0, slider will be continuous
 };
 
+pub const Container_Flow_Align = enum(u8) {
+    DOWN_LEFT,
+    DOWN_CENTER,
+    // TODO: Add more
+};
+
+const Container_Component = struct {
+    children: std.ArrayList(Entity_Id),
+    flow_align: Container_Flow_Align,
+};
+
 pub fn init() void {
-    string_alloc = std.heap.page_allocator;
+    gui_alloc = std.heap.page_allocator;
 }
 
 /// Registers components that are used in GUI systems.
@@ -113,55 +129,56 @@ pub fn register_components(world: *World) !void {
     try world.register_component(Label_Component);
     try world.register_component(Rocker_Switch_Component);
     try world.register_component(Slider_Component);
+    try world.register_component(Container_Component);
 }
 
 pub fn create_image(world: *World, image: SDL.Texture, position: Vector) !Entity_Id {
     const query = try image.query();
-    const label_id = world.create_entity().with(
+    const label_id = try world.create_entity().with(
         Gui_Component{
             .pos = position,
             .size = .{ .x = @floatFromInt(query.width), .y = @floatFromInt(query.height) },
         },
     ).with(
         Image_Component{ .texture = image },
-    ).entity_id();
+    ).build();
 
     return label_id;
 }
 
-pub fn create_progress_bar(world: *World, value: f32, position: Vector, size: Vector) Entity_Id {
-    const label_id = world.create_entity().with(
+pub fn create_progress_bar(world: *World, value: f32, position: Vector, size: Vector) !Entity_Id {
+    const label_id = try world.create_entity().with(
         Gui_Component{
             .pos = position,
             .size = size,
         },
     ).with(
         Progress_Bar_Component{ .value = value },
-    ).entity_id();
+    ).build();
 
     return label_id;
 }
 
-pub fn create_checkbox(world: *World, value: bool, position: Vector) Entity_Id {
-    const label_id = world.create_entity().with(
+pub fn create_checkbox(world: *World, value: bool, position: Vector) !Entity_Id {
+    const label_id = try world.create_entity().with(
         Gui_Component{
             .pos = position,
             .size = .{ .x = 20, .y = 20 },
         },
     ).with(
         Checkbox_Component{ .value = value },
-    ).entity_id();
+    ).build();
 
     return label_id;
 }
 
-pub fn create_label(world: *World, text: []const u8, position: Vector, font_id: font_.Font_Manager_Resource.Font_Id) !Entity_Id {
+pub fn create_label(world: *World, text: []const u8, position: Vector, font_id: font_.Font_Id) !Entity_Id {
     const font_mgr = world.get_resource(font_.Font_Manager_Resource);
     var font = font_mgr.get_font(font_id);
     const width = font.width(text);
     const height = font.height;
-    const duped_text = try string_alloc.dupe(u8, text);
-    const label_id = world.create_entity().with(
+    const duped_text = try gui_alloc.dupe(u8, text);
+    const label_id = try world.create_entity().with(
         Gui_Component{
             .pos = position,
             .size = .{ .x = @floatFromInt(width), .y = @floatFromInt(height) },
@@ -170,13 +187,13 @@ pub fn create_label(world: *World, text: []const u8, position: Vector, font_id: 
         Label_Component{ .text = duped_text },
     ).with(
         Font_Id_Component{ .font_id = font_id },
-    ).entity_id();
+    ).build();
 
     return label_id;
 }
 
-pub fn create_rocker_switch(world: *World, value: bool, onchange: Gui_Event_Callback, pos: Vector) Entity_Id {
-    const label_id = world.create_entity().with(
+pub fn create_rocker_switch(world: *World, value: bool, onchange: Gui_Event_Callback, pos: Vector) !Entity_Id {
+    const label_id = try world.create_entity().with(
         Gui_Component{
             .pos = pos,
             .size = .{ .x = 44, .y = 20 },
@@ -185,13 +202,13 @@ pub fn create_rocker_switch(world: *World, value: bool, onchange: Gui_Event_Call
         Rocker_Switch_Component{ .value = value, .onchange = onchange },
     ).with(
         Animation_Component{ .value = if (value) 1.0 else 0.0 },
-    ).entity_id();
+    ).build();
 
     return label_id;
 }
 
-pub fn create_slider(world: *World, value: f32, pos: Vector, width: usize, n_notches: usize, onchange: ?Gui_Event_Callback) Entity_Id {
-    const label_id = world.create_entity().with(
+pub fn create_slider(world: *World, value: f32, pos: Vector, width: usize, n_notches: usize, onchange: ?Gui_Event_Callback) !Entity_Id {
+    const label_id = try world.create_entity().with(
         Gui_Component{
             .pos = pos,
             .size = .{ .x = @floatFromInt(width), .y = 52 },
@@ -202,7 +219,23 @@ pub fn create_slider(world: *World, value: f32, pos: Vector, width: usize, n_not
             .onchange = onchange,
             .n_notches = n_notches,
         },
-    ).entity_id();
+    ).build();
+
+    return label_id;
+}
+
+pub fn create_container(world: *World, pos: Vector, flow_align: Container_Flow_Align) !Entity_Id {
+    const label_id = try world.create_entity().with(
+        Gui_Component{
+            .pos = pos,
+            .size = .{ .x = 0, .y = 0 },
+        },
+    ).with(
+        Container_Component{
+            .children = std.ArrayList(Entity_Id).init(gui_alloc),
+            .flow_align = flow_align,
+        },
+    ).build();
 
     return label_id;
 }
@@ -252,7 +285,7 @@ pub fn set_shown(world: *World, entity_id: Entity_Id, shown: bool) void {
     // TODO: Trigger re-flow
 }
 
-pub fn set_font_id(world: *World, font_entity_id: Entity_Id, font_id: font_.Font_Manager_Resource.Font_Id) void {
+pub fn set_font_id(world: *World, font_entity_id: Entity_Id, font_id: font_.Font_Id) void {
     const font = world.get_component(Font_Id_Component, font_entity_id);
     font.font_id = font_id;
 }
@@ -294,8 +327,8 @@ pub fn set_label_text(
     args: anytype,
 ) !void {
     var label = world.get_component(Label_Component, label_id);
-    string_alloc.free(label.text); // TODO: I don't like this...
-    label.text = try std.fmt.allocPrint(string_alloc, fmt, args);
+    gui_alloc.free(label.text); // TODO: I don't like this...
+    label.text = try std.fmt.allocPrint(gui_alloc, fmt, args);
 }
 
 pub fn get_rocker_switch_value(world: *World, rocker_switch_id: Entity_Id) bool {
@@ -316,6 +349,87 @@ pub fn get_slider_value(world: *World, slider_id: Entity_Id) f32 {
 pub fn set_slider_value(world: *World, slider_id: Entity_Id, value: f32) void {
     const slider = world.get_component(Slider_Component, slider_id);
     slider.value = value;
+}
+
+pub fn get_root(world: *World, id: Entity_Id) Entity_Id {
+    var curr_id = id;
+    while (true) {
+        const gui = world.get_component(Gui_Component, curr_id);
+        if (!gui.parent.is_valid()) {
+            return curr_id;
+        } else {
+            curr_id = gui.parent;
+        }
+    }
+}
+
+pub fn add_element(world: *World, container_id: Entity_Id, element_id: Entity_Id) !void {
+    const container = world.get_component(Container_Component, container_id);
+    try container.children.append(element_id);
+    const container_gui = world.get_component(Gui_Component, container_id);
+    const element_gui = world.get_component(Gui_Component, element_id);
+    element_gui.parent = container_id;
+    _ = update_layout(world, get_root(world, container_id), container_gui.pos);
+}
+
+pub fn update_layout(world: *World, id: Entity_Id, parent_pos: Vector) Vector {
+    const gui = world.get_component(Gui_Component, id);
+    if (!gui.shown) {
+        return Vector{ .x = 0, .y = 0 };
+    }
+
+    if (gui.parent.is_valid()) {
+        gui.pos.x = parent_pos.x + gui.margin + gui.padding;
+        gui.pos.y = parent_pos.y + gui.margin + gui.padding;
+    } else {
+        gui.pos = parent_pos;
+    }
+    if (world.entity_has_all_components(struct { c: Container_Component }, id)) {
+        const container = world.get_component(Container_Component, id);
+        var working_size = Vector{ .x = gui.padding, .y = gui.padding };
+        var placement = Vector{ .x = gui.margin, .y = gui.margin };
+        switch (container.flow_align) {
+            .DOWN_LEFT => {
+                for (0..container.children.items.len) |i| {
+                    const child_id = container.children.items[i];
+                    const child_gui = world.get_component(Gui_Component, child_id);
+                    const new_size = update_layout(world, child_id, gui.pos.add(placement));
+                    if (child_gui.shown and new_size.x > 0) {
+                        placement.y += new_size.y + gui.padding;
+                        working_size.x = @max(working_size.x, placement.x + new_size.x);
+                        working_size.y = @max(working_size.y, placement.y + new_size.y + gui.padding);
+                    }
+                }
+            },
+            .DOWN_CENTER => {
+                for (0..container.children.items.len) |i| {
+                    const child_id = container.children.items[i];
+                    const child_gui = world.get_component(Gui_Component, child_id);
+                    const new_size = update_layout(world, child_id, gui.pos);
+                    if (child_gui.shown and new_size.x > 0) {
+                        working_size.x = @max(working_size.x, new_size.x + 2 * child_gui.margin);
+                        working_size.y = new_size.y + gui.padding + 2 * child_gui.margin;
+                    }
+                }
+                // Size is now defined
+                for (0..container.children.items.len) |i| {
+                    const child_id = container.children.items[i];
+                    const child_gui = world.get_component(Gui_Component, child_id);
+                    const new_size = update_layout(world, child_id, gui.pos.add(placement));
+                    _ = update_layout(world, child_id, .{
+                        .x = gui.pos.x + working_size.x / 2.0 - new_size.x / 2.0 + child_gui.margin,
+                        .y = gui.pos.y + placement.y,
+                    });
+                    placement.y += new_size.y + gui.padding + 2 * child_gui.margin;
+                }
+            },
+        }
+        working_size.x += 2 * gui.padding + gui.margin;
+        gui.size = working_size;
+        return working_size;
+    } else {
+        return gui.size;
+    }
 }
 
 pub fn update(world: *World) void {
@@ -455,5 +569,296 @@ fn update_slider(world: *World) void {
 }
 
 pub fn render(world: *World) !void {
-    _ = world; // autofix
+    try render_image(world);
+    try render_progress_bar(world);
+    try render_checkbox(world);
+    try render_label(world);
+    try render_rocker_switch(world);
+    try render_slider(world);
+}
+
+fn render_image(world: *World) !void {
+    const app = world.get_resource(App);
+    var iter = world.iter(struct {
+        gui: *const Gui_Component,
+        image: *const Image_Component,
+    });
+    while (iter.next()) |entity| {
+        if (!entity.gui.shown) {
+            continue;
+        }
+        const dest = SDL.Rectangle{
+            .x = @intFromFloat(entity.gui.pos.x),
+            .y = @intFromFloat(entity.gui.pos.y),
+            .width = @intFromFloat(entity.gui.size.x),
+            .height = @intFromFloat(entity.gui.size.y),
+        };
+        try app.renderer.copyEx(
+            entity.image.texture,
+            dest,
+            null,
+            entity.image.angle,
+            null,
+            SDL.RendererFlip.none,
+        );
+    }
+}
+
+fn render_progress_bar(world: *World) !void {
+    const app = world.get_resource(App);
+    var iter = world.iter(struct {
+        gui: *const Gui_Component,
+        progress_bar: *const Progress_Bar_Component,
+    });
+    while (iter.next()) |entity| {
+        if (!entity.gui.shown) {
+            continue;
+        }
+        try app.renderer.setColor(border_color);
+        var rect = SDL.Rectangle{
+            .x = @intFromFloat(entity.gui.pos.x),
+            .y = @intFromFloat(entity.gui.pos.y),
+            .width = @intFromFloat(entity.gui.size.x),
+            .height = 6,
+        };
+        try app.renderer.fillRect(rect);
+        try app.renderer.setColor(active_color);
+        rect = SDL.Rectangle{
+            .x = @intFromFloat(entity.gui.pos.x),
+            .y = @intFromFloat(entity.gui.pos.y),
+            .width = @intFromFloat(entity.gui.size.x * entity.progress_bar.value),
+            .height = 6,
+        };
+        try app.renderer.fillRect(rect);
+    }
+}
+
+fn render_checkbox(world: *World) !void {
+    const app = world.get_resource(App);
+    var iter = world.iter(struct {
+        gui: *const Gui_Component,
+        checkbox: *const Checkbox_Component,
+    });
+    while (iter.next()) |entity| {
+        if (!entity.gui.shown) {
+            continue;
+        }
+
+        var rect = SDL.RectangleF{
+            .x = entity.gui.pos.x,
+            .y = entity.gui.pos.y,
+            .width = 20,
+            .height = 20,
+        };
+
+        // Fill in box with color
+        if (entity.gui.clicked_in) {
+            try app.renderer.setColor(clicked_color);
+            try app.renderer.fillRectF(rect);
+        } else if (entity.checkbox.value) {
+            try app.renderer.setColor(active_color);
+            try app.renderer.fillRectF(rect);
+        }
+
+        // Draw border
+        if (entity.gui.clicked_in) {
+            try app.renderer.setColor(clicked_color);
+        } else if (entity.gui.is_hovered) {
+            try app.renderer.setColor(hovered_border_color);
+        } else if (!entity.checkbox.value) {
+            try app.renderer.setColor(border_color);
+        }
+        try app.renderer.drawRectF(rect);
+        rect.x += 1;
+        rect.y += 1;
+        rect.width -= 2;
+        rect.height -= 2;
+        try app.renderer.drawRectF(rect);
+
+        // Draw check
+        if (entity.checkbox.value) {
+            try app.renderer.setColor(text_color);
+            try app.renderer.drawLineF(
+                entity.gui.pos.x + 2,
+                entity.gui.pos.y + 10,
+                entity.gui.pos.x + 7,
+                entity.gui.pos.y + 15,
+            );
+            try app.renderer.drawLineF(
+                entity.gui.pos.x + 2,
+                entity.gui.pos.y + 11,
+                entity.gui.pos.x + 7,
+                entity.gui.pos.y + 16,
+            );
+            try app.renderer.drawLineF(
+                entity.gui.pos.x + 7,
+                entity.gui.pos.y + 15,
+                entity.gui.pos.x + 17,
+                entity.gui.pos.y + 5,
+            );
+
+            try app.renderer.drawLineF(
+                entity.gui.pos.x + 7,
+                entity.gui.pos.y + 16,
+                entity.gui.pos.x + 17,
+                entity.gui.pos.y + 6,
+            );
+        }
+    }
+}
+
+fn render_label(world: *World) !void {
+    const app = world.get_resource(App);
+    const font_mgr = world.get_resource(font_.Font_Manager_Resource);
+    var iter = world.iter(struct {
+        gui: *const Gui_Component,
+        label: *const Label_Component,
+        font: *const Font_Id_Component,
+    });
+    while (iter.next()) |entity| {
+        if (!entity.gui.shown) {
+            continue;
+        }
+        const font = font_mgr.get_font(entity.font.font_id);
+        try font.draw(
+            app.renderer,
+            @intFromFloat(entity.gui.pos.x),
+            @intFromFloat(entity.gui.pos.y),
+            entity.label.text,
+        );
+    }
+}
+
+fn render_rocker_switch(world: *World) !void {
+    const app = world.get_resource(App);
+    var iter = world.iter(struct {
+        gui: *const Gui_Component,
+        rocker_switch: *const Rocker_Switch_Component,
+        animation: *const Animation_Component,
+    });
+    while (iter.next()) |entity| {
+        if (!entity.gui.shown) {
+            continue;
+        }
+        // Draw border
+        var rect = SDL.RectangleF{
+            .x = entity.gui.pos.x,
+            .y = entity.gui.pos.y,
+            .width = 44,
+            .height = 20,
+        };
+        if (entity.gui.clicked_in) {
+            try app.renderer.setColor(clicked_color);
+        } else if (entity.gui.is_hovered) {
+            if (entity.rocker_switch.value) {
+                try app.renderer.setColor(hovered_active_color);
+            } else {
+                try app.renderer.setColor(hovered_border_color);
+            }
+        } else {
+            if (entity.rocker_switch.value) {
+                try app.renderer.setColor(active_color);
+            } else {
+                try app.renderer.setColor(border_color);
+            }
+        }
+        if (entity.rocker_switch.value or entity.gui.clicked_in) {
+            try app.renderer.fillRectF(rect);
+        } else {
+            try app.renderer.drawRectF(rect);
+            rect.x += 1;
+            rect.y += 1;
+            rect.width -= 2;
+            rect.height -= 2;
+            try app.renderer.drawRectF(rect);
+        }
+
+        // Draw switch
+        const switch_rect = SDL.RectangleF{
+            .x = entity.gui.pos.x + 5 + 24 * entity.animation.value,
+            .y = entity.gui.pos.y + 5,
+            .width = 10,
+            .height = 10,
+        };
+        if (entity.rocker_switch.value) {
+            try app.renderer.setColor(white_color);
+        } else if (entity.gui.clicked_in) {
+            try app.renderer.setColor(white_color);
+        } else {
+            if (entity.gui.is_hovered) {
+                try app.renderer.setColor(hovered_border_color);
+            } else {
+                try app.renderer.setColor(border_color);
+            }
+        }
+        try app.renderer.fillRectF(switch_rect);
+    }
+}
+
+fn render_slider(world: *World) !void {
+    const app = world.get_resource(App);
+    var iter = world.iter(struct {
+        gui: *const Gui_Component,
+        slider: *const Slider_Component,
+    });
+    while (iter.next()) |entity| {
+        if (!entity.gui.shown) {
+            continue;
+        }
+        const slider_offset = 6 + 12 + 16;
+        const slider_value_denom = if (entity.slider.n_notches == 0) 1 else @as(f32, @floatFromInt(entity.slider.n_notches - 1));
+
+        // Draw full slider track
+        if (entity.gui.is_hovered) {
+            try app.renderer.setColor(border_color);
+        } else {
+            try app.renderer.setColor(background_color);
+        }
+        var rect = SDL.RectangleF{
+            .x = entity.gui.pos.x,
+            .y = entity.gui.pos.y + slider_offset,
+            .width = entity.gui.size.x,
+            .height = 2,
+        };
+        try app.renderer.fillRectF(rect);
+
+        // Draw filled slider track
+        try app.renderer.setColor(active_color);
+        rect = .{
+            .x = entity.gui.pos.x,
+            .y = entity.gui.pos.y + slider_offset,
+            .width = entity.gui.size.x * (entity.slider.value) / slider_value_denom,
+            .height = 2,
+        };
+        try app.renderer.fillRectF(rect);
+
+        // Draw notches
+        const notch_width = entity.gui.size.x / (@as(f32, @floatFromInt(entity.slider.n_notches)) - 1.0);
+        try app.renderer.setColor(border_color);
+        for (0..entity.slider.n_notches) |i| {
+            const f = @as(f32, @floatFromInt(i));
+            try app.renderer.drawLineF(
+                entity.gui.pos.x + f * notch_width,
+                entity.gui.pos.y + 7 + 16,
+                entity.gui.pos.x + f * notch_width,
+                entity.gui.pos.y + 7 + 16 + 5,
+            );
+            try app.renderer.drawLineF(
+                entity.gui.pos.x + f * notch_width,
+                entity.gui.pos.y + 7 + 16 + 18,
+                entity.gui.pos.x + f * notch_width,
+                entity.gui.pos.y + 7 + 16 + 5 + 18,
+            );
+        }
+
+        // Draw knob
+        const knob_rect = SDL.RectangleF{
+            .x = entity.gui.pos.x + entity.gui.size.x * (entity.slider.value) / slider_value_denom - 4,
+            .y = entity.gui.pos.y + 11 + 12,
+            .width = 8,
+            .height = 24,
+        };
+        try app.renderer.setColor(active_color);
+        try app.renderer.fillRectF(knob_rect);
+    }
 }

@@ -18,6 +18,10 @@ pub const Entity_Id: type = struct {
     pub inline fn version(self: Entity_Id) Entity_Version {
         return self.vers;
     }
+
+    pub inline fn is_valid(self: Entity_Id) bool {
+        return self.idx != INVALID_ENTITY_INDEX;
+    }
 };
 
 /// The index of an entity in a scene's component and bitmask arrays
@@ -87,6 +91,11 @@ const Lazy_Entity_Builder = struct {
 
     /// Returns the ID of the entity being constructed
     pub fn entity_id(self: *Lazy_Entity_Builder) Entity_Id {
+        return self.id;
+    }
+
+    pub fn build(self: *Lazy_Entity_Builder) !Entity_Id {
+        try self.world.maintain();
         return self.id;
     }
 };

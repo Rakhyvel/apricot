@@ -99,7 +99,7 @@ pub const Font = struct {
 
             const surf = try self.ttf_font.renderTextBlended(
                 byte_slice,
-                SDL.Color.rgb(255, 255, 255),
+                SDL.Color.rgb(0, 0, 0),
             );
             defer surf.destroy();
 

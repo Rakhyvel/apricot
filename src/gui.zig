@@ -47,7 +47,7 @@ const Gui_Component = struct {
     clicked_in: bool = false,
     parent: Entity_Id = Entity_Id.INVALID_ENTITY_ID,
     // TODO: Move to layout component?
-    margin: f32 = 0,
+    margin: Vector = .{ .x = 0, .y = 0 },
     border: f32 = 0,
     padding: f32 = 0,
 };
@@ -109,6 +109,11 @@ const Container_Component = struct {
     flow_align: Container_Flow_Align,
 };
 
+const Button_Component = struct {
+    onclick: Gui_Event_Callback,
+    text: []const u8,
+};
+
 pub fn init() void {
     gui_alloc = std.heap.page_allocator;
 }
@@ -130,6 +135,7 @@ pub fn register_components(world: *World) !void {
     try world.register_component(Rocker_Switch_Component);
     try world.register_component(Slider_Component);
     try world.register_component(Container_Component);
+    try world.register_component(Button_Component);
 }
 
 pub fn create_image(world: *World, image: SDL.Texture, position: Vector) !Entity_Id {
@@ -235,6 +241,26 @@ pub fn create_container(world: *World, pos: Vector, flow_align: Container_Flow_A
             .children = std.ArrayList(Entity_Id).init(gui_alloc),
             .flow_align = flow_align,
         },
+    ).build();
+
+    return label_id;
+}
+
+// TODO: Think of a common arg layout for all these
+pub fn create_button(world: *World, pos: Vector, text: []const u8, font_id: font_.Font_Id, onclick: Gui_Event_Callback) !Entity_Id {
+    const label_id = try world.create_entity().with(
+        Gui_Component{
+            .pos = pos,
+            .size = .{ .x = 220, .y = 40 },
+            .margin = .{ .x = 0, .y = 8 },
+        },
+    ).with(
+        Button_Component{
+            .onclick = onclick,
+            .text = text,
+        },
+    ).with(
+        Font_Id_Component{ .font_id = font_id },
     ).build();
 
     return label_id;
@@ -379,15 +405,15 @@ pub fn update_layout(world: *World, id: Entity_Id, parent_pos: Vector) Vector {
     }
 
     if (gui.parent.is_valid()) {
-        gui.pos.x = parent_pos.x + gui.margin + gui.padding;
-        gui.pos.y = parent_pos.y + gui.margin + gui.padding;
+        gui.pos.x = parent_pos.x + gui.margin.x + gui.padding;
+        gui.pos.y = parent_pos.y + gui.margin.y + gui.padding;
     } else {
         gui.pos = parent_pos;
     }
     if (world.entity_has_all_components(struct { c: Container_Component }, id)) {
         const container = world.get_component(Container_Component, id);
         var working_size = Vector{ .x = gui.padding, .y = gui.padding };
-        var placement = Vector{ .x = gui.margin, .y = gui.margin };
+        var placement = gui.margin;
         switch (container.flow_align) {
             .DOWN_LEFT => {
                 for (0..container.children.items.len) |i| {
@@ -407,8 +433,8 @@ pub fn update_layout(world: *World, id: Entity_Id, parent_pos: Vector) Vector {
                     const child_gui = world.get_component(Gui_Component, child_id);
                     const new_size = update_layout(world, child_id, gui.pos);
                     if (child_gui.shown and new_size.x > 0) {
-                        working_size.x = @max(working_size.x, new_size.x + 2 * child_gui.margin);
-                        working_size.y = new_size.y + gui.padding + 2 * child_gui.margin;
+                        working_size.x = @max(working_size.x, new_size.x + 2 * child_gui.margin.x);
+                        working_size.y = new_size.y + gui.padding + 2 * child_gui.margin.y;
                     }
                 }
                 // Size is now defined
@@ -417,14 +443,14 @@ pub fn update_layout(world: *World, id: Entity_Id, parent_pos: Vector) Vector {
                     const child_gui = world.get_component(Gui_Component, child_id);
                     const new_size = update_layout(world, child_id, gui.pos.add(placement));
                     _ = update_layout(world, child_id, .{
-                        .x = gui.pos.x + working_size.x / 2.0 - new_size.x / 2.0 + child_gui.margin,
+                        .x = gui.pos.x + working_size.x / 2.0 - new_size.x / 2.0 + child_gui.margin.x,
                         .y = gui.pos.y + placement.y,
                     });
-                    placement.y += new_size.y + gui.padding + 2 * child_gui.margin;
+                    placement.y += new_size.y + gui.padding + 2 * child_gui.margin.y;
                 }
             },
         }
-        working_size.x += 2 * gui.padding + gui.margin;
+        working_size.x += 2 * gui.padding + gui.margin.x;
         gui.size = working_size;
         return working_size;
     } else {
@@ -438,6 +464,7 @@ pub fn update(world: *World) void {
     update_checkbox(world);
     update_rocker_switch(world);
     update_slider(world);
+    update_button(world);
 }
 
 fn update_linear(world: *World) void {
@@ -568,6 +595,31 @@ fn update_slider(world: *World) void {
     }
 }
 
+pub fn update_button(world: *World) void {
+    const app = world.get_resource(App);
+    var iter = world.iter(struct {
+        id: Entity_Id,
+        gui: *Gui_Component,
+        button: *Button_Component,
+    });
+    while (iter.next()) |entity| {
+        entity.gui.is_hovered = entity.gui.shown and
+            app.mouse_x > @as(i32, @intFromFloat(entity.gui.pos.x)) and
+            app.mouse_x <= @as(i32, @intFromFloat(entity.gui.pos.x + entity.gui.size.x)) and
+            app.mouse_y > @as(i32, @intFromFloat(entity.gui.pos.y)) and
+            app.mouse_y <= @as(i32, @intFromFloat(entity.gui.pos.y + entity.gui.size.y));
+        if (entity.gui.is_hovered and app.mouse_left_down) {
+            entity.gui.clicked_in = true;
+        }
+        if (!app.mouse_left_down) {
+            if (entity.gui.clicked_in and entity.gui.is_hovered) {
+                entity.button.onclick(world, entity.id);
+            }
+            entity.gui.clicked_in = false;
+        }
+    }
+}
+
 pub fn render(world: *World) !void {
     try render_image(world);
     try render_progress_bar(world);
@@ -575,6 +627,7 @@ pub fn render(world: *World) !void {
     try render_label(world);
     try render_rocker_switch(world);
     try render_slider(world);
+    try render_button(world);
 }
 
 fn render_image(world: *World) !void {
@@ -860,5 +913,57 @@ fn render_slider(world: *World) !void {
         };
         try app.renderer.setColor(active_color);
         try app.renderer.fillRectF(knob_rect);
+    }
+}
+
+fn render_button(world: *World) !void {
+    const app = world.get_resource(App);
+    const font_mgr = world.get_resource(font_.Font_Manager_Resource);
+    var iter = world.iter(struct {
+        gui: *const Gui_Component,
+        button: *const Button_Component,
+        font: *const Font_Id_Component,
+    });
+    while (iter.next()) |entity| {
+        if (!entity.gui.shown) {
+            continue;
+        }
+
+        var rect = SDL.RectangleF{
+            .x = entity.gui.pos.x,
+            .y = entity.gui.pos.y,
+            .width = entity.gui.size.x,
+            .height = entity.gui.size.y,
+        };
+
+        // Fill in box with color
+        if (entity.gui.clicked_in) {
+            try app.renderer.setColor(border_color);
+        } else {
+            try app.renderer.setColor(background_color);
+        }
+        try app.renderer.fillRectF(rect);
+
+        // Draw border
+        if (entity.gui.clicked_in or entity.gui.is_hovered) {
+            try app.renderer.setColor(border_color);
+            try app.renderer.drawRectF(rect);
+            rect.x += 1;
+            rect.y += 1;
+            rect.width -= 2;
+            rect.height -= 2;
+            try app.renderer.drawRectF(rect);
+        }
+
+        // Draw text
+        const font = font_mgr.get_font(entity.font.font_id);
+        const text_width = @as(f32, @floatFromInt(font.width(entity.button.text)));
+        const text_height = @as(f32, @floatFromInt(font.height));
+        try font.draw(
+            app.renderer,
+            @intFromFloat(entity.gui.pos.x + entity.gui.size.x / 2.0 - text_width / 2.0),
+            @intFromFloat(entity.gui.pos.y + entity.gui.size.y / 2.0 - text_height / 2.0),
+            entity.button.text,
+        );
     }
 }

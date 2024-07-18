@@ -6,19 +6,23 @@ const Vector = @import("vector.zig");
 const World = @import("world.zig").World;
 const font_ = @import("font.zig");
 
+// TODO: Add these
 // x Image
 // x Progress bar
 // x Check box
 // x Label
 // x Rocker switch
 // x Slider
-// - Container
-// - Button
+// x Container
+// x Button
+// x Spacer
+// - Horizontal/vertical rule
 // - Text box
 // - Radio button group (requires circles)
 
 var gui_alloc: std.mem.Allocator = undefined;
 
+// TODO: Inherit Dear IMGUI color pallettes
 pub const white_color = SDL.Color.rgb(255, 255, 255);
 
 pub const background_color = SDL.Color.rgb(153, 153, 153);
@@ -38,8 +42,8 @@ pub const inactive_text_color = SDL.Color.rgb(200, 200, 200);
 
 const Gui_Event_Callback = *const fn (world: *World, id: Entity_Id) void;
 
-const Gui_Component = struct {
-    pos: Vector,
+pub const Gui_Component = struct {
+    pos: Vector = .{ .x = 0, .y = 0 },
     size: Vector,
     shown: bool = true,
     // TODO: Move these to a Click_Component, and run through the whole gui lot with the python script
@@ -52,7 +56,7 @@ const Gui_Component = struct {
     padding: f32 = 0,
 };
 
-const Font_Id_Component = struct {
+pub const Font_Id_Component = struct {
     font_id: font_.Font_Id,
 };
 
@@ -101,6 +105,7 @@ const Slider_Component = struct {
 pub const Container_Flow_Align = enum(u8) {
     DOWN_LEFT,
     DOWN_CENTER,
+    LEFT_TOP,
     // TODO: Add more
 };
 
@@ -138,11 +143,20 @@ pub fn register_components(world: *World) !void {
     try world.register_component(Button_Component);
 }
 
-pub fn create_image(world: *World, image: SDL.Texture, position: Vector) !Entity_Id {
+pub fn create_spacer(world: *World, size: Vector) !Entity_Id {
+    const entity_id = try world.create_entity().with(
+        Gui_Component{
+            .size = size,
+        },
+    ).build();
+
+    return entity_id;
+}
+
+pub fn create_image(world: *World, image: SDL.Texture) !Entity_Id {
     const query = try image.query();
     const label_id = try world.create_entity().with(
         Gui_Component{
-            .pos = position,
             .size = .{ .x = @floatFromInt(query.width), .y = @floatFromInt(query.height) },
         },
     ).with(
@@ -152,41 +166,38 @@ pub fn create_image(world: *World, image: SDL.Texture, position: Vector) !Entity
     return label_id;
 }
 
-pub fn create_progress_bar(world: *World, value: f32, position: Vector, size: Vector) !Entity_Id {
-    const label_id = try world.create_entity().with(
+pub fn create_progress_bar(world: *World, value: f32, size: Vector) !Entity_Id {
+    const entity_id = try world.create_entity().with(
         Gui_Component{
-            .pos = position,
             .size = size,
         },
     ).with(
         Progress_Bar_Component{ .value = value },
     ).build();
 
-    return label_id;
+    return entity_id;
 }
 
-pub fn create_checkbox(world: *World, value: bool, position: Vector) !Entity_Id {
-    const label_id = try world.create_entity().with(
+pub fn create_checkbox(world: *World, value: bool) !Entity_Id {
+    const entity_id = try world.create_entity().with(
         Gui_Component{
-            .pos = position,
             .size = .{ .x = 20, .y = 20 },
         },
     ).with(
         Checkbox_Component{ .value = value },
     ).build();
 
-    return label_id;
+    return entity_id;
 }
 
-pub fn create_label(world: *World, text: []const u8, position: Vector, font_id: font_.Font_Id) !Entity_Id {
+pub fn create_label(world: *World, text: []const u8, font_id: font_.Font_Id) !Entity_Id {
     const font_mgr = world.get_resource(font_.Font_Manager_Resource);
     var font = font_mgr.get_font(font_id);
-    const width = font.width(text);
-    const height = font.height;
     const duped_text = try gui_alloc.dupe(u8, text);
-    const label_id = try world.create_entity().with(
+    const width = font.width(duped_text);
+    const height = font.height;
+    const entity_id = try world.create_entity().with(
         Gui_Component{
-            .pos = position,
             .size = .{ .x = @floatFromInt(width), .y = @floatFromInt(height) },
         },
     ).with(
@@ -195,13 +206,12 @@ pub fn create_label(world: *World, text: []const u8, position: Vector, font_id: 
         Font_Id_Component{ .font_id = font_id },
     ).build();
 
-    return label_id;
+    return entity_id;
 }
 
-pub fn create_rocker_switch(world: *World, value: bool, onchange: Gui_Event_Callback, pos: Vector) !Entity_Id {
-    const label_id = try world.create_entity().with(
+pub fn create_rocker_switch(world: *World, value: bool, onchange: Gui_Event_Callback) !Entity_Id {
+    const entity_id = try world.create_entity().with(
         Gui_Component{
-            .pos = pos,
             .size = .{ .x = 44, .y = 20 },
         },
     ).with(
@@ -210,13 +220,12 @@ pub fn create_rocker_switch(world: *World, value: bool, onchange: Gui_Event_Call
         Animation_Component{ .value = if (value) 1.0 else 0.0 },
     ).build();
 
-    return label_id;
+    return entity_id;
 }
 
-pub fn create_slider(world: *World, value: f32, pos: Vector, width: usize, n_notches: usize, onchange: ?Gui_Event_Callback) !Entity_Id {
-    const label_id = try world.create_entity().with(
+pub fn create_slider(world: *World, value: f32, width: usize, n_notches: usize, onchange: ?Gui_Event_Callback) !Entity_Id {
+    const entity_id = try world.create_entity().with(
         Gui_Component{
-            .pos = pos,
             .size = .{ .x = @floatFromInt(width), .y = 52 },
         },
     ).with(
@@ -227,11 +236,11 @@ pub fn create_slider(world: *World, value: f32, pos: Vector, width: usize, n_not
         },
     ).build();
 
-    return label_id;
+    return entity_id;
 }
 
 pub fn create_container(world: *World, pos: Vector, flow_align: Container_Flow_Align) !Entity_Id {
-    const label_id = try world.create_entity().with(
+    const entity_id = try world.create_entity().with(
         Gui_Component{
             .pos = pos,
             .size = .{ .x = 0, .y = 0 },
@@ -243,14 +252,13 @@ pub fn create_container(world: *World, pos: Vector, flow_align: Container_Flow_A
         },
     ).build();
 
-    return label_id;
+    return entity_id;
 }
 
 // TODO: Think of a common arg layout for all these
-pub fn create_button(world: *World, pos: Vector, text: []const u8, font_id: font_.Font_Id, onclick: Gui_Event_Callback) !Entity_Id {
+pub fn create_button(world: *World, text: []const u8, font_id: font_.Font_Id, onclick: Gui_Event_Callback) !Entity_Id {
     const label_id = try world.create_entity().with(
         Gui_Component{
-            .pos = pos,
             .size = .{ .x = 220, .y = 40 },
             .margin = .{ .x = 0, .y = 8 },
         },
@@ -289,14 +297,25 @@ pub fn set_pos(world: *World, entity_id: Entity_Id, position: Vector) void {
     // TODO: Trigger re-flow
 }
 
-pub fn get_dimensions(world: *World, entity_id: Entity_Id) Vector {
+pub fn get_size(world: *World, entity_id: Entity_Id) Vector {
     const gui = world.get_component(Gui_Component, entity_id);
     return gui.size;
 }
 
-pub fn set_dimensions(world: *World, entity_id: Entity_Id, size: Vector) void {
+pub fn set_size(world: *World, entity_id: Entity_Id, size: Vector) void {
     const gui = world.get_component(Gui_Component, entity_id);
-    gui.pos = size;
+    gui.size = size;
+    // TODO: Trigger re-flow
+}
+
+pub fn get_padding(world: *World, entity_id: Entity_Id) f32 {
+    const gui = world.get_component(Gui_Component, entity_id);
+    return gui.padding;
+}
+
+pub fn set_padding(world: *World, entity_id: Entity_Id, padding: f32) void {
+    const gui = world.get_component(Gui_Component, entity_id);
+    gui.padding = padding;
     // TODO: Trigger re-flow
 }
 
@@ -392,10 +411,11 @@ pub fn get_root(world: *World, id: Entity_Id) Entity_Id {
 pub fn add_element(world: *World, container_id: Entity_Id, element_id: Entity_Id) !void {
     const container = world.get_component(Container_Component, container_id);
     try container.children.append(element_id);
-    const container_gui = world.get_component(Gui_Component, container_id);
     const element_gui = world.get_component(Gui_Component, element_id);
     element_gui.parent = container_id;
-    _ = update_layout(world, get_root(world, container_id), container_gui.pos);
+    const root_id = get_root(world, container_id);
+    const root_gui = world.get_component(Gui_Component, root_id);
+    _ = update_layout(world, get_root(world, container_id), root_gui.pos);
 }
 
 pub fn update_layout(world: *World, id: Entity_Id, parent_pos: Vector) Vector {
@@ -405,15 +425,17 @@ pub fn update_layout(world: *World, id: Entity_Id, parent_pos: Vector) Vector {
     }
 
     if (gui.parent.is_valid()) {
-        gui.pos.x = parent_pos.x + gui.margin.x + gui.padding;
-        gui.pos.y = parent_pos.y + gui.margin.y + gui.padding;
+        gui.pos.x = parent_pos.x + gui.margin.x;
+        gui.pos.y = parent_pos.y + gui.margin.y;
     } else {
         gui.pos = parent_pos;
     }
+
+    // TODO: Understand margin and padding
     if (world.entity_has_all_components(struct { c: Container_Component }, id)) {
         const container = world.get_component(Container_Component, id);
-        var working_size = Vector{ .x = gui.padding, .y = gui.padding };
-        var placement = gui.margin;
+        var working_size = Vector{ .x = 0, .y = 0 };
+        var placement = Vector{ .x = 0, .y = 0 };
         switch (container.flow_align) {
             .DOWN_LEFT => {
                 for (0..container.children.items.len) |i| {
@@ -421,9 +443,9 @@ pub fn update_layout(world: *World, id: Entity_Id, parent_pos: Vector) Vector {
                     const child_gui = world.get_component(Gui_Component, child_id);
                     const new_size = update_layout(world, child_id, gui.pos.add(placement));
                     if (child_gui.shown and new_size.x > 0) {
-                        placement.y += new_size.y + gui.padding;
-                        working_size.x = @max(working_size.x, placement.x + new_size.x);
-                        working_size.y = @max(working_size.y, placement.y + new_size.y + gui.padding);
+                        placement.y += new_size.y + gui.padding + 2 * child_gui.margin.y;
+                        working_size.x = @max(working_size.x, new_size.x);
+                        working_size.y += new_size.y + gui.padding + 2 * child_gui.margin.y;
                     }
                 }
             },
@@ -434,7 +456,7 @@ pub fn update_layout(world: *World, id: Entity_Id, parent_pos: Vector) Vector {
                     const new_size = update_layout(world, child_id, gui.pos);
                     if (child_gui.shown and new_size.x > 0) {
                         working_size.x = @max(working_size.x, new_size.x + 2 * child_gui.margin.x);
-                        working_size.y = new_size.y + gui.padding + 2 * child_gui.margin.y;
+                        working_size.y += new_size.y + gui.padding + 2 * child_gui.margin.y;
                     }
                 }
                 // Size is now defined
@@ -449,8 +471,21 @@ pub fn update_layout(world: *World, id: Entity_Id, parent_pos: Vector) Vector {
                     placement.y += new_size.y + gui.padding + 2 * child_gui.margin.y;
                 }
             },
+            .LEFT_TOP => {
+                for (0..container.children.items.len) |i| {
+                    const child_id = container.children.items[i];
+                    const child_gui = world.get_component(Gui_Component, child_id);
+                    if (child_gui.shown) {
+                        const new_size = update_layout(world, child_id, gui.pos.add(placement));
+                        placement.x += new_size.x;
+                        working_size.x += new_size.x;
+                        working_size.y = @max(working_size.y, placement.y + new_size.y);
+                    }
+                }
+            },
         }
-        working_size.x += 2 * gui.padding + gui.margin.x;
+        // working_size.x += gui.padding + gui.margin.x;
+        // working_size.y += gui.padding + gui.margin.y;
         gui.size = working_size;
         return working_size;
     } else {
@@ -621,6 +656,7 @@ pub fn update_button(world: *World) void {
 }
 
 pub fn render(world: *World) !void {
+    try render_container(world);
     try render_image(world);
     try render_progress_bar(world);
     try render_checkbox(world);
@@ -628,6 +664,27 @@ pub fn render(world: *World) !void {
     try render_rocker_switch(world);
     try render_slider(world);
     try render_button(world);
+}
+
+fn render_container(world: *World) !void {
+    const app = world.get_resource(App);
+    var iter = world.iter(struct {
+        gui: *const Gui_Component,
+        container: *const Container_Component,
+    });
+    while (iter.next()) |entity| {
+        if (!entity.gui.shown) {
+            continue;
+        }
+        const dest = SDL.RectangleF{
+            .x = entity.gui.pos.x,
+            .y = entity.gui.pos.y,
+            .width = entity.gui.size.x,
+            .height = entity.gui.size.y,
+        };
+        try app.renderer.setColorRGBA(0, 0, 0, 20);
+        try app.renderer.drawRectF(dest);
+    }
 }
 
 fn render_image(world: *World) !void {

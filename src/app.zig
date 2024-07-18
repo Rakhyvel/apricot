@@ -16,6 +16,7 @@ pub const App = struct {
 
     // Scene stack stuff
     scene_stack: std.ArrayList(Scene_Object),
+    scene_stale: bool,
 
     // Mouse stuff
     mouse_x: i32,
@@ -57,6 +58,8 @@ pub const App = struct {
         const renderer = try SDL.createRenderer(window, null, .{ .accelerated = true });
         errdefer renderer.destroy();
 
+        try renderer.setDrawBlendMode(SDL.BlendMode.blend);
+
         return .{
             // Window stuff
             .title = title,
@@ -68,6 +71,7 @@ pub const App = struct {
             .ticks = 0,
             // Scene stack stuff
             .scene_stack = std.ArrayList(Scene_Object).init(alloc),
+            .scene_stale = false,
             // Mouse stuff
             .mouse_x = 0,
             .mouse_y = 0,
@@ -93,6 +97,7 @@ pub const App = struct {
 
     pub fn push_scene(self: *App, scene: Scene_Object) void {
         self.scene_stack.append(scene) catch @panic("memory error");
+        self.scene_stale = true;
     }
 
     pub fn start_app(self: *@This()) !void {
@@ -113,24 +118,32 @@ pub const App = struct {
 
             previous = current;
             lag += elapsed;
+            self.scene_stale = false;
 
             if (self.scene_stack.items.len > 0) {
                 var top = self.scene_stack.getLast();
+
                 // update
                 while (lag >= DELTA_T) {
                     self.reset_input();
                     self.poll_input();
-                    top.vtable.update(top.self);
-                    self.ticks += 1;
-                    lag -= DELTA_T;
+                    if (!self.scene_stale) {
+                        top.vtable.update(top.self);
+                        self.ticks += 1;
+                        lag -= DELTA_T;
+                    } else {
+                        break;
+                    }
                 }
 
                 // render
-                try self.renderer.setColorRGB(0xFF, 0xFF, 0xFF);
-                try self.renderer.clear();
-                top.vtable.render(top.self);
-                frames += 1;
-                self.renderer.present();
+                if (!self.scene_stale) {
+                    try self.renderer.setColorRGB(0xFF, 0xFF, 0xFF);
+                    try self.renderer.clear();
+                    top.vtable.render(top.self);
+                    frames += 1;
+                    self.renderer.present();
+                }
             }
 
             const now_seconds = std.time.timestamp();

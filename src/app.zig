@@ -3,7 +3,7 @@ const SDL = @import("sdl2");
 const Scene_Object = @import("scene.zig").Scene_Object;
 
 pub const App = struct {
-    // TODO: Actually split these up into resource structs
+    // I don't feel a real reason to split these up, besides to group them
     // Window stuff
     title: [:0]const u8,
     width: usize,
@@ -24,7 +24,10 @@ pub const App = struct {
     mouse_rel_x: i32,
     mouse_rel_y: i32,
     mouse_left_down: bool,
+    mouse_middle_down: bool,
     mouse_right_down: bool,
+    mouse_extra_1_down: bool,
+    mouse_extra_2_down: bool,
     mouse_wheel: i32,
 
     // Keyboard stuff
@@ -78,7 +81,10 @@ pub const App = struct {
             .mouse_rel_x = 0,
             .mouse_rel_y = 0,
             .mouse_left_down = false,
+            .mouse_middle_down = false,
             .mouse_right_down = false,
+            .mouse_extra_1_down = false,
+            .mouse_extra_2_down = false,
             .mouse_wheel = 0,
             // Keyboard stuff
             .keys = [_]bool{false} ** 256,
@@ -173,13 +179,17 @@ pub const App = struct {
                 },
                 .mouse_button_down => switch (ev.mouse_button_down.button) {
                     .left => self.mouse_left_down = true,
+                    .middle => self.mouse_middle_down = true,
                     .right => self.mouse_right_down = true,
-                    else => {}, // TODO: These might be cool to add!
+                    .extra_1 => self.mouse_extra_1_down = true,
+                    .extra_2 => self.mouse_extra_2_down = true,
                 },
                 .mouse_button_up => switch (ev.mouse_button_up.button) {
                     .left => self.mouse_left_down = false,
+                    .middle => self.mouse_middle_down = false,
                     .right => self.mouse_right_down = false,
-                    else => {}, // TODO: These might be cool to add!
+                    .extra_1 => self.mouse_extra_1_down = false,
+                    .extra_2 => self.mouse_extra_2_down = false,
                 },
                 .mouse_wheel => self.mouse_wheel = ev.mouse_wheel.delta_y,
                 .window => if (ev.window.type == .resized) {

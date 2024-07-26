@@ -27,8 +27,8 @@ pub fn build(b: *std.Build) void {
     // Build Apricot
     var apricot_package = apricot.init(b);
     apricot_package.link(exe, .{
-        .image = "path\to\sdl2_image\lib",
-        .ttf = "path\to\sdl2_ttf\lib",
+        .image = "path/to/SDL2_image/lib",
+        .ttf = "path/to/SDL2_ttf/lib",
     });
     // Add apricot's "sdl2" subpackage
     exe.root_module.addImport("sdl2", apricot_package.sdl2());

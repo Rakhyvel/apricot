@@ -6,6 +6,7 @@ This library provides basic utilities for making games and *ap*plications. These
 - Builin GUI components and systems
 
 ### Hello, Apricot
+Below is some starting code for a basic app:
 ```zig
 const std = @import("std");
 const apricot = @import("apricot");

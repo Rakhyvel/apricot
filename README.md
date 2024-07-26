@@ -5,6 +5,75 @@ This library provides basic utilities for making games and *ap*plications. These
 - Font cacheing
 - Builin GUI components and systems
 
+### Hello, Apricot
+```zig
+const std = @import("std");
+const apricot = @import("apricot");
+
+pub fn main() !void {
+    // Initialize the apricot library
+    const width: usize = 640;
+    const height: usize = 480;
+    var app = try apricot.App.init("Apricot Demo", width, height, std.heap.c_allocator);
+    defer app.deinit();
+    
+    // Create a scene
+    const alloc = std.heap.c_allocator;
+    var scene = try Scene.init(alloc, &app);
+
+    // Push the scene to the app's scene stack
+    app.push_scene(scene.as_scene());
+
+    // Start the app's update/render loop
+    try app.start_app();
+}
+
+pub const Scene = struct {
+    // Scene global members here
+
+    pub fn init(alloc: std.mem.Allocator) !*Scene {
+        const self = try alloc.create(Scene);
+
+        // Init scene here
+
+        return self;
+    }
+
+    pub fn as_scene(self: *Scene) apricot.scene.Scene_Object {
+        return .{
+            .self = @ptrCast(self),
+            .vtable = &scene_vtable,
+        };
+    }
+
+    fn deinit(pself: *void) void {
+        const self: *Scene = @alignCast(@ptrCast(pself));
+        _ = self;
+        // Scene deinit-ing here
+    }
+
+    fn update(pself: *void) void {
+        const self: *Scene = @alignCast(@ptrCast(pself));
+        _ = self;
+        // Scene updating here
+        std.debug.print("Scene update!\n", .{});
+    }
+
+    fn render(pself: *void) void {
+        const self: *Scene = @alignCast(@ptrCast(pself));
+        _ = self;
+        // Scene rendering here
+        std.debug.print("Scene render!\n", .{});
+    }
+};
+
+const scene_vtable: apricot.scene.Scene_VTable = .{
+    .deinit = Scene.deinit,
+    .update = Scene.update,
+    .render = Scene.render,
+};
+```
+
 ### Installation and Build File
 1. `zig fetch --save https://github.com/rakhyvel/apricot/archive/[commit_hash].tar.gz`
 

@@ -6,7 +6,7 @@ Apricot is a lightweight library that provides basic utilities for rapid prototy
 - Font cacheing
 - Builin GUI components and systems
 
-### Installation and Build File
+## Installation and Build File
 1. `zig fetch --save https://github.com/rakhyvel/apricot/archive/[commit_hash].tar.gz`
 
 1. Add this to your `build.zig`
@@ -43,7 +43,7 @@ pub fn build(b: *std.Build) void {
 1. Add `SDL2.dll` to your project base path
 1. Add `SDL2_ttf.dll` to your `zig-out/bin` path
 
-### Usage
+## Usage
 Below is some starting code for a basic app:
 ```zig
 const std = @import("std");
@@ -113,11 +113,10 @@ const scene_vtable: apricot.scene.Scene_VTable = .{
 };
 ```
 
-### Features
-TODO
+## Features
 <!-- TODO 
 - Showcase getting user input and stuff
-- Showcase ECS features
+- Showcase ECS features (creating/destroying entities, custom components, systems over those components resources)
 - Showcase Scene features
 - Maybe showcase GUI?
 -->

@@ -6,12 +6,12 @@ This library provides basic utilities for making games and *ap*plications. These
 - Builin GUI components and systems
 
 ### Installation and Build File
-`zig fetch --save https://github.com/rakhyvel/apricot/archive/[commit_hash].tar.gz`
+1. `zig fetch --save https://github.com/rakhyvel/apricot/archive/[commit_hash].tar.gz`
 
+1. Add this to your `build.zig`
 ```zig
 const std = @import("std");
 // Import the apricot build file
-const apricot = @import("third-party/apricot/build.zig");
 
 pub fn build(b: *std.Build) void {
     const target = b.standardTargetOptions(.{});
@@ -25,7 +25,7 @@ pub fn build(b: *std.Build) void {
     });
 
     // Build Apricot
-    var apricot_package = apricot.init(b);
+    var apricot_package = @import("apricot").init(b);
     apricot_package.link(exe, .{
         .image = "path/to/SDL2_image/lib",
         .ttf = "path/to/SDL2_ttf/lib",
@@ -38,3 +38,6 @@ pub fn build(b: *std.Build) void {
     b.installArtifact(exe);
 }
 ```
+1. Add `.build_config/sdl.json` to your project base path
+1. Add `SDL2.dll` to your project base path
+1. Add `SDL2_ttf.dll` to your `zig-out/bin` path

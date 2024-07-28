@@ -1,5 +1,5 @@
 const std = @import("std");
-const sdl = @import("../SDL.zig/build.zig");
+const sdl = @import("third-party/SDL.zig/build.zig");
 
 const Apricot = @This();
 
@@ -12,13 +12,13 @@ pub const SDL2_Subsys_Lib_Paths = struct {
 };
 
 pub fn init(b: *std.Build) Apricot {
-    const sdk = sdl.init(b, null);
+    const sdk = sdl.init(b, null, null);
     const sdl2_module = sdk.getWrapperModule();
     return .{ .sdl2_sdk = sdk, .sdl2_module = sdl2_module };
 }
 
 pub fn link(sdk: *Apricot, exe: *std.Build.Step.Compile, subsys_lib_paths: SDL2_Subsys_Lib_Paths) void {
-    sdk.sdl2_sdk.link(exe, .dynamic);
+    sdk.sdl2_sdk.link(exe, .dynamic, .SDL2);
     if (subsys_lib_paths.image) |image_path| {
         exe.addLibraryPath(.{ .cwd_relative = image_path });
         exe.linkSystemLibrary2("SDL2_image", .{ .use_pkg_config = .no });

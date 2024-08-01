@@ -22,6 +22,10 @@ pub const Entity_Id: type = struct {
     pub inline fn is_valid(self: Entity_Id) bool {
         return self.idx != INVALID_ENTITY_INDEX;
     }
+
+    pub inline fn equals(self: Entity_Id, other: Entity_Id) bool {
+        return self.idx == other.idx and self.vers == other.vers;
+    }
 };
 
 /// The index of an entity in a scene's component and bitmask arrays

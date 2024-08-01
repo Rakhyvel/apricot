@@ -45,8 +45,8 @@ pub const Font = struct {
     pub inline fn draw(
         self: *const Font,
         renderer: SDL.Renderer,
-        x: usize,
-        y: usize,
+        x: i32,
+        y: i32,
         text: []const u8,
     ) !void {
         var cursor_x = x;

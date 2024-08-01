@@ -1,6 +1,7 @@
 const std = @import("std");
 const SDL = @import("sdl2");
 const Scene_Object = @import("scene.zig").Scene_Object;
+const Vec2 = @import("vector.zig");
 
 pub const App = struct {
     // I don't feel a real reason to split these up, besides to group them
@@ -18,11 +19,9 @@ pub const App = struct {
     scene_stack: std.ArrayList(Scene_Object),
     scene_stale: bool,
 
-    // Mouse stuff
-    mouse_x: i32,
-    mouse_y: i32,
-    mouse_rel_x: i32,
-    mouse_rel_y: i32,
+    // Mouse stuff TODO: Maybe use Vec2
+    mouse: Vec2,
+    mouse_rel: Vec2,
     mouse_left_down: bool,
     mouse_middle_down: bool,
     mouse_right_down: bool,
@@ -76,10 +75,8 @@ pub const App = struct {
             .scene_stack = std.ArrayList(Scene_Object).init(alloc),
             .scene_stale = false,
             // Mouse stuff
-            .mouse_x = 0,
-            .mouse_y = 0,
-            .mouse_rel_x = 0,
-            .mouse_rel_y = 0,
+            .mouse = Vec2.zero(),
+            .mouse_rel = Vec2.zero(),
             .mouse_left_down = false,
             .mouse_middle_down = false,
             .mouse_right_down = false,
@@ -162,8 +159,7 @@ pub const App = struct {
     }
 
     fn reset_input(self: *@This()) void {
-        self.mouse_rel_x = 0;
-        self.mouse_rel_y = 0;
+        self.mouse_rel = Vec2.zero();
         self.mouse_wheel = 0.0;
     }
 
@@ -172,10 +168,14 @@ pub const App = struct {
             switch (ev) {
                 .quit => self.running = false,
                 .mouse_motion => {
-                    self.mouse_x = ev.mouse_motion.x;
-                    self.mouse_y = ev.mouse_motion.y;
-                    self.mouse_rel_x = ev.mouse_motion.delta_x;
-                    self.mouse_rel_y = ev.mouse_motion.delta_y;
+                    self.mouse = Vec2.new(
+                        @floatFromInt(ev.mouse_motion.x),
+                        @floatFromInt(ev.mouse_motion.y),
+                    );
+                    self.mouse_rel = Vec2.new(
+                        @floatFromInt(ev.mouse_motion.delta_x),
+                        @floatFromInt(ev.mouse_motion.delta_y),
+                    );
                 },
                 .mouse_button_down => switch (ev.mouse_button_down.button) {
                     .left => self.mouse_left_down = true,

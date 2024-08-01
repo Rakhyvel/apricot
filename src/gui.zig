@@ -60,48 +60,53 @@ pub const Font_Id_Component = struct {
     font_id: font_.Font_Id,
 };
 
-const Animation_Component = struct {
+pub const Animation_Component = struct {
     value: f32,
 };
 
-const Linear_Component = struct {
+pub const Linear_Component = struct {
     vel: f32,
 };
 
-const Ease_Out_Component = struct {
+pub const Ease_Out_Component = struct {
     t: f32,
     vel: f32,
     inverted: bool,
 };
 
-const Image_Component = struct {
+pub const Image_Component = struct {
     texture: SDL.Texture,
     angle: f32 = 0.0,
 };
 
-const Progress_Bar_Component = struct {
+pub const Progress_Bar_Component = struct {
     value: f32 = 0.0,
 };
 
-const Checkbox_Component = struct {
+pub const Checkbox_Component = struct {
     value: bool = false,
 };
 
-const Label_Component = struct {
+pub const Label_Component = struct {
     text: []const u8,
 };
 
-const Rocker_Switch_Component = struct {
+pub const Rocker_Switch_Component = struct {
     value: bool = false,
     onchange: Gui_Event_Callback,
 };
 
-const Slider_Component = struct {
+pub const Slider_Component = struct {
     onchange: ?Gui_Event_Callback,
     value: f32, // Will be [0, n_nothces - 1] when n_notches != 0, otherwise will be [0.0, 1.0]
     n_notches: usize, // The number of discrete nothces on the slider. If 0, slider will be continuous
 };
 
+// TODO: Have separate enums for:
+// - flow  (down, left, up, right, stack)
+// - align (center, down, left, up, right)
+// - sizedness (fixed size, min size)
+// There's gotta be a better way...
 pub const Container_Flow_Align = enum(u8) {
     DOWN_LEFT,
     DOWN_CENTER,
@@ -109,12 +114,13 @@ pub const Container_Flow_Align = enum(u8) {
     // TODO: Add more
 };
 
-const Container_Component = struct {
+pub const Container_Component = struct {
     children: std.ArrayList(Entity_Id),
     flow_align: Container_Flow_Align,
+    fixed_size: bool,
 };
 
-const Button_Component = struct {
+pub const Button_Component = struct {
     onclick: Gui_Event_Callback,
     text: []const u8,
 };
@@ -239,7 +245,7 @@ pub fn create_slider(world: *World, value: f32, width: usize, n_notches: usize, 
     return entity_id;
 }
 
-pub fn create_container(world: *World, pos: Vector, flow_align: Container_Flow_Align) !Entity_Id {
+pub fn create_container(world: *World, pos: Vector, flow_align: Container_Flow_Align, fixed_size: bool) !Entity_Id {
     const entity_id = try world.create_entity().with(
         Gui_Component{
             .pos = pos,
@@ -249,6 +255,7 @@ pub fn create_container(world: *World, pos: Vector, flow_align: Container_Flow_A
         Container_Component{
             .children = std.ArrayList(Entity_Id).init(gui_alloc),
             .flow_align = flow_align,
+            .fixed_size = fixed_size,
         },
     ).build();
 
@@ -418,6 +425,35 @@ pub fn add_element(world: *World, container_id: Entity_Id, element_id: Entity_Id
     _ = update_layout(world, get_root(world, container_id), root_gui.pos);
 }
 
+pub fn remove_element(world: *World, container_id: Entity_Id, element_id: Entity_Id) void {
+    const container = world.get_component(Container_Component, container_id);
+    var i: usize = undefined;
+    for (0..container.children.items.len) |j| {
+        if (container.children.items[j].equals(element_id)) {
+            i = j;
+            break;
+        }
+    } else {
+        unreachable;
+    }
+    _ = container.children.orderedRemove(i);
+    const element_gui = world.get_component(Gui_Component, element_id);
+    element_gui.parent = Entity_Id.INVALID_ENTITY_ID;
+    const root_id = get_root(world, container_id);
+    const root_gui = world.get_component(Gui_Component, root_id);
+    _ = update_layout(world, get_root(world, container_id), root_gui.pos);
+}
+
+pub fn len(world: *World, container_id: Entity_Id) usize {
+    const container = world.get_component(Container_Component, container_id);
+    return container.children.items.len;
+}
+
+pub fn get_child(world: *World, container_id: Entity_Id, idx: usize) Entity_Id {
+    const container = world.get_component(Container_Component, container_id);
+    return container.children.items[idx];
+}
+
 pub fn update_layout(world: *World, id: Entity_Id, parent_pos: Vector) Vector {
     const gui = world.get_component(Gui_Component, id);
     if (!gui.shown) {
@@ -484,13 +520,11 @@ pub fn update_layout(world: *World, id: Entity_Id, parent_pos: Vector) Vector {
                 }
             },
         }
-        // working_size.x += gui.padding + gui.margin.x;
-        // working_size.y += gui.padding + gui.margin.y;
-        gui.size = working_size;
-        return working_size;
-    } else {
-        return gui.size;
+        if (!container.fixed_size) {
+            gui.size = working_size;
+        }
     }
+    return gui.size;
 }
 
 pub fn update(world: *World) void {
@@ -545,10 +579,10 @@ fn update_checkbox(world: *World) void {
     });
     while (iter.next()) |entity| {
         entity.gui.is_hovered = entity.gui.shown and
-            app.mouse_x > @as(i32, @intFromFloat(entity.gui.pos.x)) and
-            app.mouse_x <= @as(i32, @intFromFloat(entity.gui.pos.x + entity.gui.size.x)) and
-            app.mouse_y > @as(i32, @intFromFloat(entity.gui.pos.y)) and
-            app.mouse_y <= @as(i32, @intFromFloat(entity.gui.pos.y + entity.gui.size.y));
+            app.mouse.x > entity.gui.pos.x and
+            app.mouse.x <= entity.gui.pos.x + entity.gui.size.x and
+            app.mouse.y > entity.gui.pos.y and
+            app.mouse.y <= entity.gui.pos.y + entity.gui.size.y;
         if (entity.gui.is_hovered and app.mouse_left_down) {
             entity.gui.clicked_in = true;
         }
@@ -571,10 +605,10 @@ fn update_rocker_switch(world: *World) void {
     });
     while (iter.next()) |entity| {
         entity.gui.is_hovered = entity.gui.shown and
-            app.mouse_x > @as(i32, @intFromFloat(entity.gui.pos.x)) and
-            app.mouse_x <= @as(i32, @intFromFloat(entity.gui.pos.x + entity.gui.size.x)) and
-            app.mouse_y > @as(i32, @intFromFloat(entity.gui.pos.y)) and
-            app.mouse_y <= @as(i32, @intFromFloat(entity.gui.pos.y + entity.gui.size.y));
+            app.mouse.x > entity.gui.pos.x and
+            app.mouse.x <= entity.gui.pos.x + entity.gui.size.x and
+            app.mouse.y > entity.gui.pos.y and
+            app.mouse.y <= entity.gui.pos.y + entity.gui.size.y;
         if (entity.gui.is_hovered and app.mouse_left_down) {
             entity.gui.clicked_in = true;
         }
@@ -601,14 +635,14 @@ fn update_slider(world: *World) void {
             continue;
         }
         entity.gui.is_hovered = entity.gui.shown and
-            app.mouse_x > @as(i32, @intFromFloat(entity.gui.pos.x)) and
-            app.mouse_x <= @as(i32, @intFromFloat(entity.gui.pos.x + entity.gui.size.x)) and
-            app.mouse_y > @as(i32, @intFromFloat(entity.gui.pos.y)) and
-            app.mouse_y <= @as(i32, @intFromFloat(entity.gui.pos.y + entity.gui.size.y));
+            app.mouse.x > entity.gui.pos.x and
+            app.mouse.x <= entity.gui.pos.x + entity.gui.size.x and
+            app.mouse.y > entity.gui.pos.y and
+            app.mouse.y <= entity.gui.pos.y + entity.gui.size.y;
 
         if ((entity.gui.is_hovered or entity.gui.clicked_in) and app.mouse_left_down) {
             const val = std.math.clamp(
-                (@as(f32, @floatFromInt(app.mouse_x)) - entity.gui.pos.x) / entity.gui.size.x,
+                (app.mouse.x - entity.gui.pos.x) / entity.gui.size.x,
                 0.0,
                 1.0,
             );
@@ -639,10 +673,10 @@ pub fn update_button(world: *World) void {
     });
     while (iter.next()) |entity| {
         entity.gui.is_hovered = entity.gui.shown and
-            app.mouse_x > @as(i32, @intFromFloat(entity.gui.pos.x)) and
-            app.mouse_x <= @as(i32, @intFromFloat(entity.gui.pos.x + entity.gui.size.x)) and
-            app.mouse_y > @as(i32, @intFromFloat(entity.gui.pos.y)) and
-            app.mouse_y <= @as(i32, @intFromFloat(entity.gui.pos.y + entity.gui.size.y));
+            app.mouse.x > entity.gui.pos.x and
+            app.mouse.x <= entity.gui.pos.x + entity.gui.size.x and
+            app.mouse.y > entity.gui.pos.y and
+            app.mouse.y <= entity.gui.pos.y + entity.gui.size.y;
         if (entity.gui.is_hovered and app.mouse_left_down) {
             entity.gui.clicked_in = true;
         }

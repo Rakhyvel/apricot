@@ -115,8 +115,5 @@ const scene_vtable: apricot.scene.Scene_VTable = .{
 
 ## Features
 <!-- TODO 
-- Showcase getting user input and stuff
-- Showcase ECS features (creating/destroying entities, custom components, systems over those components resources)
-- Showcase Scene features
-- Maybe showcase GUI?
+- Showcase making a system
 -->

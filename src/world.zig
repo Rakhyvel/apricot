@@ -396,7 +396,7 @@ pub const World = struct {
     /// Checks that an Entity_Id refers to a valid and current entity
     pub fn entity_is_valid(self: *World, id: Entity_Id) bool {
         const entity = self.entities.items[id.index()];
-        return entity.mask != 0 and entity.id == id;
+        return entity.mask != 0 and entity.id.idx == id.idx and entity.id.vers == id.vers;
     }
 
     pub fn entity_has_all_components(self: *World, comptime Components: type, id: Entity_Id) bool {

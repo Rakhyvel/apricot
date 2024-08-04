@@ -105,7 +105,8 @@ pub const Slider_Component = struct {
 // TODO: Have separate enums for:
 // - flow  (down, left, up, right, stack)
 // - align (center, down, left, up, right)
-// - sizedness (fixed size, min size)
+// - sizedness (fullscreen, fixed size, min size)
+// - A way to say "hey if you're fixed size, just divide up your size horizontally/vertically"
 // There's gotta be a better way...
 pub const Container_Flow_Align = enum(u8) {
     DOWN_LEFT,
@@ -196,6 +197,7 @@ pub fn create_checkbox(world: *World, value: bool) !Entity_Id {
     return entity_id;
 }
 
+// TODO: Accept formatting
 pub fn create_label(world: *World, text: []const u8, font_id: font_.Font_Id) !Entity_Id {
     const font_mgr = world.get_resource(font_.Font_Manager_Resource);
     var font = font_mgr.get_font(font_id);
@@ -403,7 +405,11 @@ pub fn set_slider_value(world: *World, slider_id: Entity_Id, value: f32) void {
     slider.value = value;
 }
 
+/// Retrieves the eldest parent of a gui, if any. If none are found, returns an invalid entity ID.
+///
+/// This does *NOT* return the immediate parent. For that, just use the `.parent` field of `Gui_Component`.
 pub fn get_root(world: *World, id: Entity_Id) Entity_Id {
+    std.debug.assert(id.is_valid());
     var curr_id = id;
     while (true) {
         const gui = world.get_component(Gui_Component, curr_id);
@@ -426,6 +432,8 @@ pub fn add_element(world: *World, container_id: Entity_Id, element_id: Entity_Id
 }
 
 pub fn remove_element(world: *World, container_id: Entity_Id, element_id: Entity_Id) void {
+    std.debug.assert(world.entity_is_valid(container_id));
+    std.debug.assert(world.entity_is_valid(element_id));
     const container = world.get_component(Container_Component, container_id);
     var i: usize = undefined;
     for (0..container.children.items.len) |j| {
@@ -434,14 +442,33 @@ pub fn remove_element(world: *World, container_id: Entity_Id, element_id: Entity
             break;
         }
     } else {
-        unreachable;
+        std.debug.panic("{} not in container {}", .{ element_id, container_id });
     }
     _ = container.children.orderedRemove(i);
     const element_gui = world.get_component(Gui_Component, element_id);
-    element_gui.parent = Entity_Id.INVALID_ENTITY_ID;
     const root_id = get_root(world, container_id);
     const root_gui = world.get_component(Gui_Component, root_id);
     _ = update_layout(world, get_root(world, container_id), root_gui.pos);
+    element_gui.parent = Entity_Id.INVALID_ENTITY_ID;
+}
+
+/// Removes entity from any containers, and marks it as purged.
+pub fn mark_purged(world: *World, id: Entity_Id) !void {
+    std.debug.assert(world.entity_is_valid(id));
+    const gui = world.get_component(Gui_Component, id);
+    if (gui.parent.is_valid()) {
+        remove_element(world, gui.parent, id);
+    }
+    try world.mark_purged(id);
+}
+
+pub fn purge_all_elements(world: *World, container_id: Entity_Id) !void {
+    std.debug.assert(world.entity_is_valid(container_id));
+    const container = world.get_component(Container_Component, container_id);
+    for (container.children.items) |item| {
+        try world.mark_purged(item);
+    }
+    try mark_purged(world, container_id);
 }
 
 pub fn len(world: *World, container_id: Entity_Id) usize {

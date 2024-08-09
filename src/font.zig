@@ -47,6 +47,7 @@ pub const Font = struct {
         renderer: SDL.Renderer,
         x: i32,
         y: i32,
+        color: SDL.Color,
         text: []const u8,
     ) !void {
         var cursor_x = x;
@@ -61,6 +62,7 @@ pub const Font = struct {
                 .width = glyph.rect.width,
                 .height = glyph.rect.height,
             };
+            try self.cache_texture.setColorMod(color);
             try renderer.copy(self.cache_texture, dest_rect, glyph.rect);
             cursor_x += @intCast(glyph.advance);
         }
@@ -99,7 +101,7 @@ pub const Font = struct {
 
             const surf = try self.ttf_font.renderTextBlended(
                 byte_slice,
-                SDL.Color.rgb(0, 0, 0),
+                SDL.Color.rgb(255, 255, 255),
             );
             defer surf.destroy();
 

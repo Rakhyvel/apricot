@@ -2,7 +2,8 @@ const std = @import("std");
 const App = @import("app.zig").App;
 const Entity_Id = @import("world.zig").Entity_Id;
 const SDL = @import("sdl2");
-const Vector = @import("vector.zig");
+const Vector = @import("vector.zig").Vec2;
+const Vec4 = @import("vector.zig").Vec4;
 const World = @import("world.zig").World;
 const font_ = @import("font.zig");
 
@@ -23,22 +24,39 @@ const font_ = @import("font.zig");
 var gui_alloc: std.mem.Allocator = undefined;
 
 // TODO: Inherit Dear IMGUI color pallettes
-pub const white_color = SDL.Color.rgb(255, 255, 255);
 
-pub const background_color = SDL.Color.rgb(153, 153, 153);
-pub const text_color = SDL.Color.rgb(255, 255, 255);
+// text
+// text-disabled
+// window background
+// border
+// checkmark
+// slider grab
+// slider grab-active
+// button
+// button hovered
+// button active
+pub const Color_Palette = struct {
+    white: SDL.Color = cfv(Vec4.new(1.0, 1.0, 1.0, 1.0)),
+    dark: SDL.Color = cfv(Vec4.new(0.0, 0.0, 0.0, 0.2)),
+    darker: SDL.Color = cfv(Vec4.new(0.0, 0.0, 0.0, 0.5)),
+    background: SDL.Color = cfv(Vec4.new(0.95, 0.95, 0.95, 1.0)),
+    text: SDL.Color = cfv(Vec4.new(0.1, 0.1, 0.1, 1.0)),
+    border: SDL.Color = cfv(Vec4.new(0.6, 0.6, 0.6, 1.0)),
+    grab: SDL.Color = cfv(Vec4.new(0.69, 0.69, 0.69, 1.0)),
+    solid: SDL.Color = cfv(Vec4.new(0.86, 0.86, 0.86, 1.0)),
+    active: SDL.Color = cfv(Vec4.new(0.0, 0.47, 0.84, 1.0)),
+    hover: SDL.Color = cfv(Vec4.new(0.00, 0.47, 0.84, 0.2)),
 
-pub const border_color = SDL.Color.rgb(122, 122, 122);
-pub const hovered_border_color = SDL.Color.rgb(51, 51, 51);
-
-pub const active_color = SDL.Color.rgb(0, 120, 215);
-pub const hovered_active_color = SDL.Color.rgb(77, 161, 227);
-
-pub const clicked_color = SDL.Color.rgb(102, 102, 102);
-
-pub const error_color = SDL.Color.rgb(250, 80, 80);
-pub const inactive_background_color = SDL.Color.rgba(77, 82, 88, 64);
-pub const inactive_text_color = SDL.Color.rgb(200, 200, 200);
+    fn cfv(vec4: Vec4) SDL.Color {
+        return SDL.Color.rgba(
+            @intFromFloat(vec4.x * 255.0),
+            @intFromFloat(vec4.y * 255.0),
+            @intFromFloat(vec4.z * 255.0),
+            @intFromFloat(vec4.w * 255.0),
+        );
+    }
+};
+const palette = Color_Palette{};
 
 const Gui_Event_Callback = *const fn (world: *World, id: Entity_Id) void;
 
@@ -53,7 +71,7 @@ pub const Gui_Component = struct {
     // TODO: Move to layout component?
     margin: Vector = .{ .x = 0, .y = 0 },
     border: f32 = 0,
-    padding: f32 = 0,
+    padding: Vector = .{ .x = 0, .y = 1 },
 };
 
 pub const Font_Id_Component = struct {
@@ -111,20 +129,40 @@ pub const Slider_Component = struct {
 pub const Container_Flow_Align = enum(u8) {
     DOWN_LEFT,
     DOWN_CENTER,
+    DOWN_CENTER_EVEN,
     LEFT_TOP,
+    LEFT_TOP_EVEN,
     // TODO: Add more
 };
 
 pub const Container_Component = struct {
     children: std.ArrayList(Entity_Id),
     flow_align: Container_Flow_Align,
-    fixed_size: bool,
+    fixed_width: bool,
+    fixed_height: bool,
 };
 
 pub const Button_Component = struct {
     onclick: Gui_Event_Callback,
     text: []const u8,
 };
+
+pub const Draggable_Component = struct {
+    state: union(enum) {
+        snapped_in: struct {
+            container_id: Entity_Id,
+            clicked_in_coords: ?Vector,
+        },
+        snapped_out: struct {
+            old_container_id: Entity_Id,
+            old_mouse_offset: Vector,
+        },
+        animated: struct {},
+    },
+    hovered_not_clicked: bool = false,
+};
+
+pub const Recepticle_Component = struct {};
 
 pub fn init() void {
     gui_alloc = std.heap.page_allocator;
@@ -148,6 +186,8 @@ pub fn register_components(world: *World) !void {
     try world.register_component(Slider_Component);
     try world.register_component(Container_Component);
     try world.register_component(Button_Component);
+    try world.register_component(Draggable_Component);
+    try world.register_component(Recepticle_Component);
 }
 
 pub fn create_spacer(world: *World, size: Vector) !Entity_Id {
@@ -198,10 +238,10 @@ pub fn create_checkbox(world: *World, value: bool) !Entity_Id {
 }
 
 // TODO: Accept formatting
-pub fn create_label(world: *World, text: []const u8, font_id: font_.Font_Id) !Entity_Id {
+pub fn create_label(world: *World, font_id: font_.Font_Id, comptime fmt: []const u8, args: anytype) !Entity_Id {
     const font_mgr = world.get_resource(font_.Font_Manager_Resource);
     var font = font_mgr.get_font(font_id);
-    const duped_text = try gui_alloc.dupe(u8, text);
+    const duped_text = try std.fmt.allocPrint(gui_alloc, fmt, args);
     const width = font.width(duped_text);
     const height = font.height;
     const entity_id = try world.create_entity().with(
@@ -247,7 +287,7 @@ pub fn create_slider(world: *World, value: f32, width: usize, n_notches: usize, 
     return entity_id;
 }
 
-pub fn create_container(world: *World, pos: Vector, flow_align: Container_Flow_Align, fixed_size: bool) !Entity_Id {
+pub fn create_container(world: *World, pos: Vector, flow_align: Container_Flow_Align, fixed_width: bool, fixed_height: bool) !Entity_Id {
     const entity_id = try world.create_entity().with(
         Gui_Component{
             .pos = pos,
@@ -257,7 +297,8 @@ pub fn create_container(world: *World, pos: Vector, flow_align: Container_Flow_A
         Container_Component{
             .children = std.ArrayList(Entity_Id).init(gui_alloc),
             .flow_align = flow_align,
-            .fixed_size = fixed_size,
+            .fixed_width = fixed_width,
+            .fixed_height = fixed_height,
         },
     ).build();
 
@@ -269,7 +310,6 @@ pub fn create_button(world: *World, text: []const u8, font_id: font_.Font_Id, on
     const label_id = try world.create_entity().with(
         Gui_Component{
             .size = .{ .x = 220, .y = 40 },
-            .margin = .{ .x = 0, .y = 8 },
         },
     ).with(
         Button_Component{
@@ -311,18 +351,30 @@ pub fn get_size(world: *World, entity_id: Entity_Id) Vector {
     return gui.size;
 }
 
+// TODO: Create a builder architecture so that you don't have to call these when you build/clutter component stuff
 pub fn set_size(world: *World, entity_id: Entity_Id, size: Vector) void {
     const gui = world.get_component(Gui_Component, entity_id);
     gui.size = size;
     // TODO: Trigger re-flow
 }
 
-pub fn get_padding(world: *World, entity_id: Entity_Id) f32 {
+pub fn get_margin(world: *World, entity_id: Entity_Id) Vector {
+    const gui = world.get_component(Gui_Component, entity_id);
+    return gui.margin;
+}
+
+pub fn set_margin(world: *World, entity_id: Entity_Id, margin: Vector) void {
+    const gui = world.get_component(Gui_Component, entity_id);
+    gui.margin = margin;
+    // TODO: Trigger re-flow
+}
+
+pub fn get_padding(world: *World, entity_id: Entity_Id) Vector {
     const gui = world.get_component(Gui_Component, entity_id);
     return gui.padding;
 }
 
-pub fn set_padding(world: *World, entity_id: Entity_Id, padding: f32) void {
+pub fn set_padding(world: *World, entity_id: Entity_Id, padding: Vector) void {
     const gui = world.get_component(Gui_Component, entity_id);
     gui.padding = padding;
     // TODO: Trigger re-flow
@@ -428,7 +480,11 @@ pub fn add_element(world: *World, container_id: Entity_Id, element_id: Entity_Id
     element_gui.parent = container_id;
     const root_id = get_root(world, container_id);
     const root_gui = world.get_component(Gui_Component, root_id);
-    _ = update_layout(world, get_root(world, container_id), root_gui.pos);
+    _ = update_layout(
+        world,
+        get_root(world, container_id),
+        root_gui.pos,
+    );
 }
 
 pub fn remove_element(world: *World, container_id: Entity_Id, element_id: Entity_Id) void {
@@ -448,7 +504,11 @@ pub fn remove_element(world: *World, container_id: Entity_Id, element_id: Entity
     const element_gui = world.get_component(Gui_Component, element_id);
     const root_id = get_root(world, container_id);
     const root_gui = world.get_component(Gui_Component, root_id);
-    _ = update_layout(world, get_root(world, container_id), root_gui.pos);
+    _ = update_layout(
+        world,
+        get_root(world, container_id),
+        root_gui.pos,
+    );
     element_gui.parent = Entity_Id.INVALID_ENTITY_ID;
 }
 
@@ -462,6 +522,7 @@ pub fn mark_purged(world: *World, id: Entity_Id) !void {
     try world.mark_purged(id);
 }
 
+/// Removes all entities from the container, then marks entity as purged
 pub fn purge_all_elements(world: *World, container_id: Entity_Id) !void {
     std.debug.assert(world.entity_is_valid(container_id));
     const container = world.get_component(Container_Component, container_id);
@@ -481,77 +542,147 @@ pub fn get_child(world: *World, container_id: Entity_Id, idx: usize) Entity_Id {
     return container.children.items[idx];
 }
 
+/// Lays out the GUI, along with any children if element is a component with children, and returns the
+/// size + padding + margin.
 pub fn update_layout(world: *World, id: Entity_Id, parent_pos: Vector) Vector {
     const gui = world.get_component(Gui_Component, id);
     if (!gui.shown) {
         return Vector{ .x = 0, .y = 0 };
     }
 
-    if (gui.parent.is_valid()) {
-        gui.pos.x = parent_pos.x + gui.margin.x;
-        gui.pos.y = parent_pos.y + gui.margin.y;
-    } else {
+    if (!gui.parent.is_valid()) {
+        // For absolute roots. They do not have margins nor padding
         gui.pos = parent_pos;
+    } else {
+        gui.pos = parent_pos.add(gui.padding).add(gui.margin);
     }
 
-    // TODO: Understand margin and padding
     if (world.entity_has_all_components(struct { c: Container_Component }, id)) {
         const container = world.get_component(Container_Component, id);
-        var working_size = Vector{ .x = 0, .y = 0 };
-        var placement = Vector{ .x = 0, .y = 0 };
+        var working_content_size = Vector{ .x = 0, .y = 0 };
+        var child_placement = Vector{ .x = 0, .y = 0 };
+
         switch (container.flow_align) {
             .DOWN_LEFT => {
                 for (0..container.children.items.len) |i| {
                     const child_id = container.children.items[i];
                     const child_gui = world.get_component(Gui_Component, child_id);
-                    const new_size = update_layout(world, child_id, gui.pos.add(placement));
-                    if (child_gui.shown and new_size.x > 0) {
-                        placement.y += new_size.y + gui.padding + 2 * child_gui.margin.y;
-                        working_size.x = @max(working_size.x, new_size.x);
-                        working_size.y += new_size.y + gui.padding + 2 * child_gui.margin.y;
+                    const child_size_padding_margin = update_layout(
+                        world,
+                        child_id,
+                        gui.pos.add(child_placement),
+                    );
+                    if (child_gui.shown and child_size_padding_margin.x > 0) {
+                        child_placement.y += child_size_padding_margin.y;
+                        working_content_size.x = @max(working_content_size.x, child_size_padding_margin.x);
+                        working_content_size.y += child_size_padding_margin.y;
                     }
                 }
             },
+
             .DOWN_CENTER => {
+                // Find size of content
                 for (0..container.children.items.len) |i| {
                     const child_id = container.children.items[i];
                     const child_gui = world.get_component(Gui_Component, child_id);
-                    const new_size = update_layout(world, child_id, gui.pos);
-                    if (child_gui.shown and new_size.x > 0) {
-                        working_size.x = @max(working_size.x, new_size.x + 2 * child_gui.margin.x);
-                        working_size.y += new_size.y + gui.padding + 2 * child_gui.margin.y;
+                    const child_size_padding_margin = update_layout(world, child_id, gui.pos);
+                    if (child_gui.shown and child_size_padding_margin.x > 0) {
+                        working_content_size.x = @max(working_content_size.x, child_size_padding_margin.x);
+                        working_content_size.y += child_size_padding_margin.y;
                     }
-                }
-                // Size is now defined
+                } // Size of content is now found
+
+                // Place children on center line
                 for (0..container.children.items.len) |i| {
                     const child_id = container.children.items[i];
-                    const child_gui = world.get_component(Gui_Component, child_id);
-                    const new_size = update_layout(world, child_id, gui.pos.add(placement));
+                    const child_size_padding_margin = update_layout(world, child_id, gui.pos.add(child_placement));
                     _ = update_layout(world, child_id, .{
-                        .x = gui.pos.x + working_size.x / 2.0 - new_size.x / 2.0 + child_gui.margin.x,
-                        .y = gui.pos.y + placement.y,
+                        .x = gui.pos.x + working_content_size.x / 2.0 - child_size_padding_margin.x / 2.0 + gui.padding.x + gui.margin.x,
+                        .y = gui.pos.y + child_placement.y,
                     });
-                    placement.y += new_size.y + gui.padding + 2 * child_gui.margin.y;
+                    child_placement.y += child_size_padding_margin.y;
                 }
             },
+
+            .DOWN_CENTER_EVEN => {
+                std.debug.assert(container.fixed_height);
+                // Go through and sum up horiz-space taken
+                var space_left = gui.size.y;
+                for (0..container.children.items.len) |i| {
+                    const child_id = container.children.items[i];
+                    const child_gui = world.get_component(Gui_Component, child_id);
+                    if (child_gui.shown) {
+                        const child_size_padding_margin = update_layout(world, child_id, gui.pos.add(child_placement));
+                        space_left -= child_size_padding_margin.y;
+                        working_content_size.x = @max(working_content_size.x, child_placement.x + child_size_padding_margin.x);
+                    }
+                }
+
+                // let spacer = (container.width - sum_space) / (container.len + 1)
+                const spacer = space_left / (@as(f32, @floatFromInt(container.children.items.len)) + 1.0);
+                child_placement.y = spacer;
+                for (0..container.children.items.len) |i| {
+                    const child_id = container.children.items[i];
+                    const child_gui = world.get_component(Gui_Component, child_id);
+                    if (child_gui.shown) {
+                        const child_size_padding_margin = update_layout(world, child_id, gui.pos.add(child_placement));
+                        _ = update_layout(world, child_id, .{
+                            .x = gui.pos.x + working_content_size.x / 2.0 - child_size_padding_margin.x / 2.0 + gui.padding.x + gui.margin.x,
+                            .y = gui.pos.y + child_placement.y,
+                        });
+                        child_placement.y += spacer + child_size_padding_margin.y;
+                    }
+                }
+            },
+
             .LEFT_TOP => {
                 for (0..container.children.items.len) |i| {
                     const child_id = container.children.items[i];
                     const child_gui = world.get_component(Gui_Component, child_id);
                     if (child_gui.shown) {
-                        const new_size = update_layout(world, child_id, gui.pos.add(placement));
-                        placement.x += new_size.x;
-                        working_size.x += new_size.x;
-                        working_size.y = @max(working_size.y, placement.y + new_size.y);
+                        const child_size_padding_margin = update_layout(world, child_id, gui.pos.add(child_placement));
+                        child_placement.x += child_size_padding_margin.x;
+                        working_content_size.x += child_size_padding_margin.x;
+                        working_content_size.y = @max(working_content_size.y, child_placement.y + child_size_padding_margin.y);
+                    }
+                }
+            },
+
+            .LEFT_TOP_EVEN => {
+                std.debug.assert(container.fixed_width);
+                // Go through and sum up horiz-space taken
+                var space_left = gui.size.x;
+                for (0..container.children.items.len) |i| {
+                    const child_id = container.children.items[i];
+                    const child_gui = world.get_component(Gui_Component, child_id);
+                    if (child_gui.shown) {
+                        const child_size_padding_margin = update_layout(world, child_id, gui.pos.add(child_placement));
+                        space_left -= child_size_padding_margin.x;
+                    }
+                }
+
+                // let spacer = (container.width - sum_space) / (container.len + 1)
+                const spacer = space_left / (@as(f32, @floatFromInt(container.children.items.len)) + 1.0);
+                child_placement.x = spacer;
+                for (0..container.children.items.len) |i| {
+                    const child_id = container.children.items[i];
+                    const child_gui = world.get_component(Gui_Component, child_id);
+                    if (child_gui.shown) {
+                        const child_size_padding_margin = update_layout(world, child_id, gui.pos.add(child_placement));
+                        child_placement.x += spacer + child_size_padding_margin.x;
+                        working_content_size.y = @max(working_content_size.y, child_placement.y + child_size_padding_margin.y);
                     }
                 }
             },
         }
-        if (!container.fixed_size) {
-            gui.size = working_size;
+        if (!container.fixed_width) {
+            gui.size.x = working_content_size.add(gui.padding.scale(2.0)).add(gui.margin.scale(2.0)).x;
+        }
+        if (!container.fixed_height) {
+            gui.size.y = working_content_size.add(gui.padding.scale(2.0)).add(gui.margin.scale(2.0)).y;
         }
     }
-    return gui.size;
+    return gui.size.add(gui.padding.scale(2.0)).add(gui.margin.scale(2.0));
 }
 
 pub fn update(world: *World) void {
@@ -561,6 +692,7 @@ pub fn update(world: *World) void {
     update_rocker_switch(world);
     update_slider(world);
     update_button(world);
+    update_draggable(world) catch unreachable;
 }
 
 fn update_linear(world: *World) void {
@@ -699,7 +831,7 @@ pub fn update_button(world: *World) void {
         button: *Button_Component,
     });
     while (iter.next()) |entity| {
-        entity.gui.is_hovered = entity.gui.shown and
+        entity.gui.is_hovered = (!app.mouse_left_down or entity.gui.is_hovered) and entity.gui.shown and
             app.mouse.x > entity.gui.pos.x and
             app.mouse.x <= entity.gui.pos.x + entity.gui.size.x and
             app.mouse.y > entity.gui.pos.y and
@@ -716,7 +848,111 @@ pub fn update_button(world: *World) void {
     }
 }
 
+fn update_draggable(world: *World) !void {
+    const app = world.get_resource(App);
+    var iter = world.iter(struct {
+        id: Entity_Id,
+        gui: *Gui_Component,
+        draggable: *Draggable_Component,
+    });
+    while (iter.next()) |entity| {
+        entity.gui.is_hovered = entity.gui.shown and
+            app.mouse.x > entity.gui.pos.x and
+            app.mouse.x <= entity.gui.pos.x + entity.gui.size.x and
+            app.mouse.y > entity.gui.pos.y and
+            app.mouse.y <= entity.gui.pos.y + entity.gui.size.y;
+
+        switch (entity.draggable.state) {
+            .snapped_in => {
+                if ((entity.gui.is_hovered or (app.mouse_left_down and entity.draggable.state == .snapped_out)) and
+                    ((!entity.draggable.hovered_not_clicked and !app.mouse_left_down) or entity.draggable.hovered_not_clicked))
+                {
+                    entity.draggable.hovered_not_clicked = true;
+                } else {
+                    entity.draggable.hovered_not_clicked = false;
+                }
+
+                if (entity.draggable.hovered_not_clicked and app.mouse_left_down) {
+                    entity.gui.clicked_in = true;
+                } else {
+                    entity.gui.clicked_in = false;
+                }
+
+                if (entity.gui.clicked_in) {
+                    if (entity.draggable.state.snapped_in.clicked_in_coords == null) {
+                        entity.draggable.state.snapped_in.clicked_in_coords = app.mouse;
+                    } else if (!entity.draggable.state.snapped_in.clicked_in_coords.?.close_squared(
+                        app.mouse,
+                        100,
+                    )) {
+                        remove_element(
+                            world,
+                            entity.draggable.state.snapped_in.container_id,
+                            entity.id,
+                        );
+                        const old_coords = entity.gui.pos.sub(app.mouse);
+                        const old_container_id = entity.draggable.state.snapped_in.container_id;
+                        entity.draggable.state = .{
+                            .snapped_out = .{
+                                .old_mouse_offset = old_coords,
+                                .old_container_id = old_container_id,
+                            },
+                        };
+                    }
+                }
+            },
+            .snapped_out => {
+                entity.gui.pos = app.mouse.add(entity.draggable.state.snapped_out.old_mouse_offset);
+                _ = update_layout(world, entity.id, entity.gui.pos);
+
+                if (!app.mouse_left_down) {
+                    var recepticle_iter = world.iter(struct {
+                        id: Entity_Id,
+                        gui: *const Gui_Component,
+                        recepticle: *Recepticle_Component,
+                        container: *const Container_Component,
+                    });
+                    var recepticle_found: ?Entity_Id = null;
+                    while (recepticle_iter.next()) |recpticle_entity| {
+                        if (app.mouse.x > recpticle_entity.gui.pos.x and
+                            app.mouse.x <= recpticle_entity.gui.pos.x + recpticle_entity.gui.size.x and
+                            app.mouse.y > recpticle_entity.gui.pos.y and
+                            app.mouse.y <= recpticle_entity.gui.pos.y + recpticle_entity.gui.size.y and
+                            len(world, recpticle_entity.id) == 0)
+                        {
+                            recepticle_found = recpticle_entity.id;
+                            break;
+                        }
+                    }
+                    if (recepticle_found) |recepticle_id| {
+                        try add_element(world, recepticle_id, entity.id);
+                        entity.draggable.state = .{
+                            .snapped_in = .{ // TODO: Switch to animated state instead, fly to recepticle pos
+                                .container_id = recepticle_id,
+                                .clicked_in_coords = null,
+                            },
+                        };
+                    } else if (entity.draggable.state.snapped_out.old_container_id.is_valid()) {
+                        const old_container_id = entity.draggable.state.snapped_out.old_container_id;
+                        try add_element(world, old_container_id, entity.id);
+                        entity.draggable.state = .{
+                            .snapped_in = .{ // TODO: Switch to animated state instead, fly to recepticle pos
+                                .container_id = old_container_id,
+                                .clicked_in_coords = null,
+                            },
+                        };
+                    }
+                }
+            },
+            .animated => {},
+        }
+    }
+}
+
 pub fn render(world: *World) !void {
+    const app = world.get_resource(App);
+    app.background = palette.background;
+
     try render_container(world);
     try render_image(world);
     try render_progress_bar(world);
@@ -727,6 +963,7 @@ pub fn render(world: *World) !void {
     try render_button(world);
 }
 
+// TODO: Turn into render_border
 fn render_container(world: *World) !void {
     const app = world.get_resource(App);
     var iter = world.iter(struct {
@@ -738,10 +975,10 @@ fn render_container(world: *World) !void {
             continue;
         }
         const dest = SDL.RectangleF{
-            .x = entity.gui.pos.x,
-            .y = entity.gui.pos.y,
-            .width = entity.gui.size.x,
-            .height = entity.gui.size.y,
+            .x = entity.gui.pos.x - entity.gui.padding.x,
+            .y = entity.gui.pos.y - entity.gui.padding.y,
+            .width = entity.gui.size.x + entity.gui.padding.x * 2,
+            .height = entity.gui.size.y + entity.gui.padding.y * 2,
         };
         try app.renderer.setColorRGBA(0, 0, 0, 20);
         try app.renderer.drawRectF(dest);
@@ -785,7 +1022,8 @@ fn render_progress_bar(world: *World) !void {
         if (!entity.gui.shown) {
             continue;
         }
-        try app.renderer.setColor(border_color);
+        // Draw full bar
+        try app.renderer.setColor(palette.border);
         var rect = SDL.Rectangle{
             .x = @intFromFloat(entity.gui.pos.x),
             .y = @intFromFloat(entity.gui.pos.y),
@@ -793,7 +1031,9 @@ fn render_progress_bar(world: *World) !void {
             .height = 6,
         };
         try app.renderer.fillRect(rect);
-        try app.renderer.setColor(active_color);
+
+        // Draw completed bar
+        try app.renderer.setColor(palette.active);
         rect = SDL.Rectangle{
             .x = @intFromFloat(entity.gui.pos.x),
             .y = @intFromFloat(entity.gui.pos.y),
@@ -824,20 +1064,20 @@ fn render_checkbox(world: *World) !void {
 
         // Fill in box with color
         if (entity.gui.clicked_in) {
-            try app.renderer.setColor(clicked_color);
+            try app.renderer.setColor(palette.active);
             try app.renderer.fillRectF(rect);
         } else if (entity.checkbox.value) {
-            try app.renderer.setColor(active_color);
+            try app.renderer.setColor(palette.active);
             try app.renderer.fillRectF(rect);
         }
 
         // Draw border
         if (entity.gui.clicked_in) {
-            try app.renderer.setColor(clicked_color);
+            try app.renderer.setColor(palette.border);
         } else if (entity.gui.is_hovered) {
-            try app.renderer.setColor(hovered_border_color);
+            try app.renderer.setColor(palette.border);
         } else if (!entity.checkbox.value) {
-            try app.renderer.setColor(border_color);
+            try app.renderer.setColor(palette.border);
         }
         try app.renderer.drawRectF(rect);
         rect.x += 1;
@@ -848,7 +1088,7 @@ fn render_checkbox(world: *World) !void {
 
         // Draw check
         if (entity.checkbox.value) {
-            try app.renderer.setColor(text_color);
+            try app.renderer.setColor(palette.text);
             try app.renderer.drawLineF(
                 entity.gui.pos.x + 2,
                 entity.gui.pos.y + 10,
@@ -895,6 +1135,7 @@ fn render_label(world: *World) !void {
             app.renderer,
             @intFromFloat(entity.gui.pos.x),
             @intFromFloat(entity.gui.pos.y),
+            palette.text,
             entity.label.text,
         );
     }
@@ -919,18 +1160,18 @@ fn render_rocker_switch(world: *World) !void {
             .height = 20,
         };
         if (entity.gui.clicked_in) {
-            try app.renderer.setColor(clicked_color);
+            try app.renderer.setColor(palette.active);
         } else if (entity.gui.is_hovered) {
             if (entity.rocker_switch.value) {
-                try app.renderer.setColor(hovered_active_color);
+                try app.renderer.setColor(palette.hover);
             } else {
-                try app.renderer.setColor(hovered_border_color);
+                try app.renderer.setColor(palette.hover);
             }
         } else {
             if (entity.rocker_switch.value) {
-                try app.renderer.setColor(active_color);
+                try app.renderer.setColor(palette.active);
             } else {
-                try app.renderer.setColor(border_color);
+                try app.renderer.setColor(palette.border);
             }
         }
         if (entity.rocker_switch.value or entity.gui.clicked_in) {
@@ -952,14 +1193,14 @@ fn render_rocker_switch(world: *World) !void {
             .height = 10,
         };
         if (entity.rocker_switch.value) {
-            try app.renderer.setColor(white_color);
+            try app.renderer.setColor(palette.white);
         } else if (entity.gui.clicked_in) {
-            try app.renderer.setColor(white_color);
+            try app.renderer.setColor(palette.grab);
         } else {
             if (entity.gui.is_hovered) {
-                try app.renderer.setColor(hovered_border_color);
+                try app.renderer.setColor(palette.hover);
             } else {
-                try app.renderer.setColor(border_color);
+                try app.renderer.setColor(palette.border);
             }
         }
         try app.renderer.fillRectF(switch_rect);
@@ -981,9 +1222,9 @@ fn render_slider(world: *World) !void {
 
         // Draw full slider track
         if (entity.gui.is_hovered) {
-            try app.renderer.setColor(border_color);
+            try app.renderer.setColor(palette.border);
         } else {
-            try app.renderer.setColor(background_color);
+            try app.renderer.setColor(palette.grab);
         }
         var rect = SDL.RectangleF{
             .x = entity.gui.pos.x,
@@ -994,7 +1235,7 @@ fn render_slider(world: *World) !void {
         try app.renderer.fillRectF(rect);
 
         // Draw filled slider track
-        try app.renderer.setColor(active_color);
+        try app.renderer.setColor(palette.active);
         rect = .{
             .x = entity.gui.pos.x,
             .y = entity.gui.pos.y + slider_offset,
@@ -1005,7 +1246,7 @@ fn render_slider(world: *World) !void {
 
         // Draw notches
         const notch_width = entity.gui.size.x / (@as(f32, @floatFromInt(entity.slider.n_notches)) - 1.0);
-        try app.renderer.setColor(border_color);
+        try app.renderer.setColor(palette.border);
         for (0..entity.slider.n_notches) |i| {
             const f = @as(f32, @floatFromInt(i));
             try app.renderer.drawLineF(
@@ -1029,7 +1270,7 @@ fn render_slider(world: *World) !void {
             .width = 8,
             .height = 24,
         };
-        try app.renderer.setColor(active_color);
+        try app.renderer.setColor(palette.active);
         try app.renderer.fillRectF(knob_rect);
     }
 }
@@ -1056,15 +1297,15 @@ fn render_button(world: *World) !void {
 
         // Fill in box with color
         if (entity.gui.clicked_in) {
-            try app.renderer.setColor(border_color);
+            try app.renderer.setColor(palette.border);
         } else {
-            try app.renderer.setColor(background_color);
+            try app.renderer.setColor(palette.solid);
         }
         try app.renderer.fillRectF(rect);
 
         // Draw border
         if (entity.gui.clicked_in or entity.gui.is_hovered) {
-            try app.renderer.setColor(border_color);
+            try app.renderer.setColor(palette.border);
             try app.renderer.drawRectF(rect);
             rect.x += 1;
             rect.y += 1;
@@ -1081,6 +1322,7 @@ fn render_button(world: *World) !void {
             app.renderer,
             @intFromFloat(entity.gui.pos.x + entity.gui.size.x / 2.0 - text_width / 2.0),
             @intFromFloat(entity.gui.pos.y + entity.gui.size.y / 2.0 - text_height / 2.0),
+            palette.text,
             entity.button.text,
         );
     }

@@ -95,10 +95,12 @@ const Lazy_Entity_Builder = struct {
 
     /// Returns the ID of the entity being constructed
     pub fn entity_id(self: *Lazy_Entity_Builder) Entity_Id {
+        self.world.num_entities += 1;
         return self.id;
     }
 
     pub fn build(self: *Lazy_Entity_Builder) !Entity_Id {
+        self.world.num_entities += 1;
         try self.world.maintain();
         return self.id;
     }

@@ -1,7 +1,7 @@
 const std = @import("std");
 const SDL = @import("sdl2");
 const Scene_Object = @import("scene.zig").Scene_Object;
-const Vec2 = @import("vector.zig");
+const Vec2 = @import("vector.zig").Vec2;
 
 pub const App = struct {
     // I don't feel a real reason to split these up, besides to group them
@@ -9,6 +9,7 @@ pub const App = struct {
     title: [:0]const u8,
     width: usize,
     height: usize,
+    background: SDL.Color = SDL.Color.rgb(0xff, 0xff, 0xff),
 
     // Gameloop stuff
     running: bool,
@@ -19,7 +20,7 @@ pub const App = struct {
     scene_stack: std.ArrayList(Scene_Object),
     scene_stale: bool,
 
-    // Mouse stuff TODO: Maybe use Vec2
+    // Mouse stuff
     mouse: Vec2,
     mouse_rel: Vec2,
     mouse_left_down: bool,
@@ -141,7 +142,7 @@ pub const App = struct {
 
                 // render
                 if (!self.scene_stale) {
-                    try self.renderer.setColorRGB(0xFF, 0xFF, 0xFF);
+                    try self.renderer.setColor(self.background);
                     try self.renderer.clear();
                     top.vtable.render(top.self);
                     frames += 1;

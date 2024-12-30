@@ -9,8 +9,10 @@ pub struct BVH<Object: Copy + Clone> {
     rng: StdRng,
 }
 
+/// Opaque ID for a BVH node
 pub type BVHNodeId = u32;
 
+/// An invalid BVHNodeId. Represents the absense of a true node
 pub const INVALID_BVH_NODE_ID: BVHNodeId = !0u32;
 
 // TODO: Implement ray tracing query
@@ -25,6 +27,7 @@ struct BVHNode<Object: Copy + Clone> {
     height: i32,
 }
 
+/// Iterator returned when iterating over the items in a BVH that intersect with a frustrum
 pub struct BVHFrustrumIterator<'a, Object: Copy + Clone> {
     bvh: &'a BVH<Object>, // Reference to the tree
     frustrum: &'a Frustrum,
@@ -32,12 +35,14 @@ pub struct BVHFrustrumIterator<'a, Object: Copy + Clone> {
     debug: bool,
 }
 
+/// Iterator returned when iterating over the items in a BVH that intersect with a sphere
 pub struct BVHSphereIterator<'a, Object: Copy + Clone> {
     bvh: &'a BVH<Object>, // Reference to the tree
     sphere: &'a Sphere,
     stack: Vec<BVHNodeId>,
 }
 
+/// Iterator returned when iterating over the items in a BVH that are struck by a ray
 pub struct BVHRayIterator<'a, Object: Copy + Clone> {
     bvh: &'a BVH<Object>, // Reference to the tree
     ray: &'a Ray,
@@ -48,6 +53,7 @@ impl<Object: Copy + Clone> BVH<Object> {
     const AABB_EXTENSION: f32 = 0.1;
     const AABB_MULTIPLIER: f32 = 2.0;
 
+    /// Create a new BVH
     pub fn new() -> Self {
         Self {
             nodes: vec![],
@@ -56,6 +62,7 @@ impl<Object: Copy + Clone> BVH<Object> {
         }
     }
 
+    /// Insert an object into a BVH, with a given AABB
     pub fn insert(&mut self, object: Object, aabb: AABB) -> BVHNodeId {
         let proxy_id = self.allocate_node(object, aabb);
 
@@ -75,6 +82,7 @@ impl<Object: Copy + Clone> BVH<Object> {
         proxy_id
     }
 
+    /// Remove a node id from the BVH
     pub fn remove(&mut self, node_id: BVHNodeId) {
         assert!((node_id as usize) < self.nodes.len());
         assert!(self.node_at(node_id).is_leaf());
@@ -83,6 +91,7 @@ impl<Object: Copy + Clone> BVH<Object> {
         // TODO: Free the node id
     }
 
+    /// Move an object within a BVH given the now current AABB and the movement experienced
     pub fn move_obj(
         &mut self,
         proxy_id: BVHNodeId,
@@ -215,7 +224,7 @@ impl<Object: Copy + Clone> BVH<Object> {
         self.adjust_bounds(new_parent);
     }
 
-    pub fn remove_leaf(&mut self, leaf: BVHNodeId) {
+    fn remove_leaf(&mut self, leaf: BVHNodeId) {
         if leaf == self.root_id {
             self.root_id = INVALID_BVH_NODE_ID;
             return;
@@ -246,6 +255,7 @@ impl<Object: Copy + Clone> BVH<Object> {
         }
     }
 
+    /// Iterate through all objects in the BVH that intersect with a given frustrum
     pub fn iter_frustrum<'a>(
         &'a self,
         frustrum: &'a Frustrum,
@@ -265,6 +275,7 @@ impl<Object: Copy + Clone> BVH<Object> {
         }
     }
 
+    /// Iterate through all objects in the BVH that intersect with a given sphere
     pub fn iter_sphere<'a>(&'a self, sphere: &'a Sphere) -> BVHSphereIterator<'a, Object> {
         let mut stack = Vec::new();
 
@@ -279,6 +290,7 @@ impl<Object: Copy + Clone> BVH<Object> {
         }
     }
 
+    /// Iterate through all objects in the BVH that are struck by a given ray
     pub fn iter_ray<'a>(&'a self, ray: &'a Ray) -> BVHRayIterator<'a, Object> {
         let mut stack = Vec::new();
 
@@ -293,6 +305,7 @@ impl<Object: Copy + Clone> BVH<Object> {
         }
     }
 
+    /// Print a graphviz representation of the BVH at the current moment
     pub fn walk_tree(&self) {
         let mut stack = vec![];
         stack.push(self.root_id);

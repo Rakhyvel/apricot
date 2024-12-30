@@ -1,3 +1,5 @@
+//! WARNING: Audio not fully tested yet, I don't think it works
+
 use std::sync::{Arc, Mutex};
 
 use sdl2::mixer::{self, Chunk};

@@ -1,3 +1,5 @@
+//! This module implements chunked loading of infinite terrain
+
 use hecs::{Entity, World};
 
 use super::{
@@ -7,6 +9,7 @@ use super::{
 };
 
 #[derive(Default)]
+/// A single chunk, with it's height map, position, and other info
 pub struct Chunk {
     map: PerlinMap,
     hydration: PerlinMap,
@@ -20,6 +23,7 @@ pub struct Chunk {
 }
 
 #[derive(Default)]
+/// A chunked perlin noise map, which allows for infinite chunks to be loaded
 pub struct ChunkedPerlinMap {
     chunks: Vec<Chunk>,
     map_width: usize,
@@ -31,6 +35,7 @@ pub struct ChunkedPerlinMap {
 }
 
 impl Chunk {
+    /// Create a new chunk
     pub fn new(
         chunk_width: usize,
         pos: nalgebra_glm::Vec2,
@@ -50,6 +55,7 @@ impl Chunk {
         }
     }
 
+    /// Generate a new chunk
     pub fn generate(&mut self, renderer: &RenderContext, world: &mut World, bvh: &mut BVH<Entity>) {
         if !self.generated {
             self.map.generate(
@@ -214,6 +220,7 @@ fn add_uv(uv: &mut Vec<f32>, x: f32, y: f32) {
 }
 
 impl ChunkedPerlinMap {
+    /// Create a new chunked map
     pub fn new(
         map_width: usize,
         chunk_width: usize,
@@ -233,6 +240,7 @@ impl ChunkedPerlinMap {
         }
     }
 
+    /// Check the surrounding chunks to see if they need to be generated
     pub fn check_chunks(
         &mut self,
         renderer: &RenderContext,
@@ -250,6 +258,7 @@ impl ChunkedPerlinMap {
         }
     }
 
+    /// Get the height of the map at a position _without_ storing the chunk
     pub fn chunkless_height(&mut self, pos: nalgebra_glm::Vec2) -> f32 {
         let chunk_p =
             nalgebra_glm::floor(&(pos / self.chunk_width as f32)) * self.chunk_width as f32;

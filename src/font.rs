@@ -1,3 +1,5 @@
+//! This module deals with managing fonts
+
 use sdl2::{
     pixels::Color,
     rect::Rect,
@@ -18,8 +20,8 @@ struct Glyph {
     advance: usize,
 }
 
+/// A cached font
 pub struct Font {
-    // ttf_font: sdl2::ttf::Font<'a, 'a>,
     pub cache_texture: Option<TextureId>,
     glyphs: [Glyph; 95], //< All 95 printable ASCII glyphs
     height: usize,
@@ -31,8 +33,10 @@ pub struct Font {
 
 /// Opaque type used by a FontManager to associate fonts.
 #[derive(Copy, Clone)]
+/// An opaque reference id to a font within the manager
 pub struct FontId(usize);
 
+/// Manages the loading and rendering of fonts
 pub struct FontManager {
     ttf_context: Sdl2TtfContext,
     fonts: Vec<Font>,                    //< List of fonts
@@ -40,6 +44,7 @@ pub struct FontManager {
 }
 
 impl Font {
+    /// Create a new font
     pub fn new(font: &sdl2::ttf::Font, _style: FontStyle, renderer: &RenderContext) -> Self {
         let height = font.height() as usize;
         let _ascender = font.ascent() as usize;
@@ -58,6 +63,7 @@ impl Font {
         retval
     }
 
+    /// Draw text in a font to the screen
     pub fn draw(&self, pos: nalgebra_glm::Vec2, text: &str, renderer: &RenderContext) {
         let mut cursor = pos;
         for c in text.chars() {
@@ -136,6 +142,7 @@ impl Font {
 }
 
 impl FontManager {
+    /// Create a new font manager
     pub fn new() -> Self {
         let ttf_context = sdl2::ttf::init().unwrap();
         Self {
@@ -145,6 +152,7 @@ impl FontManager {
         }
     }
 
+    /// Add a new font to the manager and retrieve it's ID
     pub fn add_font(
         &mut self,
         path: &'static str,
@@ -166,14 +174,17 @@ impl FontManager {
         id
     }
 
+    /// Retrieve a font from it's ID
     pub fn get_font_from_id(&self, id: FontId) -> Option<&Font> {
         self.fonts.get(id.as_usize())
     }
 
+    /// Get a font ID from it's name
     pub fn get_id_from_name(&self, name: &'static str) -> Option<FontId> {
         self.keys.get(name).copied()
     }
 
+    /// Get a font from it's name
     pub fn get_font(&self, name: &'static str) -> Option<&Font> {
         self.get_font_from_id(self.get_id_from_name(name).unwrap())
     }
@@ -190,6 +201,7 @@ impl OpaqueId for FontId {
 }
 
 impl Glyph {
+    /// Create a new glyph
     pub fn new(rect: Rect, advance: i32) -> Self {
         Self {
             rect: Rectangle {

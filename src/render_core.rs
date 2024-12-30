@@ -1,3 +1,5 @@
+//! This file contains the core rendering functionality that is shared between 2D and 3D rendering.
+
 use std::{cell::RefCell, collections::HashMap, fmt::Debug};
 
 use obj::{load_obj, Obj, TexturedVertex};

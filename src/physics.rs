@@ -1,3 +1,5 @@
+//! NOTE: This isn't really implemented yet
+
 pub struct PositionComponent {
     pub pos: nalgebra_glm::Vec3,
 }

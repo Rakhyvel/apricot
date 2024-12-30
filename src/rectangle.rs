@@ -1,4 +1,7 @@
+//! This module defines a rectangle
+
 #[derive(Default, Copy, Clone)]
+/// A rectangle data structure
 pub struct Rectangle {
     pub pos: nalgebra_glm::Vec2,
     pub size: nalgebra_glm::Vec2,

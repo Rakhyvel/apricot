@@ -1,3 +1,6 @@
+//! This module implements a Bounding Volume Hierarchy. This data structure allows for efficient spatial lookup of
+//! objects that intersect an AABB, a frustrum, a sphere, or are struck by a ray.
+
 use rand::{rngs::StdRng, Rng, SeedableRng};
 
 use super::{aabb::AABB, frustrum::Frustrum, ray::Ray, sphere::Sphere};

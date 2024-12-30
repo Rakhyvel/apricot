@@ -3,7 +3,7 @@
 use std::{
     ffi::{CStr, CString},
     marker::PhantomData,
-    path::{Path, PathBuf},
+    path::Path,
     ptr::{null, null_mut},
 };
 
@@ -313,10 +313,7 @@ impl Texture {
 
     pub fn from_png(texture_filename: &'static str) -> Self {
         let texture = Texture::new();
-        const RES_PATH: &str = "C:\\Users\\Joseph\\git\\survival\\res";
-        let res_path = Path::new(RES_PATH);
-        let mut path = PathBuf::from(res_path);
-        path.push(texture_filename);
+        let path = Path::new(texture_filename);
         texture.load(&path).unwrap();
         texture
     }

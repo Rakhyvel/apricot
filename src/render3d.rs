@@ -19,15 +19,15 @@ impl RenderContext {
     ) {
         self.set_program_from_id(self.get_program_id_from_name("3d").unwrap());
 
-        let u_sun_dir = self.get_program_uniform("u_sun_dir").expect("erm lol");
-        unsafe {
-            gl::Uniform3f(
-                u_sun_dir.id,
-                directional_light.light_dir.x,
-                directional_light.light_dir.y,
-                directional_light.light_dir.z,
-            );
-        }
+        // let u_sun_dir = self.get_program_uniform("u_sun_dir").expect("erm lol");
+        // unsafe {
+        //     gl::Uniform3f(
+        //         u_sun_dir.id,
+        //         directional_light.light_dir.x,
+        //         directional_light.light_dir.y,
+        //         directional_light.light_dir.z,
+        //     );
+        // }
 
         unsafe {
             gl::Viewport(

@@ -1,8 +1,6 @@
 use hecs::{Entity, World};
 use rand::{Rng, SeedableRng};
 
-use crate::scenes::gameplay::Rock;
-
 use super::{
     bvh::BVH,
     perlin::{HeightMap, PerlinMap},
@@ -94,107 +92,6 @@ impl Chunk {
                 chunk_entity,
                 renderer.get_mesh_aabb(grass_mesh).translate(pos_with_z),
             );
-
-            // TODO: This should be OUT!
-
-            for _ in 0..4 {
-                // Add all the rocks
-                let mut position = nalgebra_glm::vec3(
-                    rng.gen_range(0..self.chunk_width) as f32,
-                    rng.gen_range(0..self.chunk_width) as f32,
-                    0.0,
-                );
-                let scale = 0.2;
-                let scale_vec = nalgebra_glm::vec3(scale, scale, scale);
-                position.z = self.map.get_z_interpolated(position.xy());
-                if position.z < 1.0 {
-                    continue;
-                }
-                position.x += self.pos.x;
-                position.y += self.pos.y;
-                let rock_entity = world.spawn((
-                    ModelComponent::new(cube_mesh, rock_texture, position, scale_vec),
-                    Rock {},
-                ));
-                bvh.insert(
-                    rock_entity,
-                    renderer
-                        .get_mesh_aabb(cube_mesh)
-                        .scale(scale_vec * 0.5)
-                        .translate(position),
-                );
-            }
-
-            for _ in 0..4 {
-                // Add all the trees
-                let pos = nalgebra_glm::vec2(
-                    rng.gen::<f32>() * (self.chunk_width as f32 - 1.0),
-                    rng.gen::<f32>() * (self.chunk_width as f32 - 1.0),
-                );
-                let height = self.map.get_z_interpolated(pos);
-                let hydro_normal = self.hydration.get_normal(pos);
-                let variation: f32 = rng.gen_range(0.0..1.0);
-                let scale = (1.4 + 1.0 * variation);
-                let scale_vec = nalgebra_glm::vec3(scale, scale, scale * 0.8);
-                let position = nalgebra_glm::vec3(pos.x + self.pos.x, pos.y + self.pos.y, height);
-                if height >= 1.0
-                    && hydro_normal.y > 0.0
-                    && 0.5 < self.hydration.height(pos)
-                    && bvh
-                        .iter_sphere(&Sphere::new(position, scale))
-                        .filter(|entity| world.get::<&Tree>(*entity).is_ok())
-                        .count()
-                        == 0
-                {
-                    let tree_entity = world.spawn((
-                        ModelComponent::new(tree_mesh, tree_texture, position, scale_vec),
-                        Tree {},
-                    ));
-                    bvh.insert(
-                        tree_entity,
-                        renderer
-                            .get_mesh_aabb(cube_mesh)
-                            .scale(scale_vec)
-                            .translate(position),
-                    );
-                }
-            }
-
-            for _ in 0..4 {
-                // Add all the bushes
-                let pos = nalgebra_glm::vec2(
-                    rng.gen::<f32>() * (self.chunk_width as f32 - 1.0),
-                    rng.gen::<f32>() * (self.chunk_width as f32 - 1.0),
-                );
-                let height = self.map.get_z_interpolated(pos);
-                let hydro_normal = self.hydration.get_normal(pos);
-                let variation: f32 = rng.gen_range(0.0..1.0);
-                let scale = (0.4 + 1.0 * variation);
-                let scale_vec = nalgebra_glm::vec3(scale, scale, scale * 0.8);
-                let position = nalgebra_glm::vec3(pos.x + self.pos.x, pos.y + self.pos.y, height);
-                if height >= 1.0
-                    && variation < (hydro_normal.y + 0.5) * 1.0
-                    && bvh
-                        .iter_sphere(&Sphere::new(position, scale))
-                        .filter(|entity| world.get::<&Tree>(*entity).is_ok())
-                        .count()
-                        == 0
-                {
-                    let tree_entity = world.spawn((ModelComponent::new(
-                        bush_mesh,
-                        tree_texture,
-                        position,
-                        scale_vec,
-                    ),));
-                    bvh.insert(
-                        tree_entity,
-                        renderer
-                            .get_mesh_aabb(bush_mesh)
-                            .scale(scale_vec)
-                            .translate(position),
-                    );
-                }
-            }
 
             self.generated = true;
         }

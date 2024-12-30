@@ -1,4 +1,4 @@
-// Put OpenGL Objects here
+//! This module contains OpenGL objects.
 
 use std::{
     ffi::{CStr, CString},
@@ -14,12 +14,13 @@ use gl::{
 
 use image::{EncodableLayout, ImageError};
 
-// An OpenGL Shader
+/// An OpenGL Shader
 pub struct Shader {
     id: GLuint,
 }
 
 impl Shader {
+    /// Compile an OpenGL shader from GLSL souce
     pub fn from_source(source: &CStr, kind: GLenum) -> Result<Self, String> {
         let id = unsafe { gl::CreateShader(kind) };
 
@@ -50,6 +51,7 @@ impl Shader {
         Ok(Shader { id })
     }
 
+    /// Retrieve the OpenGL ID of this shader
     pub fn id(&self) -> GLuint {
         self.id
     }
@@ -65,6 +67,7 @@ impl Drop for Shader {
 
 // TODO: Rename OpenGlProgram, and rename ProgramId to Program
 #[derive(Default)]
+/// An OpenGL program
 pub struct Program {
     id: GLuint,
 }
@@ -113,12 +116,14 @@ impl Program {
         Ok(Program { id })
     }
 
+    /// Tell OpenGL to use this program
     pub fn set(&self) {
         unsafe {
             UseProgram(self.id);
         }
     }
 
+    /// Retrieve the OpenGL ID of this program
     pub fn id(&self) -> GLuint {
         self.id
     }
@@ -138,6 +143,7 @@ fn create_whitespace_cstring_with_len(len: usize) -> CString {
     unsafe { CString::from_vec_unchecked(buffer) }
 }
 
+/// Create a program with a vert and frag shader
 pub fn create_program(
     vert_data: &'static str,
     frag_data: &'static str,
@@ -158,8 +164,7 @@ pub fn create_program(
     Ok(shader_program)
 }
 
-// OpenGL Vertex Buffer Object
-// Contains vertex data given as input to the vertex shader
+/// OpenGL Vertex Buffer Object. Contains vertex data given as input to the vertex shader.
 pub struct Buffer<T> {
     pub id: GLuint,
     target: GLenum,
@@ -167,6 +172,7 @@ pub struct Buffer<T> {
 }
 
 impl<T> Buffer<T> {
+    /// Create a new OpenGL Buffer
     pub fn gen(target: GLenum) -> Self {
         let mut id: GLuint = 0;
         unsafe {
@@ -179,6 +185,7 @@ impl<T> Buffer<T> {
         }
     }
 
+    /// Set the buffer's data
     pub fn set_data(&self, data: &Vec<T>) {
         self.bind();
         unsafe {
@@ -191,6 +198,7 @@ impl<T> Buffer<T> {
         }
     }
 
+    /// Bind the buffer in OpenGL
     pub fn bind(&self) {
         unsafe {
             gl::BindBuffer(self.target, self.id);
@@ -223,6 +231,7 @@ pub struct Vao {
 }
 
 impl Vao {
+    /// Create a new VAO
     pub fn gen() -> Self {
         let mut id: GLuint = 0;
         unsafe {
@@ -231,11 +240,13 @@ impl Vao {
         Vao { id }
     }
 
+    /// Bind and use this VAO
     pub fn set(&self, loc: u32) {
         self.bind(loc);
         self.setup(loc);
     }
 
+    /// Enable this VAO
     pub fn enable(&self, loc: u32) {
         unsafe {
             gl::EnableVertexAttribArray(loc);
@@ -283,11 +294,13 @@ impl Drop for Vao {
     }
 }
 
+/// An OpenGL Uniform location
 pub struct Uniform {
     pub id: GLint,
 }
 
 impl Uniform {
+    // Create a new OpenGL uniform
     pub fn new(program: u32, name: &str) -> Result<Self, &'static str> {
         let cname: CString = CString::new(name).expect("CString::new failed");
         let location: GLint = unsafe { gl::GetUniformLocation(program, cname.as_ptr()) };
@@ -300,17 +313,20 @@ impl Uniform {
 
 // TODO: Rename OpenGlTexture, and rename TextureId to Texture
 #[derive(Clone)]
+/// An OpenGL Texture
 pub struct Texture {
     pub id: GLuint,
 }
 
 impl Texture {
+    /// Create a new blank OpenGL texture
     pub fn new() -> Self {
         let mut id: GLuint = 0;
         unsafe { gl::GenTextures(1, &mut id) }
         Self { id }
     }
 
+    /// Create an OpenGL texture from a PNG
     pub fn from_png(texture_filename: &'static str) -> Self {
         let texture = Texture::new();
         let path = Path::new(texture_filename);
@@ -318,6 +334,7 @@ impl Texture {
         texture
     }
 
+    /// Create an OpenGL texture from an SDL surface
     pub fn from_surface(surface: sdl2::surface::Surface) -> Self {
         let texture = Texture::new();
         unsafe {
@@ -360,10 +377,12 @@ impl Texture {
         texture
     }
 
+    /// Bind this texture
     pub fn bind(&self) {
         unsafe { gl::BindTexture(gl::TEXTURE_2D, self.id) }
     }
 
+    /// Load this texture into it's OpenGL slot
     pub fn load(&self, path: &Path) -> Result<(), ImageError> {
         self.bind();
 
@@ -398,6 +417,7 @@ impl Texture {
         Ok(())
     }
 
+    /// Load this texture as a depth buffer
     pub fn load_depth_buffer(&self, width: i32, height: i32) {
         self.bind();
 
@@ -434,6 +454,7 @@ impl Texture {
         }
     }
 
+    /// Method to call after binding
     pub fn post_bind(&self) {
         unsafe {
             gl::FramebufferTexture2D(
@@ -452,6 +473,7 @@ impl Texture {
         };
     }
 
+    /// Activate this texture
     pub fn activate(&self, unit: GLuint) {
         unsafe {
             gl::ActiveTexture(unit);
@@ -459,6 +481,7 @@ impl Texture {
         }
     }
 
+    /// Associate this texture with a uniform name
     pub fn associate_uniform(&self, program_id: u32, unit: GLint, uniform_name: &str) {
         unsafe {
             let uniform = CString::new(uniform_name).unwrap();
@@ -466,6 +489,7 @@ impl Texture {
         }
     }
 
+    /// Retrieve the width and height of this texture
     pub fn get_dimensions(&self) -> Option<(i32, i32)> {
         let mut width: GLint = 0;
         let mut height: GLint = 0;
@@ -498,11 +522,13 @@ impl Default for Texture {
     }
 }
 
+/// An OpenGL Frame Buffer Object
 pub struct Fbo {
     pub id: GLuint,
 }
 
 impl Fbo {
+    /// Create a new Frame Buffer Object
     pub fn new() -> Self {
         let mut id: GLuint = 0;
         unsafe {
@@ -511,12 +537,14 @@ impl Fbo {
         Self { id }
     }
 
+    /// Bind this FBO
     pub fn bind(&self) {
         unsafe {
             gl::BindFramebuffer(gl::FRAMEBUFFER, self.id);
         }
     }
 
+    /// Unbind this FBO
     pub fn unbind(&self) {
         unsafe { gl::BindFramebuffer(gl::FRAMEBUFFER, 0) }
     }

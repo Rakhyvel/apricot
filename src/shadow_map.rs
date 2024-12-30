@@ -7,7 +7,7 @@ use super::{
     bvh::BVH,
     camera::{Camera, ProjectionKind},
     frustum::Frustum,
-    objects::{Fbo, Texture},
+    opengl::{Fbo, Texture},
     render_core::{ModelComponent, RenderContext},
 };
 

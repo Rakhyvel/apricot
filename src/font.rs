@@ -9,7 +9,7 @@ use sdl2::{
 use std::{collections::HashMap, path::Path};
 
 use super::{
-    objects::Texture,
+    opengl::Texture,
     rectangle::Rectangle,
     render_core::{OpaqueId, RenderContext, TextureId},
 };

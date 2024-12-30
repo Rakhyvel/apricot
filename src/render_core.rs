@@ -6,7 +6,7 @@ use super::{
     aabb::AABB,
     camera::{Camera, ProjectionKind},
     font::{Font, FontId, FontManager},
-    objects::{Buffer, Program, Texture, Uniform, Vao},
+    opengl::{Buffer, Program, Texture, Uniform, Vao},
 };
 
 pub struct RenderContext {

@@ -2,7 +2,7 @@ use std::borrow::Borrow;
 
 use super::{
     bvh::BVH,
-    objects::*,
+    opengl::*,
     render_core::{ModelComponent, RenderContext},
     shadow_map::DirectionalLightSource,
 };

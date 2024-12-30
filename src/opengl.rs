@@ -305,6 +305,8 @@ impl Uniform {
         let cname: CString = CString::new(name).expect("CString::new failed");
         let location: GLint = unsafe { gl::GetUniformLocation(program, cname.as_ptr()) };
         if location == -1 {
+            let errs = get_last_opengl_error();
+            println!("{:?}", errs);
             return Err("Couldn't get a uniform location");
         }
         Ok(Uniform { id: location })
@@ -553,5 +555,37 @@ impl Fbo {
 impl Default for Fbo {
     fn default() -> Self {
         Self { id: 0 }
+    }
+}
+
+fn get_last_opengl_error() -> Option<String> {
+    let mut errors = Vec::new();
+
+    unsafe {
+        loop {
+            let error_code = gl::GetError();
+            if error_code == gl::NO_ERROR {
+                break;
+            }
+
+            let error_message = match error_code {
+                gl::INVALID_ENUM => "GL_INVALID_ENUM: An unacceptable value is specified for an enumerated argument.".to_string(),
+                gl::INVALID_VALUE => "GL_INVALID_VALUE: A numeric argument is out of range.".to_string(),
+                gl::INVALID_OPERATION => "GL_INVALID_OPERATION: The specified operation is not allowed in the current state.".to_string(),
+                gl::STACK_OVERFLOW => "GL_STACK_OVERFLOW: This command would cause a stack overflow.".to_string(),
+                gl::STACK_UNDERFLOW => "GL_STACK_UNDERFLOW: This command would cause a stack underflow.".to_string(),
+                gl::OUT_OF_MEMORY => "GL_OUT_OF_MEMORY: There is not enough memory left to execute the command.".to_string(),
+                gl::INVALID_FRAMEBUFFER_OPERATION => "GL_INVALID_FRAMEBUFFER_OPERATION: The framebuffer object is not complete.".to_string(),
+                _ => format!("Unknown OpenGL error code: {}", error_code),
+            };
+
+            errors.push(error_message);
+        }
+    }
+
+    if errors.is_empty() {
+        None
+    } else {
+        Some(errors.join("\n"))
     }
 }

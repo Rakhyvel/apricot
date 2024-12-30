@@ -135,6 +135,7 @@ impl<Object: Copy + Clone> BVH<Object> {
 
     fn insert_leaf(&mut self, new_node: BVHNodeId) {
         if new_node == self.root_id {
+            println!("new node was root node");
             return;
         }
 

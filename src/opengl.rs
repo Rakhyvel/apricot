@@ -23,27 +23,35 @@ impl Shader {
     /// Compile an OpenGL shader from GLSL souce
     pub fn from_source(source: &CStr, kind: GLenum) -> Result<Self, String> {
         let id = unsafe { gl::CreateShader(kind) };
+        print_any_errors();
 
         unsafe {
             gl::ShaderSource(id, 1, &source.as_ptr(), null());
+        }
+        print_any_errors();
+        unsafe {
             gl::CompileShader(id);
         }
+        print_any_errors();
 
         let mut success: GLint = 1;
         unsafe {
             gl::GetShaderiv(id, gl::COMPILE_STATUS, &mut success);
         }
+        print_any_errors();
 
         if success == 0 {
             // Error occured!
             let mut len: GLint = 0;
             unsafe { gl::GetShaderiv(id, gl::INFO_LOG_LENGTH, &mut len) }
+            print_any_errors();
 
             let error = create_whitespace_cstring_with_len(len as usize);
 
             unsafe {
                 gl::GetShaderInfoLog(id, len, null_mut(), error.as_ptr() as *mut GLchar);
             }
+            print_any_errors();
 
             return Err(error.to_string_lossy().into_owned());
         }
@@ -62,6 +70,7 @@ impl Drop for Shader {
         unsafe {
             gl::DeleteShader(self.id);
         }
+        print_any_errors();
     }
 }
 
@@ -75,21 +84,25 @@ pub struct Program {
 impl Program {
     fn from_shaders(shaders: &[Shader]) -> Result<Self, String> {
         let id = unsafe { gl::CreateProgram() };
+        print_any_errors();
 
         for shader in shaders {
             unsafe {
                 gl::AttachShader(id, shader.id());
             }
+            print_any_errors();
         }
 
         unsafe {
             gl::LinkProgram(id);
         }
+        print_any_errors();
 
         let mut success: GLint = 1;
         unsafe {
             gl::GetProgramiv(id, gl::LINK_STATUS, &mut success);
         }
+        print_any_errors();
 
         if success == 0 {
             // An error occured
@@ -97,12 +110,14 @@ impl Program {
             unsafe {
                 gl::GetProgramiv(id, gl::INFO_LOG_LENGTH, &mut len);
             }
+            print_any_errors();
 
             let error = create_whitespace_cstring_with_len(len as usize);
 
             unsafe {
                 gl::GetProgramInfoLog(id, len, null_mut(), error.as_ptr() as *mut GLchar);
             }
+            print_any_errors();
 
             return Err(error.to_string_lossy().into_owned());
         }
@@ -111,6 +126,7 @@ impl Program {
             unsafe {
                 gl::DetachShader(id, shader.id());
             }
+            print_any_errors();
         }
 
         Ok(Program { id })
@@ -134,6 +150,7 @@ impl Drop for Program {
         unsafe {
             gl::DeleteProgram(self.id);
         }
+        print_any_errors();
     }
 }
 
@@ -178,6 +195,7 @@ impl<T> Buffer<T> {
         unsafe {
             gl::GenBuffers(1, &mut id);
         }
+        print_any_errors();
         Buffer::<T> {
             id,
             target,
@@ -196,6 +214,7 @@ impl<T> Buffer<T> {
                 gl::STATIC_DRAW,
             );
         }
+        print_any_errors();
     }
 
     /// Bind the buffer in OpenGL
@@ -203,18 +222,21 @@ impl<T> Buffer<T> {
         unsafe {
             gl::BindBuffer(self.target, self.id);
         }
+        print_any_errors();
     }
 
     fn unbind(&self) {
         unsafe {
             gl::BindBuffer(self.target, 0);
         }
+        print_any_errors();
     }
 
     fn delete(&self) {
         unsafe {
             gl::DeleteBuffers(1, &self.id);
         }
+        print_any_errors();
     }
 }
 
@@ -237,6 +259,7 @@ impl Vao {
         unsafe {
             gl::GenVertexArrays(1, &mut id);
         }
+        print_any_errors();
         Vao { id }
     }
 
@@ -251,6 +274,7 @@ impl Vao {
         unsafe {
             gl::EnableVertexAttribArray(loc);
         }
+        print_any_errors();
         self.setup(loc);
     }
 
@@ -259,6 +283,7 @@ impl Vao {
             gl::EnableVertexAttribArray(loc);
             gl::BindVertexArray(self.id);
         }
+        print_any_errors();
     }
 
     fn setup(&self, loc: u32) {
@@ -272,18 +297,21 @@ impl Vao {
                 null(),
             );
         }
+        print_any_errors();
     }
 
     fn unbind(&self) {
         unsafe {
             gl::BindVertexArray(0);
         }
+        print_any_errors();
     }
 
     fn delete(&self) {
         unsafe {
             gl::DeleteVertexArrays(1, &self.id);
         }
+        print_any_errors();
     }
 }
 
@@ -304,9 +332,8 @@ impl Uniform {
     pub fn new(program: u32, name: &str) -> Result<Self, &'static str> {
         let cname: CString = CString::new(name).expect("CString::new failed");
         let location: GLint = unsafe { gl::GetUniformLocation(program, cname.as_ptr()) };
+        print_any_errors();
         if location == -1 {
-            let errs = get_last_opengl_error();
-            println!("{:?}", errs);
             return Err("Couldn't get a uniform location");
         }
         Ok(Uniform { id: location })
@@ -325,6 +352,7 @@ impl Texture {
     pub fn new() -> Self {
         let mut id: GLuint = 0;
         unsafe { gl::GenTextures(1, &mut id) }
+        print_any_errors();
         Self { id }
     }
 
@@ -362,19 +390,24 @@ impl Texture {
                 gl::UNSIGNED_BYTE,
                 surface.without_lock().unwrap().as_ptr() as *const std::ffi::c_void,
             );
+            print_any_errors();
 
             gl::TexParameteri(
                 gl::TEXTURE_2D,
                 gl::TEXTURE_WRAP_S,
                 gl::CLAMP_TO_EDGE as GLint,
             );
+            print_any_errors();
             gl::TexParameteri(
                 gl::TEXTURE_2D,
                 gl::TEXTURE_WRAP_T,
                 gl::CLAMP_TO_EDGE as GLint,
             );
+            print_any_errors();
             gl::TexParameteri(gl::TEXTURE_2D, gl::TEXTURE_MIN_FILTER, gl::NEAREST as GLint);
+            print_any_errors();
             gl::TexParameteri(gl::TEXTURE_2D, gl::TEXTURE_MAG_FILTER, gl::NEAREST as GLint);
+            print_any_errors();
         }
         texture
     }
@@ -382,6 +415,7 @@ impl Texture {
     /// Bind this texture
     pub fn bind(&self) {
         unsafe { gl::BindTexture(gl::TEXTURE_2D, self.id) }
+        print_any_errors();
     }
 
     /// Load this texture into it's OpenGL slot
@@ -395,13 +429,17 @@ impl Texture {
                 gl::TEXTURE_WRAP_S,
                 gl::CLAMP_TO_EDGE as GLint,
             );
+            print_any_errors();
             gl::TexParameteri(
                 gl::TEXTURE_2D,
                 gl::TEXTURE_WRAP_T,
                 gl::CLAMP_TO_EDGE as GLint,
             );
+            print_any_errors();
             gl::TexParameteri(gl::TEXTURE_2D, gl::TEXTURE_MIN_FILTER, gl::NEAREST as GLint);
+            print_any_errors();
             gl::TexParameteri(gl::TEXTURE_2D, gl::TEXTURE_MAG_FILTER, gl::NEAREST as GLint);
+            print_any_errors();
 
             gl::TexImage2D(
                 gl::TEXTURE_2D,
@@ -414,7 +452,9 @@ impl Texture {
                 gl::UNSIGNED_BYTE,
                 img.as_bytes().as_ptr() as *const _,
             );
+            print_any_errors();
             gl::GenerateMipmap(gl::TEXTURE_2D);
+            print_any_errors();
         }
         Ok(())
     }
@@ -435,24 +475,30 @@ impl Texture {
                 gl::FLOAT,
                 std::ptr::null(),
             );
+            print_any_errors();
             gl::TexParameteri(gl::TEXTURE_2D, gl::TEXTURE_MIN_FILTER, gl::NEAREST as GLint);
+            print_any_errors();
             gl::TexParameteri(gl::TEXTURE_2D, gl::TEXTURE_MAG_FILTER, gl::NEAREST as GLint);
+            print_any_errors();
             gl::TexParameteri(
                 gl::TEXTURE_2D,
                 gl::TEXTURE_WRAP_S,
                 gl::CLAMP_TO_BORDER as GLint,
             );
+            print_any_errors();
             gl::TexParameteri(
                 gl::TEXTURE_2D,
                 gl::TEXTURE_WRAP_T,
                 gl::CLAMP_TO_BORDER as GLint,
             );
+            print_any_errors();
             let border_color: [f32; 4] = [1.0, 1.0, 1.0, 1.0];
             gl::TexParameterfv(
                 gl::TEXTURE_2D,
                 gl::TEXTURE_BORDER_COLOR,
                 border_color.as_ptr(),
             );
+            print_any_errors();
         }
     }
 
@@ -466,12 +512,16 @@ impl Texture {
                 self.id,
                 0,
             );
+            print_any_errors();
             gl::DrawBuffer(gl::NONE);
+            print_any_errors();
             gl::ReadBuffer(gl::NONE);
+            print_any_errors();
 
             if gl::CheckFramebufferStatus(gl::FRAMEBUFFER) != gl::FRAMEBUFFER_COMPLETE {
                 panic!("Framebuffer is not complete!");
             }
+            print_any_errors();
         };
     }
 
@@ -481,6 +531,7 @@ impl Texture {
             gl::ActiveTexture(unit);
             self.bind();
         }
+        print_any_errors();
     }
 
     /// Associate this texture with a uniform name
@@ -489,6 +540,7 @@ impl Texture {
             let uniform = CString::new(uniform_name).unwrap();
             gl::Uniform1i(gl::GetUniformLocation(program_id, uniform.as_ptr()), unit)
         }
+        print_any_errors();
     }
 
     /// Retrieve the width and height of this texture
@@ -498,9 +550,13 @@ impl Texture {
 
         unsafe {
             gl::BindTexture(gl::TEXTURE_2D, self.id);
+            print_any_errors();
             gl::GetTexLevelParameteriv(gl::TEXTURE_2D, 0, gl::TEXTURE_WIDTH, &mut width);
+            print_any_errors();
             gl::GetTexLevelParameteriv(gl::TEXTURE_2D, 0, gl::TEXTURE_HEIGHT, &mut height);
+            print_any_errors();
             gl::BindTexture(gl::TEXTURE_2D, 0);
+            print_any_errors();
         }
 
         if width > 0 && height > 0 {
@@ -516,6 +572,7 @@ impl Drop for Texture {
         unsafe {
             gl::DeleteTextures(1, [self.id].as_ptr());
         }
+        print_any_errors();
     }
 }
 impl Default for Texture {
@@ -536,6 +593,7 @@ impl Fbo {
         unsafe {
             gl::GenFramebuffers(1, &mut id);
         }
+        print_any_errors();
         Self { id }
     }
 
@@ -544,17 +602,25 @@ impl Fbo {
         unsafe {
             gl::BindFramebuffer(gl::FRAMEBUFFER, self.id);
         }
+        print_any_errors();
     }
 
     /// Unbind this FBO
     pub fn unbind(&self) {
         unsafe { gl::BindFramebuffer(gl::FRAMEBUFFER, 0) }
+        print_any_errors();
     }
 }
 
 impl Default for Fbo {
     fn default() -> Self {
         Self { id: 0 }
+    }
+}
+
+fn print_any_errors() {
+    if let Some(error_message) = get_last_opengl_error() {
+        println!("OpenGL Error:\n{}", error_message);
     }
 }
 

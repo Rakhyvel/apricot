@@ -1,3 +1,12 @@
+//! This module defines an Apricot App.
+//!
+//! Apps are made up of a stack of `Scene`s. The `Scene` at the top of the stack is the one that is updated and rendered
+//! to the screen. Input information such as the keyboard state and mouse are passed along to the active scene, along
+//! with output contexts such as the renderer, which allow the scene to output to the screen.
+//!
+//! Scenes can either push new scenes onto the stack, or pop themselves off. This allows for fairly intuitive GUI
+//! management.
+
 use std::cell::RefCell;
 use std::time::Instant;
 
@@ -9,29 +18,44 @@ use sdl2::Sdl;
 
 use super::render_core::RenderContext;
 
+/// Struct that contains all information about an app, that is passed down to an active `Scene`.
 pub struct App {
     // Screen stuff
+    /// The current size of the window
     pub window_size: nalgebra_glm::I32Vec2,
+    /// The OpenGL rendering context
     pub renderer: RenderContext,
 
     // Main loop stuff
+    /// Whether or not the app is running
     pub running: bool,
-    pub seconds: f32, //< How many seconds the program has been up
-    pub ticks: usize, //< How many ticks the program has been up
+    /// How many seconds the app has been up
+    pub seconds: f32,
+    /// How many ticks have occured since the app started
+    pub ticks: usize,
 
     // User input state
+    /// Static map of key states, where the boolean at index `k` determines if the scancode `k` is currently pressed
     pub keys: [bool; 256],
+    /// The position of the mouse, relative to the top-left corner of the screen
     pub mouse_pos: nalgebra_glm::Vec2,
+    /// The relative motion of the mouse
     pub mouse_vel: nalgebra_glm::Vec2,
+    /// Whether the left mouse button is down
     pub mouse_left_down: bool,
+    /// Whether the right mouse button is down
     pub mouse_right_down: bool,
     prev_mouse_left_down: bool,
     prev_mouse_right_down: bool,
+    /// Whether the left mouse button was clicked (ie it was down the previous tick, but is now up)
     pub mouse_left_clicked: bool,
+    /// Whether the right mouse button was clicked (ie it was down the previous tick, but is now up)
     pub mouse_right_clicked: bool,
+    /// The motion of the mouse wheel
     pub mouse_wheel: f32,
 }
 
+/// Starts a new app, with the `init` scene as the first scene in the stack.
 pub fn run(
     window_size: nalgebra_glm::I32Vec2,
     window_title: &'static str,
@@ -227,6 +251,7 @@ impl App {
     }
 }
 
+/// A scene is a something that can be updated, and rendered
 pub trait Scene {
     // TODO: Return a "command" enum so that scene's can affect App state
     fn update(&mut self, app: &App);

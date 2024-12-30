@@ -1,0 +1,5 @@
+/target
+/.vs
+/.vscode
+*.dll
+*.lib

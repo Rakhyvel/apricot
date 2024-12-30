@@ -21,7 +21,7 @@ struct Glyph {
     advance: usize,
 }
 
-pub(super) struct Font {
+pub struct Font {
     // ttf_font: sdl2::ttf::Font<'a, 'a>,
     pub cache_texture: Option<TextureId>,
     glyphs: [Glyph; 95], //< All 95 printable ASCII glyphs
@@ -36,7 +36,7 @@ pub(super) struct Font {
 #[derive(Copy, Clone)]
 pub struct FontId(usize);
 
-pub(super) struct FontManager {
+pub struct FontManager {
     ttf_context: Sdl2TtfContext,
     fonts: Vec<Font>,                    //< List of fonts
     keys: HashMap<&'static str, FontId>, //< Maps font names to ids in the font list

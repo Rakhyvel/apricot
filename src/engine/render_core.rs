@@ -12,10 +12,10 @@ use super::{
 
 pub struct RenderContext {
     // Updated by the user
-    pub(super) camera: RefCell<Camera>,
-    pub(super) program: RefCell<Option<ProgramId>>,
-    pub(super) color: RefCell<nalgebra_glm::Vec4>,
-    pub(super) font: RefCell<Option<FontId>>,
+    pub camera: RefCell<Camera>,
+    pub program: RefCell<Option<ProgramId>>,
+    pub color: RefCell<nalgebra_glm::Vec4>,
+    pub font: RefCell<Option<FontId>>,
 
     // Managers
     mesh_manager: RefCell<ResourceManager<Mesh, MeshId>>,
@@ -24,8 +24,8 @@ pub struct RenderContext {
     font_manager: RefCell<FontManager>,
 
     // Updated by the app
-    pub(super) int_screen_resolution: nalgebra_glm::I32Vec2,
-    pub(super) camera_2d: Camera,
+    pub int_screen_resolution: nalgebra_glm::I32Vec2,
+    pub camera_2d: Camera,
 }
 
 struct ResourceManager<Resource, Id: OpaqueId> {
@@ -33,7 +33,7 @@ struct ResourceManager<Resource, Id: OpaqueId> {
     keys: HashMap<&'static str, Id>,
 }
 
-pub(super) trait OpaqueId: Copy {
+pub trait OpaqueId: Copy {
     fn new(id: usize) -> Self;
     fn as_usize(&self) -> usize;
 }
@@ -213,7 +213,7 @@ impl RenderContext {
         self.add_mesh(Mesh::new(indices, datas), name)
     }
 
-    pub(super) fn add_texture(&self, texture: Texture, name: Option<&'static str>) -> TextureId {
+    pub fn add_texture(&self, texture: Texture, name: Option<&'static str>) -> TextureId {
         self.texture_manager.borrow_mut().add(texture, name)
     }
 
@@ -227,7 +227,7 @@ impl RenderContext {
             .add(Texture::from_png(texture_filename), name)
     }
 
-    pub(super) fn add_program(&self, program: Program, name: Option<&'static str>) -> ProgramId {
+    pub fn add_program(&self, program: Program, name: Option<&'static str>) -> ProgramId {
         let retval = self.program_manager.borrow_mut().add(program, name);
         retval
     }
@@ -252,7 +252,7 @@ impl RenderContext {
         }
     }
 
-    pub(super) fn get_texture(&self, name: &'static str) -> Option<std::cell::Ref<'_, Texture>> {
+    pub fn get_texture(&self, name: &'static str) -> Option<std::cell::Ref<'_, Texture>> {
         if let Some(id) = self.get_texture_id_from_name(name) {
             self.get_texture_from_id(id)
         } else {
@@ -260,7 +260,7 @@ impl RenderContext {
         }
     }
 
-    pub(super) fn get_program(&self, name: &'static str) -> Option<std::cell::Ref<'_, Program>> {
+    pub fn get_program(&self, name: &'static str) -> Option<std::cell::Ref<'_, Program>> {
         if let Some(id) = self.get_program_id_from_name(name) {
             self.get_program_from_id(id)
         } else {
@@ -278,7 +278,7 @@ impl RenderContext {
         }
     }
 
-    pub(super) fn get_texture_from_id(&self, id: TextureId) -> Option<std::cell::Ref<'_, Texture>> {
+    pub fn get_texture_from_id(&self, id: TextureId) -> Option<std::cell::Ref<'_, Texture>> {
         let manager = self.texture_manager.borrow();
         if let Some(texture) = manager.get_from_id(id) {
             // Map the Ref<TextureManager> to Ref<Texture>
@@ -288,7 +288,7 @@ impl RenderContext {
         }
     }
 
-    pub(super) fn get_program_from_id(&self, id: ProgramId) -> Option<std::cell::Ref<'_, Program>> {
+    pub fn get_program_from_id(&self, id: ProgramId) -> Option<std::cell::Ref<'_, Program>> {
         let manager = self.program_manager.borrow();
         if let Some(program) = manager.get_from_id(id) {
             // Map the Ref<ProgramManager> to Ref<Program>
@@ -298,7 +298,7 @@ impl RenderContext {
         }
     }
 
-    pub(super) fn get_font_from_id(&self, id: FontId) -> Option<std::cell::Ref<'_, Font>> {
+    pub fn get_font_from_id(&self, id: FontId) -> Option<std::cell::Ref<'_, Font>> {
         let manager = self.font_manager.borrow();
         if let Some(font) = manager.get_font_from_id(id) {
             // Map the Ref<TextureManager> to Ref<Texture>
@@ -355,7 +355,7 @@ impl RenderContext {
         }
     }
 
-    pub(super) fn get_program_uniform(&self, uniform_name: &str) -> Result<Uniform, &'static str> {
+    pub fn get_program_uniform(&self, uniform_name: &str) -> Result<Uniform, &'static str> {
         Uniform::new(self.get_current_program_id(), uniform_name)
     }
 

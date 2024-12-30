@@ -1,3 +1,5 @@
+//! This module deals with 2D perlin noise.
+
 use std::cmp::Ordering;
 
 use rand::{Rng, SeedableRng};
@@ -19,6 +21,7 @@ static HASH: [u8; 256] = [
 ];
 
 #[derive(Default)]
+/// A 2D map of perlin noise
 pub struct PerlinMap {
     cells: Vec<Cell>,
     map_width: usize,
@@ -102,6 +105,7 @@ impl Particle {
 }
 
 impl PerlinMap {
+    /// Create a new 2D Perlin map
     pub fn new(map_width: usize) -> Self {
         let mut retval = Self::default();
 
@@ -110,6 +114,7 @@ impl PerlinMap {
         retval
     }
 
+    /// Fill in the map with noise
     pub fn generate(
         &mut self,
         level_of_detail: f32,
@@ -221,6 +226,7 @@ impl PerlinMap {
         }
     }
 
+    /// Get the height of the map at a given point
     pub fn height(&self, p: nalgebra_glm::Vec2) -> f32 {
         if self.oob(p) {
             return 0.0;
@@ -246,6 +252,7 @@ impl PerlinMap {
         self.cells[p.x as usize + p.y as usize * self.map_width].flow += val
     }
 
+    /// Get the height at a point, interpolating sub-pixels
     pub fn get_z_interpolated(&self, p: nalgebra_glm::Vec2) -> f32 {
         assert!(!p.x.is_nan());
         // The coordinates of the tile's origin (bottom left corner)
@@ -292,6 +299,7 @@ impl PerlinMap {
         p.x < 0.0 || p.y < 0.0 || p.x >= self.map_width as f32 || p.y >= self.map_width as f32
     }
 
+    /// Get the normal at a sub-pixel precise point
     pub fn get_normal(&self, p: nalgebra_glm::Vec2) -> nalgebra_glm::Vec3 {
         assert!(!p.x.is_nan());
         // The coordinates of the tile's origin (bottom left corner)
@@ -323,12 +331,14 @@ impl PerlinMap {
         tri_normal(offsets[0], offsets[1], offsets[2])
     }
 
+    /// Get the dot product of the normal and up at a sub-pixel precise point
     pub fn get_dot_prod(&self, p: nalgebra_glm::Vec2) -> f32 {
         assert!(!p.x.is_nan());
 
         nalgebra_glm::dot(&self.get_normal(p), &nalgebra_glm::vec3(0.0, 0.0, 1.0))
     }
 
+    /// Create a bulge near the center of the map
     pub fn create_bulge(&mut self) {
         for y in 0..self.map_width {
             for x in 0..self.map_width {
@@ -338,6 +348,7 @@ impl PerlinMap {
         }
     }
 
+    /// Create a shelf between two given heights
     pub fn create_shelf(&mut self, shelf_height: f32, shelf_depth: f32) {
         for y in 0..self.map_width {
             for x in 0..self.map_width {
@@ -349,6 +360,7 @@ impl PerlinMap {
         }
     }
 
+    /// Normalize the map so that everything's sorta even
     pub fn normalize(&mut self) {
         let mut min = f32::MAX;
         let mut max = f32::MIN;

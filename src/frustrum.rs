@@ -40,10 +40,10 @@ impl Frustrum {
             nalgebra_glm::vec4(1.0, -1.0, -1.0, 1.0),  // near-bottom-right
             nalgebra_glm::vec4(-1.0, 1.0, -1.0, 1.0),  // near-top-left
             nalgebra_glm::vec4(1.0, 1.0, -1.0, 1.0),   // near-top-right
-            nalgebra_glm::vec4(-1.0, -1.0, 0.9999, 1.0), // far-bottom-left
-            nalgebra_glm::vec4(1.0, -1.0, 0.9999, 1.0), // far-bottom-right
-            nalgebra_glm::vec4(-1.0, 1.0, 0.9999, 1.0), // far-top-left
-            nalgebra_glm::vec4(1.0, 1.0, 0.9999, 1.0), // far-top-right
+            nalgebra_glm::vec4(-1.0, -1.0, 0.9999999, 1.0), // far-bottom-left
+            nalgebra_glm::vec4(1.0, -1.0, 0.9999999, 1.0), // far-bottom-right
+            nalgebra_glm::vec4(-1.0, 1.0, 0.9999999, 1.0), // far-top-left
+            nalgebra_glm::vec4(1.0, 1.0, 0.9999999, 1.0), // far-top-right
         ];
         let corners_w: Vec<nalgebra_glm::Vec4> = clip_space_corners
             .iter()

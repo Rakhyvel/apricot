@@ -4,6 +4,7 @@ use super::frustrum::Frustrum;
 pub enum ProjectionKind {
     Perspective {
         fov: f32,
+        far: f32,
     },
     Orthographic {
         left: f32,
@@ -17,7 +18,10 @@ pub enum ProjectionKind {
 
 impl Default for ProjectionKind {
     fn default() -> Self {
-        Self::Perspective { fov: 3.5 }
+        Self::Perspective {
+            fov: 3.5,
+            far: 1000.0,
+        }
     }
 }
 
@@ -58,9 +62,8 @@ impl Camera {
     pub fn regen_view_proj_matrices(&mut self) {
         let view_matrix = nalgebra_glm::look_at(&self.position, &self.lookat, &self.up);
         let proj_matrix = match self.projection_kind {
-            ProjectionKind::Perspective { fov } => {
-                // TODO: Take in aspect, though I don't really care!
-                nalgebra_glm::perspective(800.0 / 600.0, fov, 0.1, 1000.0)
+            ProjectionKind::Perspective { fov, far } => {
+                nalgebra_glm::perspective(800.0 / 600.0, fov, 0.1, far)
             }
             ProjectionKind::Orthographic {
                 left,

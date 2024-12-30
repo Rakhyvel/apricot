@@ -1,9 +1,16 @@
+//! This module defines an Axis Aligned Bounding Box.
+
 use core::f32;
 
 use super::{frustrum::Frustrum, plane::Plane, ray::Ray, sphere::Sphere};
 
 #[derive(Debug, Copy, Clone)]
 #[allow(unused)]
+/// # Axis Aligned Bounding Box.
+/// An axis aligned bounding box is defined by two vertices: the `min`, which contains the smallest bounds on each axis,
+/// and the `max`, which contains the maximum values for each axis.
+///
+/// AABBs are very simple yet powerful, and are used for a lot of things.
 pub struct AABB {
     pub min: nalgebra_glm::Vec3,
     pub max: nalgebra_glm::Vec3,
@@ -22,12 +29,14 @@ impl AABB {
         Self { min, max }
     }
 
+    /// Create an AABB from an iterator of points. This is slow!
     pub fn from_points(points: impl IntoIterator<Item = nalgebra_glm::Vec3>) -> Self {
         let mut retval = AABB::new();
         retval.expand_to_fit(points);
         retval
     }
 
+    /// Union two AABBs to form a single AABB that contains both
     pub fn union(&self, b: AABB) -> AABB {
         AABB::from_min_max(
             nalgebra_glm::min2(&self.min, &b.min),
@@ -35,11 +44,13 @@ impl AABB {
         )
     }
 
+    /// This function finds the _surface_ area of an AABB.
     pub fn area(&self) -> f32 {
         let d = self.max - self.min;
         2.0 * (d.x * d.y + d.y * d.z + d.z * d.x)
     }
 
+    /// Determines whether or not an AABB intersects with a frustrum
     pub fn within_frustrum(&self, frustrum: &Frustrum, debug: bool) -> bool {
         let mut i = 0;
         for plane in frustrum.planes() {
@@ -66,6 +77,7 @@ impl AABB {
         true
     }
 
+    /// Determines whether or not an AABB intersects with a sphere
     pub fn within_sphere(&self, sphere: &Sphere) -> bool {
         let mut radius_squared = sphere.radius.powf(2.0);
 
@@ -91,6 +103,7 @@ impl AABB {
         radius_squared > 0.0
     }
 
+    /// Determines if a ray intersects an AABB
     pub fn raycast(&self, ray: &Ray) -> bool {
         let inv = nalgebra_glm::vec3(1.0 / ray.dir.x, 1.0 / ray.dir.y, 1.0 / ray.dir.z);
 
@@ -115,15 +128,18 @@ impl AABB {
         tmax >= tmin && tmax >= 0.0
     }
 
+    /// Calculates the bounding sphere for an AABB
     pub fn bounding_sphere(&self) -> Sphere {
         let center = self.center();
         Sphere::new(center, nalgebra_glm::distance(&center, &self.min))
     }
 
+    /// Finds the centerpoint of an AABB
     pub fn center(&self) -> nalgebra_glm::Vec3 {
         (self.max + self.min) * 0.5
     }
 
+    /// Moves an AABB by a vector
     pub fn translate(&self, center: nalgebra_glm::Vec3) -> Self {
         Self {
             min: self.min + center,
@@ -131,6 +147,7 @@ impl AABB {
         }
     }
 
+    /// Scales an AABB by a certain amount
     pub fn scale(&self, factor: nalgebra_glm::Vec3) -> Self {
         Self {
             min: self.min.component_mul(&factor),
@@ -138,6 +155,7 @@ impl AABB {
         }
     }
 
+    /// Expands an AABB to fit all points in some iterator of points. This is __slow__!
     pub fn expand_to_fit(&mut self, points: impl IntoIterator<Item = nalgebra_glm::Vec3>) {
         for corner in points.into_iter() {
             self.min = nalgebra_glm::min2(&self.min, &corner);
@@ -145,22 +163,26 @@ impl AABB {
         }
     }
 
+    /// Finds the midpoint of the positive z plane. Useful for shadow mapping.
     pub fn pos_z_plane_midpoint(&self) -> nalgebra_glm::Vec4 {
         let bottom_left = nalgebra_glm::vec4(self.min.x, self.min.y, self.max.z, 1.0);
         let top_right = nalgebra_glm::vec4(self.max.x, self.max.y, self.max.z, 1.0);
         0.5 * (bottom_left + top_right)
     }
 
+    /// Transforms the min and max points of an AABB by a Mat4
     pub fn transform(&mut self, matrix: nalgebra_glm::Mat4) {
         self.min = (matrix * nalgebra_glm::vec4(self.min.x, self.min.y, self.min.z, 1.0)).xyz();
         self.max = (matrix * nalgebra_glm::vec4(self.max.x, self.max.y, self.max.z, 1.0)).xyz();
     }
 
-    pub fn intersect_z(&mut self, other: &AABB) {
-        self.min.z = self.min.z.min(other.min.z);
-        self.max.z = self.max.z.max(other.max.z);
-    }
+    // I dont think this one is used
+    // pub fn intersect_z(&mut self, other: &AABB) {
+    //     self.min.z = self.min.z.min(other.min.z);
+    //     self.max.z = self.max.z.max(other.max.z);
+    // }
 
+    /// Determines whether two AABBs intersect
     pub fn intersects(&self, other: &AABB) -> bool {
         // Check for separation in the x-axis
         if self.max.x < other.min.x || self.min.x > other.max.x {
@@ -179,6 +201,7 @@ impl AABB {
         true
     }
 
+    /// Determines whether this AABB _fully_ contains the other AABB
     pub fn contains(&self, other: &AABB) -> bool {
         let mut result = true;
         result = result && self.min.x <= other.min.x;
@@ -190,6 +213,7 @@ impl AABB {
         result
     }
 
+    /// Determines whether this AABB contains the point
     pub fn contains_point(&self, point: nalgebra_glm::Vec3) -> bool {
         self.min.x <= point.x
             && self.min.y <= point.y
@@ -199,6 +223,7 @@ impl AABB {
             && self.max.z <= point.z
     }
 
+    /// Produces the corners of an AABB. This is _SLOW_!
     pub fn corners(&self) -> [nalgebra_glm::Vec3; 8] {
         [
             nalgebra_glm::Vec3::new(self.min.x, self.min.y, self.min.z),
@@ -212,6 +237,7 @@ impl AABB {
         ]
     }
 
+    /// Given a normal-plane, returns the further point from the plane along it's normal
     fn get_furthest_corner(&self, plane: &Plane) -> nalgebra_glm::Vec3 {
         nalgebra_glm::vec3(
             if plane.normal().x > 0.0 {

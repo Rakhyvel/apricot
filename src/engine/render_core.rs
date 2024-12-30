@@ -63,7 +63,7 @@ pub struct ModelComponent {
 
 /// Stores the geometry of a mesh. Meshes are registered in the mesh manager, and can be potentially shared across
 /// multiple models.
-pub(crate) struct Mesh {
+pub struct Mesh {
     geometry: Vec<GeometryData>,
     indices: Vec<u32>,
     aabb: AABB,

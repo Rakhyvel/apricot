@@ -6,7 +6,7 @@ use super::{
     aabb::AABB,
     bvh::BVH,
     camera::{Camera, ProjectionKind},
-    frustrum::Frustrum,
+    frustum::Frustum,
     objects::{Fbo, Texture},
     render_core::{ModelComponent, RenderContext},
 };
@@ -71,12 +71,12 @@ impl RenderContext {
         // Use a simple depth shader program
         self.set_program_from_id(self.get_program_id_from_name("shadow").unwrap());
 
-        // Compute the camera frustrum corners
+        // Compute the camera frustum corners
         let (view_matrix, proj_matrix) = self.camera.borrow().view_proj_matrices();
         let inv_proj_view = nalgebra_glm::inverse(&(proj_matrix * view_matrix));
-        let screen_frustrum = Frustrum::from_inv_proj_view(inv_proj_view, false);
+        let screen_frustum = Frustum::from_inv_proj_view(inv_proj_view, false);
 
-        // Transform the screen-world-frustrum corners to light-view-space (1st time)
+        // Transform the screen-world-frustum corners to light-view-space (1st time)
         // Move shadow camera to world-space origin (kinda arbitrary)
         directional_light
             .shadow_camera
@@ -89,22 +89,22 @@ impl RenderContext {
         let (light_view_matrix, _light_proj_view_matrix) =
             directional_light.shadow_camera.view_proj_matrices();
         // Transform the world-space screen frustum into light-view-space
-        let light_view_frustrum = screen_frustrum.transform(light_view_matrix);
+        let light_view_frustum = screen_frustum.transform(light_view_matrix);
 
-        // Calculate an AABB for the light-view-space frustrum
-        let aabb_light_space = AABB::from_points(light_view_frustrum.corners());
+        // Calculate an AABB for the light-view-space frustum
+        let aabb_light_space = AABB::from_points(light_view_frustum.corners());
 
         // Calculate a light-space AABB for the world
         // let mut world_aabb_light_space = AABB::new();
         // world_aabb_light_space.transform(light_view_matrix);
         // aabb_light_space.intersect_z(&world_aabb_light_space);
 
-        // Calculate the mid-point of the near-plane on the light-view-frustrum
+        // Calculate the mid-point of the near-plane on the light-view-frustum
         let light_pos_light_space = aabb_light_space.pos_z_plane_midpoint();
         let light_pos_world_space =
             (nalgebra_glm::inverse(&light_view_matrix)) * light_pos_light_space;
 
-        // Transform the screen-world-frustrum to light-space (2nd time)
+        // Transform the screen-world-frustum to light-space (2nd time)
         directional_light
             .shadow_camera
             .set_position(light_pos_world_space.xyz());
@@ -113,10 +113,10 @@ impl RenderContext {
             .set_lookat(directional_light.shadow_camera.position() - directional_light.light_dir);
         let (light_view_matrix, light_proj_matrix) =
             directional_light.shadow_camera.view_proj_matrices();
-        let light_view_frustrum = screen_frustrum.transform(light_view_matrix);
+        let light_view_frustum = screen_frustum.transform(light_view_matrix);
 
         // Create an Orthographic Projection around the light-space AABB
-        let aabb_light_space = AABB::from_points(light_view_frustrum.corners());
+        let aabb_light_space = AABB::from_points(light_view_frustum.corners());
         directional_light.shadow_camera.projection_kind = ProjectionKind::Orthographic {
             left: aabb_light_space.min.x,
             right: aabb_light_space.max.x,
@@ -127,9 +127,9 @@ impl RenderContext {
         };
 
         let frustum2 =
-            Frustrum::from_inv_proj_view(directional_light.shadow_camera.inv_proj_view(), false);
+            Frustum::from_inv_proj_view(directional_light.shadow_camera.inv_proj_view(), false);
 
-        for model_id in bvh.iter_frustrum(&frustum2, false) {
+        for model_id in bvh.iter_frustum(&frustum2, false) {
             let model = world.get::<&ModelComponent>(model_id).unwrap();
             let mesh = self.get_mesh_from_id(model.mesh_id).unwrap();
             let texture = self.get_texture_from_id(model.texture_id).unwrap();

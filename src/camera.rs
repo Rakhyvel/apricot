@@ -1,7 +1,7 @@
 //! This module implements the Camera structure. Cameras can either be perspective (typical for 3D) or orthographic
 //! (typical for 2D)
 
-use super::frustrum::Frustrum;
+use super::frustum::Frustum;
 
 #[derive(Debug, Copy, Clone)]
 /// Which kind of projection the camera uses.
@@ -102,10 +102,10 @@ impl Camera {
         )
     }
 
-    /// Returns the frustrum for this camera
-    pub fn frustum(&self) -> Frustrum {
-        // TODO: Store frustrum!
-        Frustrum::from_inv_proj_view(self.inv_proj_view(), false)
+    /// Returns the frustum for this camera
+    pub fn frustum(&self) -> Frustum {
+        // TODO: Store frustum!
+        Frustum::from_inv_proj_view(self.inv_proj_view(), false)
     }
 
     /// Sets the position of the camera. This regenerates the view and projection matrix, so is fairly slow.

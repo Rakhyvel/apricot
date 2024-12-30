@@ -1,9 +1,9 @@
 //! This module implements a Bounding Volume Hierarchy. This data structure allows for efficient spatial lookup of
-//! objects that intersect an AABB, a frustrum, a sphere, or are struck by a ray.
+//! objects that intersect an AABB, a frustum, a sphere, or are struck by a ray.
 
 use rand::{rngs::StdRng, Rng, SeedableRng};
 
-use super::{aabb::AABB, frustrum::Frustrum, ray::Ray, sphere::Sphere};
+use super::{aabb::AABB, frustum::Frustum, ray::Ray, sphere::Sphere};
 
 /// A Bounding Volume Hierarchy implementation. I'd recommend using BVH<Entity> if using hecs, for faster iteration.
 pub struct BVH<Object: Copy + Clone> {
@@ -30,10 +30,10 @@ struct BVHNode<Object: Copy + Clone> {
     height: i32,
 }
 
-/// Iterator returned when iterating over the items in a BVH that intersect with a frustrum
-pub struct BVHFrustrumIterator<'a, Object: Copy + Clone> {
+/// Iterator returned when iterating over the items in a BVH that intersect with a frustum
+pub struct BVHFrustumIterator<'a, Object: Copy + Clone> {
     bvh: &'a BVH<Object>, // Reference to the tree
-    frustrum: &'a Frustrum,
+    frustum: &'a Frustum,
     stack: Vec<BVHNodeId>,
     debug: bool,
 }
@@ -258,21 +258,21 @@ impl<Object: Copy + Clone> BVH<Object> {
         }
     }
 
-    /// Iterate through all objects in the BVH that intersect with a given frustrum
-    pub fn iter_frustrum<'a>(
+    /// Iterate through all objects in the BVH that intersect with a given frustum
+    pub fn iter_frustum<'a>(
         &'a self,
-        frustrum: &'a Frustrum,
+        frustum: &'a Frustum,
         debug: bool,
-    ) -> BVHFrustrumIterator<'a, Object> {
+    ) -> BVHFrustumIterator<'a, Object> {
         let mut stack = Vec::new();
 
         if self.root_id != INVALID_BVH_NODE_ID {
             stack.push(self.root_id);
         }
 
-        BVHFrustrumIterator {
+        BVHFrustumIterator {
             bvh: self,
-            frustrum,
+            frustum,
             stack,
             debug,
         }
@@ -431,16 +431,13 @@ impl<Object: Copy + Clone> BVHNode<Object> {
     }
 }
 
-impl<'a, Object: Copy + Clone> Iterator for BVHFrustrumIterator<'a, Object> {
+impl<'a, Object: Copy + Clone> Iterator for BVHFrustumIterator<'a, Object> {
     type Item = Object;
 
     fn next(&mut self) -> Option<Self::Item> {
         while let Some(current_id) = self.stack.pop() {
             let current_node = self.bvh.node_at(current_id);
-            if !current_node
-                .volume
-                .within_frustrum(self.frustrum, self.debug)
-            {
+            if !current_node.volume.within_frustum(self.frustum, self.debug) {
                 continue;
             }
 

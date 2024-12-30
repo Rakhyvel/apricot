@@ -1,16 +1,22 @@
+//! This module defines the frustum data structure. A frustum is often used to represent the volume that is visible to
+//! a camera.
+
 use super::plane::Plane;
 
 #[derive(Debug, Copy, Clone)]
-pub struct Frustrum {
+/// A frustum data structure
+pub struct Frustum {
     corners: [nalgebra_glm::Vec3; 8],
     planes: [Plane; 6],
 }
 
-impl Frustrum {
+impl Frustum {
+    /// Create a new frustum from it's planes and corners
     pub fn new(planes: [Plane; 6], corners: [nalgebra_glm::Vec3; 8]) -> Self {
         Self { corners, planes }
     }
 
+    /// Create a new frustum from just it's corners
     pub fn from_corners(corners: [nalgebra_glm::Vec3; 8]) -> Self {
         let near_bottom_left = corners[0];
         let near_bottom_right = corners[1];
@@ -34,6 +40,7 @@ impl Frustrum {
         )
     }
 
+    /// Create a frustum from an inverse-proj-view matrix
     pub fn from_inv_proj_view(inv_proj_view: nalgebra_glm::Mat4, _debug: bool) -> Self {
         let clip_space_corners: [nalgebra_glm::Vec4; 8] = [
             nalgebra_glm::vec4(-1.0, -1.0, -1.0, 1.0), // near-bottom-left
@@ -57,6 +64,7 @@ impl Frustrum {
         Self::from_corners(corners.try_into().unwrap())
     }
 
+    /// Transform a frustum by a Mat4
     pub fn transform(&self, matrix: nalgebra_glm::Mat4) -> Self {
         let new_corners_w: Vec<nalgebra_glm::Vec4> = self
             .corners
@@ -68,14 +76,17 @@ impl Frustrum {
         Self::from_corners(new_corners.try_into().unwrap())
     }
 
+    /// Get a frustum's planes
     pub fn planes(&self) -> &[Plane; 6] {
         &self.planes
     }
 
+    /// Get a mutable reference to a frustum's planes
     pub fn planes_mut(&mut self) -> &mut [Plane; 6] {
         &mut self.planes
     }
 
+    /// Get the corners of a frustum
     pub fn corners(&self) -> [nalgebra_glm::Vec3; 8] {
         self.corners
     }

@@ -5,7 +5,7 @@ pub mod bvh;
 pub mod camera;
 pub mod chunked_map;
 pub mod font;
-pub mod frustrum;
+pub mod frustum;
 pub mod objects;
 pub mod perlin;
 pub mod physics;

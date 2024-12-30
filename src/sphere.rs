@@ -1,4 +1,4 @@
-use super::frustrum::Frustrum;
+use super::frustum::Frustum;
 
 #[derive(Debug)]
 pub struct Sphere {
@@ -11,8 +11,8 @@ impl Sphere {
         Self { center, radius }
     }
 
-    pub fn within_frustrum(&self, frustrum: &Frustrum) -> bool {
-        for plane in frustrum.planes() {
+    pub fn within_frustum(&self, frustum: &Frustum) -> bool {
+        for plane in frustum.planes() {
             if plane.normal().dot(&self.center) + plane.dist() + self.radius < 0.0 {
                 return false;
             }

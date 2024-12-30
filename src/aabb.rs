@@ -2,7 +2,7 @@
 
 use core::f32;
 
-use super::{frustrum::Frustrum, plane::Plane, ray::Ray, sphere::Sphere};
+use super::{frustum::Frustum, plane::Plane, ray::Ray, sphere::Sphere};
 
 #[derive(Debug, Copy, Clone)]
 #[allow(unused)]
@@ -50,16 +50,16 @@ impl AABB {
         2.0 * (d.x * d.y + d.y * d.z + d.z * d.x)
     }
 
-    /// Determines whether or not an AABB intersects with a frustrum
-    pub fn within_frustrum(&self, frustrum: &Frustrum, debug: bool) -> bool {
+    /// Determines whether or not an AABB intersects with a frustum
+    pub fn within_frustum(&self, frustum: &Frustum, debug: bool) -> bool {
         let mut i = 0;
-        for plane in frustrum.planes() {
+        for plane in frustum.planes() {
             let vmax = self.get_furthest_corner(plane);
             let value = plane.normal().dot(&vmax) + plane.dist();
             // println!("{}", value);
             if value < 0.0 {
                 let bounding_sphere = self.bounding_sphere();
-                let in_sphere = bounding_sphere.within_frustrum(frustrum);
+                let in_sphere = bounding_sphere.within_frustum(frustum);
                 if !in_sphere && debug {
                     println!(
                         "i:{}\nmax:{:?}\nmin:{:?}\nplane:{:?}\nsphere:{:?}",

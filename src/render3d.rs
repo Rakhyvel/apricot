@@ -56,10 +56,10 @@ impl RenderContext {
             );
         }
 
-        let camera_frustrum = &self.camera.borrow().frustum();
+        let camera_frustum = &self.camera.borrow().frustum();
 
         let (view_matrix, proj_matrix) = self.camera.borrow().view_proj_matrices();
-        for model_id in bvh.iter_frustrum(camera_frustrum, debug) {
+        for model_id in bvh.iter_frustum(camera_frustum, debug) {
             let model = world.get::<&mut ModelComponent>(model_id).unwrap();
             let mesh = self.get_mesh_from_id(model.mesh_id).unwrap();
             let texture = self.get_texture_from_id(model.texture_id).unwrap();
@@ -94,7 +94,7 @@ impl RenderContext {
             gl::Disable(gl::DEPTH_TEST);
         }
         self.set_program_from_id(self.get_program_id_from_name("3d-solid").unwrap());
-        let camera_frustrum = &self.camera.borrow().frustum();
+        let camera_frustum = &self.camera.borrow().frustum();
 
         let u_color = self.get_program_uniform("u_color").unwrap();
         unsafe {
@@ -108,7 +108,7 @@ impl RenderContext {
         }
 
         let (view_matrix, proj_matrix) = self.camera.borrow().view_proj_matrices();
-        for model_id in bvh.iter_frustrum(camera_frustrum, false) {
+        for model_id in bvh.iter_frustum(camera_frustum, false) {
             let mut model = world.get::<&mut ModelComponent>(model_id).unwrap();
             if !model.outlined {
                 continue;

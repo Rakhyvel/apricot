@@ -1,6 +1,6 @@
 use std::{borrow::Borrow, collections::HashMap};
 
-use crate::App;
+use crate::engine::app::App;
 
 use super::{
     aabb::AABB,

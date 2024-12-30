@@ -1,9 +1,7 @@
 use sdl2::{
     pixels::Color,
     rect::Rect,
-    render::RendererContext,
     surface::Surface,
-    sys::SDL_Rect,
     ttf::{FontStyle, Sdl2TtfContext},
 };
 use std::{collections::HashMap, path::Path};
@@ -11,7 +9,6 @@ use std::{collections::HashMap, path::Path};
 use super::{
     objects::Texture,
     rectangle::Rectangle,
-    render2d,
     render_core::{OpaqueId, RenderContext, TextureId},
 };
 
@@ -26,10 +23,10 @@ pub struct Font {
     pub cache_texture: Option<TextureId>,
     glyphs: [Glyph; 95], //< All 95 printable ASCII glyphs
     height: usize,
-    ascender: usize,
-    descender: usize,
+    _ascender: usize,
+    _descender: usize,
     line_skip: usize, //< Used for newlines, the amount of pixels to increment Y cursor by
-    style: FontStyle,
+    _style: FontStyle,
 }
 
 /// Opaque type used by a FontManager to associate fonts.
@@ -43,19 +40,19 @@ pub struct FontManager {
 }
 
 impl Font {
-    pub fn new(font: &sdl2::ttf::Font, style: FontStyle, renderer: &RenderContext) -> Self {
+    pub fn new(font: &sdl2::ttf::Font, _style: FontStyle, renderer: &RenderContext) -> Self {
         let height = font.height() as usize;
-        let ascender = font.ascent() as usize;
-        let descender = font.descent() as usize;
+        let _ascender = font.ascent() as usize;
+        let _descender = font.descent() as usize;
         let line_skip = font.recommended_line_spacing() as usize;
         let mut retval = Self {
             cache_texture: None,
             glyphs: [Glyph::default(); 95],
             height,
-            ascender,
-            descender,
+            _ascender,
+            _descender,
             line_skip,
-            style,
+            _style,
         };
         retval.pack_gylphs(font, renderer);
         retval
@@ -95,7 +92,7 @@ impl Font {
             sdl2::pixels::PixelFormatEnum::RGBA32,
         )
         .unwrap();
-        mega_surface.set_blend_mode(sdl2::render::BlendMode::None);
+        let _ = mega_surface.set_blend_mode(sdl2::render::BlendMode::None);
         let color = Color {
             r: 255,
             g: 255,
@@ -117,8 +114,8 @@ impl Font {
                 surf.width() as u32,
                 surf.height() as u32,
             );
-            surf.set_blend_mode(sdl2::render::BlendMode::None);
-            surf.blit(Some(src_rect), &mut mega_surface, Some(dest_rect));
+            let _ = surf.set_blend_mode(sdl2::render::BlendMode::None);
+            let _ = surf.blit(Some(src_rect), &mut mega_surface, Some(dest_rect));
             x_offset += surf.width() as usize;
 
             let gylph_metrics = font.find_glyph_metrics(c).unwrap();

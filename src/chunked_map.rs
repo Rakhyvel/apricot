@@ -1,11 +1,9 @@
 use hecs::{Entity, World};
-use rand::{Rng, SeedableRng};
 
 use super::{
     bvh::BVH,
     perlin::{HeightMap, PerlinMap},
     render_core::{ModelComponent, RenderContext},
-    sphere::Sphere,
 };
 
 #[derive(Default)]
@@ -31,8 +29,6 @@ pub struct ChunkedPerlinMap {
     seed: i32,
     amplitude: f32,
 }
-
-struct Tree {}
 
 impl Chunk {
     pub fn new(
@@ -69,15 +65,9 @@ impl Chunk {
             self.map.create_bulge();
             self.map.create_shelf(0.6, 0.4);
 
-            let mut rng = rand::rngs::StdRng::from_entropy();
             // self.map.erode(64, rand::Rng::gen(&mut rng));
 
             let grass_texture = renderer.get_texture_id_from_name("grass").unwrap();
-            let tree_texture = renderer.get_texture_id_from_name("tree").unwrap();
-            let rock_texture = renderer.get_texture_id_from_name("rock").unwrap();
-            let tree_mesh = renderer.get_mesh_id_from_name("tree").unwrap();
-            let bush_mesh = renderer.get_mesh_id_from_name("bush").unwrap();
-            let cube_mesh = renderer.get_mesh_id_from_name("cube").unwrap();
 
             let pos_with_z = nalgebra_glm::vec3(self.pos.x, self.pos.y, 0.0);
             let (i, v, n, u) = self.create_mesh();
@@ -261,7 +251,6 @@ impl ChunkedPerlinMap {
     }
 
     pub fn chunkless_height(&mut self, pos: nalgebra_glm::Vec2) -> f32 {
-        let side_chunks = self.map_width / self.chunk_width;
         let chunk_p =
             nalgebra_glm::floor(&(pos / self.chunk_width as f32)) * self.chunk_width as f32;
         let mut map = PerlinMap::new(self.chunk_width);

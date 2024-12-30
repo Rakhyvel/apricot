@@ -34,7 +34,7 @@ impl Frustrum {
         )
     }
 
-    pub fn from_inv_proj_view(inv_proj_view: nalgebra_glm::Mat4, debug: bool) -> Self {
+    pub fn from_inv_proj_view(inv_proj_view: nalgebra_glm::Mat4, _debug: bool) -> Self {
         let clip_space_corners: [nalgebra_glm::Vec4; 8] = [
             nalgebra_glm::vec4(-1.0, -1.0, -1.0, 1.0), // near-bottom-left
             nalgebra_glm::vec4(1.0, -1.0, -1.0, 1.0),  // near-bottom-right

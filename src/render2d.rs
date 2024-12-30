@@ -1,11 +1,8 @@
 use std::borrow::Borrow;
 
-use hecs::{Entity, World};
-
 use super::{
-    bvh::BVH,
     rectangle::Rectangle,
-    render_core::{ModelComponent, RenderContext, TextureId},
+    render_core::{RenderContext, TextureId},
 };
 
 pub struct NineSlice {

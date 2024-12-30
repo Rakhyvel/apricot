@@ -1,6 +1,3 @@
-use std::{array::IntoIter, cmp::max};
-
-use obj::Obj;
 use rand::{rngs::StdRng, Rng, SeedableRng};
 
 use super::{aabb::AABB, frustrum::Frustrum, ray::Ray, sphere::Sphere};
@@ -144,9 +141,7 @@ impl<Object: Copy + Clone> BVH<Object> {
         // Find the best sibling for the new leaf
         let aabb = self.get_volume(new_node);
         let mut index = self.root_id;
-        let mut loop_counter = 0;
         while !self.node_at(index).is_leaf() {
-            loop_counter += 1;
             let left = self.node_at(index).left;
             let right = self.node_at(index).right;
             let area = self.node_at(index).volume.area();
@@ -167,7 +162,7 @@ impl<Object: Copy + Clone> BVH<Object> {
                 let aabb2 = aabb.union(self.node_at(left).volume);
                 let old_area = self.node_at(left).volume.area();
                 let new_area = aabb2.area();
-                (new_area - old_area)
+                new_area - old_area
             } + inheritance_cost;
 
             // Cost of descending into right child
@@ -177,16 +172,16 @@ impl<Object: Copy + Clone> BVH<Object> {
                 let aabb2 = aabb.union(self.node_at(right).volume);
                 let old_area = self.node_at(right).volume.area();
                 let new_area = aabb2.area();
-                (new_area - old_area)
+                new_area - old_area
             } + inheritance_cost;
 
             // Descend according to the minimum cost
-            if (cost < left_cost && cost < right_cost) {
+            if cost < left_cost && cost < right_cost {
                 break;
             }
 
             // Descend
-            if (left_cost < right_cost) {
+            if left_cost < right_cost {
                 index = left;
             } else {
                 index = right;
@@ -202,9 +197,9 @@ impl<Object: Copy + Clone> BVH<Object> {
             new_node,
             best_sibling,
         );
-        if (old_parent != INVALID_BVH_NODE_ID) {
+        if old_parent != INVALID_BVH_NODE_ID {
             // The sibling was not the root
-            if (self.node_at(old_parent).left == best_sibling) {
+            if self.node_at(old_parent).left == best_sibling {
                 self.node_at_mut(old_parent).left = new_parent;
             } else {
                 assert_eq!(self.node_at_mut(old_parent).right, best_sibling);
@@ -411,14 +406,6 @@ impl<Object: Copy + Clone> BVH<Object> {
 
     fn set_volume(&mut self, id: BVHNodeId, volume: AABB) {
         self.node_at_mut(id).volume = volume
-    }
-
-    fn get_height(&self, id: BVHNodeId) -> i32 {
-        self.node_at(id).height
-    }
-
-    fn set_height(&mut self, id: BVHNodeId, height: i32) {
-        self.node_at_mut(id).height = height
     }
 }
 

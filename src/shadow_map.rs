@@ -7,8 +7,8 @@ use super::{
     bvh::BVH,
     camera::{Camera, ProjectionKind},
     frustrum::Frustrum,
-    objects::{Fbo, Program, Texture},
-    render_core::{ModelComponent, ProgramId, RenderContext},
+    objects::{Fbo, Texture},
+    render_core::{ModelComponent, RenderContext},
 };
 
 pub struct DirectionalLightSource {
@@ -86,7 +86,7 @@ impl RenderContext {
             .shadow_camera
             .set_lookat(directional_light.shadow_camera.position() - directional_light.light_dir);
         // Calculate the view and proj matrices for this
-        let (light_view_matrix, light_proj_view_matrix) =
+        let (light_view_matrix, _light_proj_view_matrix) =
             directional_light.shadow_camera.view_proj_matrices();
         // Transform the world-space screen frustum into light-view-space
         let light_view_frustrum = screen_frustrum.transform(light_view_matrix);
@@ -129,9 +129,7 @@ impl RenderContext {
         let frustum2 =
             Frustrum::from_inv_proj_view(directional_light.shadow_camera.inv_proj_view(), false);
 
-        let mut rendered = 0;
         for model_id in bvh.iter_frustrum(&frustum2, false) {
-            rendered += 1;
             let model = world.get::<&ModelComponent>(model_id).unwrap();
             let mesh = self.get_mesh_from_id(model.mesh_id).unwrap();
             let texture = self.get_texture_from_id(model.texture_id).unwrap();

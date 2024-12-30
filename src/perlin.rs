@@ -36,9 +36,8 @@ struct Particle {
     pub pos: nalgebra_glm::Vec3,
     pub vel: nalgebra_glm::Vec3,
 
-    pub volume: f32,   // Total particle volume
-    pub sediment: f32, // Fraction of volume that is sediment
-    pub rain: f32,     // Separate
+    pub volume: f32, // Total particle volume
+    pub rain: f32,   // Separate
 }
 
 pub trait HeightMap {
@@ -55,18 +54,14 @@ impl Particle {
             pos,
             vel: nalgebra_glm::vec3(0.0, 0.0, 0.0),
             volume: 1.0,
-            sediment: 0.0,
             rain: 0.0,
         }
     }
 
     fn descend(&mut self, map: &mut PerlinMap) -> bool {
         loop {
-            const MIN_VOLUME: f32 = 0.01;
-            const DEPOSITION_RATE: f32 = 0.1;
             const EVAPORATION_RATE: f32 = 0.1;
             const MAX_AGE: usize = 100;
-            const ENTRAINMENT: f32 = 1.0;
 
             if self.age > MAX_AGE {
                 break;
@@ -338,12 +333,7 @@ impl PerlinMap {
         for y in 0..self.map_width {
             for x in 0..self.map_width {
                 let z = self.cells[x + y * self.map_width].height;
-                let xo = (x as f32) - (self.map_width as f32) / 2.0;
-                let yo = (y as f32) - (self.map_width as f32) / 2.0;
-                let d = ((xo * xo + yo * yo) as f32).sqrt();
-                let shoreline = 0.5 * self.map_width as f32;
-                let bulge = -(d - shoreline) / shoreline;
-                self.cells[x + y * self.map_width].height = (((z - 0.5).powf(3.0) * 150.0) + 0.55);
+                self.cells[x + y * self.map_width].height = ((z - 0.5).powf(3.0) * 150.0) + 0.55;
             }
         }
     }

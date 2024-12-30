@@ -1,21 +1,13 @@
-use std::{borrow::Borrow, collections::HashMap};
-
-use crate::engine::app::App;
+use std::borrow::Borrow;
 
 use super::{
-    aabb::AABB,
     bvh::BVH,
-    camera::{Camera, ProjectionKind},
-    frustrum::Frustrum,
     objects::*,
-    physics::PositionComponent,
-    render_core::{ModelComponent, ProgramId, RenderContext},
+    render_core::{ModelComponent, RenderContext},
     shadow_map::DirectionalLightSource,
 };
 
-use gl::types::GLuint;
 use hecs::{Entity, World};
-use obj::{load_obj, Obj, TexturedVertex};
 
 impl RenderContext {
     pub fn render_3d_models_system(
@@ -27,7 +19,6 @@ impl RenderContext {
     ) {
         self.set_program_from_id(self.get_program_id_from_name("3d").unwrap());
 
-        let screen_resolution: nalgebra_glm::Vec2 = self.int_screen_resolution.cast();
         let u_sun_dir = self.get_program_uniform("u_sun_dir").unwrap();
         unsafe {
             gl::Uniform3f(
@@ -66,12 +57,10 @@ impl RenderContext {
         }
 
         let camera_frustrum = &self.camera.borrow().frustum();
-        let mut rendered = 0;
 
         let (view_matrix, proj_matrix) = self.camera.borrow().view_proj_matrices();
         for model_id in bvh.iter_frustrum(camera_frustrum, debug) {
-            rendered += 1;
-            let mut model = world.get::<&mut ModelComponent>(model_id).unwrap();
+            let model = world.get::<&mut ModelComponent>(model_id).unwrap();
             let mesh = self.get_mesh_from_id(model.mesh_id).unwrap();
             let texture = self.get_texture_from_id(model.texture_id).unwrap();
             let model_matrix = model.get_model_matrix();

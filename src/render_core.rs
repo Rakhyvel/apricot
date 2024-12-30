@@ -1,13 +1,12 @@
-use std::{borrow::BorrowMut, cell::RefCell, collections::HashMap, fmt::Debug, ops::Deref};
+use std::{cell::RefCell, collections::HashMap, fmt::Debug};
 
-use gl::types::GLuint;
 use obj::{load_obj, Obj, TexturedVertex};
 
 use super::{
     aabb::AABB,
     camera::{Camera, ProjectionKind},
     font::{Font, FontId, FontManager},
-    objects::{create_program, Buffer, Program, Texture, Uniform, Vao},
+    objects::{Buffer, Program, Texture, Uniform, Vao},
 };
 
 pub struct RenderContext {
@@ -77,7 +76,7 @@ struct GeometryData {
     vertex_data: Vec<f32>,
 }
 
-enum GeometryDataIndex {
+pub enum GeometryDataIndex {
     Vertex = 0,
     Normal = 1,
     Texture = 2,
@@ -86,7 +85,7 @@ enum GeometryDataIndex {
 
 impl RenderContext {
     pub fn new() -> Self {
-        let mut retval = Self {
+        let retval = Self {
             camera: RefCell::new(Camera::default()),
             program: RefCell::new(None),
             color: RefCell::new(nalgebra_glm::vec4(0.0, 0.0, 0.0, 1.0)),
@@ -115,48 +114,6 @@ impl RenderContext {
 
         // TODO: Add meshes
         // TODO: Add textures (?)
-
-        // Add programs
-        retval.add_program(
-            create_program(
-                include_str!("../shaders/3d.vert"),
-                include_str!("../shaders/3d.frag"),
-            )
-            .unwrap(),
-            Some("3d"),
-        );
-        retval.add_program(
-            create_program(
-                include_str!("../shaders/2d.vert"),
-                include_str!("../shaders/2d.frag"),
-            )
-            .unwrap(),
-            Some("2d"),
-        );
-        retval.add_program(
-            create_program(
-                include_str!("../shaders/shadow.vert"),
-                include_str!("../shaders/shadow.frag"),
-            )
-            .unwrap(),
-            Some("shadow"),
-        );
-        retval.add_program(
-            create_program(
-                include_str!("../shaders/2d.vert"),
-                include_str!("../shaders/solid-color.frag"),
-            )
-            .unwrap(),
-            Some("2d-solid"),
-        );
-        retval.add_program(
-            create_program(
-                include_str!("../shaders/3d.vert"),
-                include_str!("../shaders/solid-color.frag"),
-            )
-            .unwrap(),
-            Some("3d-solid"),
-        );
 
         retval
     }
@@ -270,7 +227,7 @@ impl RenderContext {
 
     pub fn get_mesh_from_id(&self, id: MeshId) -> Option<std::cell::Ref<'_, Mesh>> {
         let manager = self.mesh_manager.borrow();
-        if let Some(mesh) = manager.get_from_id(id) {
+        if let Some(_mesh) = manager.get_from_id(id) {
             // Map the Ref<MeshManager> to Ref<Mesh>
             Some(std::cell::Ref::map(manager, |m| m.get_from_id(id).unwrap()))
         } else {
@@ -280,7 +237,7 @@ impl RenderContext {
 
     pub fn get_texture_from_id(&self, id: TextureId) -> Option<std::cell::Ref<'_, Texture>> {
         let manager = self.texture_manager.borrow();
-        if let Some(texture) = manager.get_from_id(id) {
+        if let Some(_texture) = manager.get_from_id(id) {
             // Map the Ref<TextureManager> to Ref<Texture>
             Some(std::cell::Ref::map(manager, |m| m.get_from_id(id).unwrap()))
         } else {
@@ -290,7 +247,7 @@ impl RenderContext {
 
     pub fn get_program_from_id(&self, id: ProgramId) -> Option<std::cell::Ref<'_, Program>> {
         let manager = self.program_manager.borrow();
-        if let Some(program) = manager.get_from_id(id) {
+        if let Some(_program) = manager.get_from_id(id) {
             // Map the Ref<ProgramManager> to Ref<Program>
             Some(std::cell::Ref::map(manager, |m| m.get_from_id(id).unwrap()))
         } else {
@@ -300,7 +257,7 @@ impl RenderContext {
 
     pub fn get_font_from_id(&self, id: FontId) -> Option<std::cell::Ref<'_, Font>> {
         let manager = self.font_manager.borrow();
-        if let Some(font) = manager.get_font_from_id(id) {
+        if let Some(_font) = manager.get_font_from_id(id) {
             // Map the Ref<TextureManager> to Ref<Texture>
             Some(std::cell::Ref::map(manager, |m| {
                 m.get_font_from_id(id).unwrap()
@@ -430,10 +387,6 @@ impl<Resource, Id: OpaqueId + Debug> ResourceManager<Resource, Id> {
 
     pub fn get_id_from_name(&self, name: &'static str) -> Option<Id> {
         self.keys.get(name).copied()
-    }
-
-    pub fn get(&self, name: &'static str) -> Option<&Resource> {
-        self.get_from_id(self.get_id_from_name(name).unwrap())
     }
 }
 

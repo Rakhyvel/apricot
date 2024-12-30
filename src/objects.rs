@@ -1,7 +1,6 @@
 // Put OpenGL Objects here
 
 use std::{
-    env,
     ffi::{CStr, CString},
     marker::PhantomData,
     path::{Path, PathBuf},

@@ -1,4 +1,4 @@
-use super::{frustrum::Frustrum, plane::Plane};
+use super::frustrum::Frustrum;
 
 #[derive(Debug, Copy, Clone)]
 pub enum ProjectionKind {
@@ -27,7 +27,6 @@ pub struct Camera {
     lookat: nalgebra_glm::Vec3,
     up: nalgebra_glm::Vec3,
     pub projection_kind: ProjectionKind,
-    aspect_ratio: f32,
 
     view_matrix: nalgebra_glm::Mat4,
     proj_matrix: nalgebra_glm::Mat4,
@@ -45,7 +44,6 @@ impl Camera {
             lookat,
             up,
             projection_kind,
-            aspect_ratio: 1.0,
             view_matrix: nalgebra_glm::identity(),
             proj_matrix: nalgebra_glm::identity(),
         };
@@ -116,12 +114,5 @@ impl Camera {
 
     pub fn up(&self) -> nalgebra_glm::Vec3 {
         self.up
-    }
-
-    fn get_forward_right_up(&self) -> (nalgebra_glm::Vec3, nalgebra_glm::Vec3, nalgebra_glm::Vec3) {
-        let forward = (self.lookat - self.position).normalize();
-        let right = -forward.cross(&self.up).normalize();
-        let up = right.cross(&forward).normalize();
-        (forward, right, up)
     }
 }

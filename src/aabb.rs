@@ -1,12 +1,6 @@
 use core::f32;
-use std::cmp::max;
 
-use super::{
-    frustrum::{self, Frustrum},
-    plane::Plane,
-    ray::Ray,
-    sphere::Sphere,
-};
+use super::{frustrum::Frustrum, plane::Plane, ray::Ray, sphere::Sphere};
 
 #[derive(Debug, Copy, Clone)]
 #[allow(unused)]

@@ -97,7 +97,6 @@ impl<Object: Copy + Clone> BVH<Object> {
         }
 
         self.remove_leaf(proxy_id);
-        self.walk_tree();
 
         // Extend AABB.
         let mut new_aabb = *aabb;
@@ -130,7 +129,6 @@ impl<Object: Copy + Clone> BVH<Object> {
         self.set_volume(proxy_id, new_aabb);
 
         self.insert_leaf(proxy_id);
-        self.walk_tree();
 
         true
     }

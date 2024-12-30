@@ -97,6 +97,7 @@ impl<Object: Copy + Clone> BVH<Object> {
         }
 
         self.remove_leaf(proxy_id);
+        self.walk_tree();
 
         // Extend AABB.
         let mut new_aabb = *aabb;
@@ -129,13 +130,13 @@ impl<Object: Copy + Clone> BVH<Object> {
         self.set_volume(proxy_id, new_aabb);
 
         self.insert_leaf(proxy_id);
+        self.walk_tree();
 
         true
     }
 
     fn insert_leaf(&mut self, new_node: BVHNodeId) {
         if new_node == self.root_id {
-            println!("new node was root node");
             return;
         }
 
@@ -242,7 +243,7 @@ impl<Object: Copy + Clone> BVH<Object> {
             self.adjust_bounds(grand_parent);
         } else {
             self.root_id = sibling;
-            self.set_parent(leaf, INVALID_BVH_NODE_ID);
+            self.set_parent(sibling, INVALID_BVH_NODE_ID);
             // TODO: Implement free-list, add parent to free-list
         }
     }
@@ -412,7 +413,7 @@ impl<Object: Copy + Clone> BVH<Object> {
 
 impl<Object: Copy + Clone> BVHNode<Object> {
     fn is_leaf(&self) -> bool {
-        self.left == INVALID_BVH_NODE_ID
+        self.left == INVALID_BVH_NODE_ID && self.right == INVALID_BVH_NODE_ID
     }
 }
 

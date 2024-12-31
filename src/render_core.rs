@@ -502,7 +502,7 @@ impl Mesh {
         for i in 0..geometry.len() {
             geometry[i].vbo.set_data(&geometry[i].vertex_data);
             geometry[i].ibo.set_data(&indices);
-            // geometry[i].vao.set(i as u32)
+            geometry[i].vao.set(i as u32)
         }
 
         let aabb = AABB::from_points(

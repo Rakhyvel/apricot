@@ -7,10 +7,7 @@ use std::{
     ptr::{null, null_mut},
 };
 
-use gl::{
-    types::{GLchar, GLenum, GLint, GLuint},
-    UseProgram,
-};
+use gl::types::{GLchar, GLenum, GLint, GLuint};
 
 use image::{EncodableLayout, ImageError};
 
@@ -135,7 +132,7 @@ impl Program {
     /// Tell OpenGL to use this program
     pub fn set(&self) {
         unsafe {
-            UseProgram(self.id);
+            gl::UseProgram(self.id);
         }
     }
 
@@ -620,7 +617,7 @@ impl Default for Fbo {
 
 fn print_any_errors() {
     if let Some(error_message) = get_last_opengl_error() {
-        println!("OpenGL Error:\n{}", error_message);
+        panic!("OpenGL Error:\n{}", error_message);
     }
 }
 

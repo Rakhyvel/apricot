@@ -367,7 +367,7 @@ impl RenderContext {
             for i in 0..mesh.geometry.len() {
                 mesh.geometry[i].vbo.unbind();
                 mesh.geometry[i].ibo.unbind();
-                mesh.geometry[i].vao.unbind();
+                // mesh.geometry[i].vao.unbind();
             }
         }
     }
@@ -516,7 +516,7 @@ impl Mesh {
         for i in 0..geometry.len() {
             geometry[i].vbo.unbind();
             geometry[i].ibo.unbind();
-            geometry[i].vao.unbind();
+            // geometry[i].vao.unbind();
         }
 
         let aabb = AABB::from_points(

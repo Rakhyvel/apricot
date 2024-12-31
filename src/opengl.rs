@@ -620,7 +620,7 @@ impl Default for Fbo {
 
 fn print_any_errors() {
     if let Some(error_message) = get_last_opengl_error() {
-        println!("OpenGL Error:\n{}", error_message);
+        panic!("OpenGL Error:\n{}", error_message);
     }
 }
 

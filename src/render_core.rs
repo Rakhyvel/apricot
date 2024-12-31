@@ -3,7 +3,7 @@
 use std::{cell::RefCell, collections::HashMap, f32::consts::PI, fmt::Debug, mem, ptr};
 
 use gl::types::{GLsizeiptr, GLuint};
-use obj::{load_obj, raw::object::Line, Obj, TexturedVertex};
+use obj::{load_obj, Obj, TexturedVertex};
 
 use super::{
     aabb::AABB,
@@ -393,7 +393,6 @@ impl RenderContext {
             gl::LineWidth(1.1);
 
             // Set uniforms
-            let (view_matrix, proj_matrix) = self.camera.borrow().view_proj_matrices();
             let model_matrix = nalgebra_glm::translate(&nalgebra_glm::one(), &line_path.position);
 
             let u_model_matrix = self.get_program_uniform("model").unwrap();

@@ -1,5 +1,7 @@
 use std::borrow::Borrow;
 
+use crate::render_core::LinePathComponent;
+
 use super::{
     bvh::BVH,
     opengl::*,
@@ -127,6 +129,13 @@ impl RenderContext {
             gl::StencilMask(0xFF);
             gl::Enable(gl::STENCIL_TEST);
             gl::StencilFunc(gl::ALWAYS, 1, 0xFF);
+        }
+    }
+
+    pub fn render_3d_line_paths(&self, world: &mut World) {
+        let (view_matrix, proj_matrix) = self.camera.borrow().view_proj_matrices();
+        for (_entity, line_path) in world.query::<&LinePathComponent>().iter() {
+            self.draw_line_path(line_path, view_matrix, proj_matrix)
         }
     }
 }

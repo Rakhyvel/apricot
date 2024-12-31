@@ -362,6 +362,13 @@ impl RenderContext {
                 gl::UNSIGNED_INT,
                 0 as *const _,
             );
+
+            // Unbind all buffers
+            for i in 0..mesh.geometry.len() {
+                mesh.geometry[i].vbo.unbind();
+                mesh.geometry[i].ibo.unbind();
+                mesh.geometry[i].vao.unbind();
+            }
         }
     }
 }
@@ -503,6 +510,13 @@ impl Mesh {
             geometry[i].vbo.set_data(&geometry[i].vertex_data);
             geometry[i].ibo.set_data(&indices);
             geometry[i].vao.set(i as u32)
+        }
+
+        // Unbind all buffers
+        for i in 0..geometry.len() {
+            geometry[i].vbo.unbind();
+            geometry[i].ibo.unbind();
+            geometry[i].vao.unbind();
         }
 
         let aabb = AABB::from_points(

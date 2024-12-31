@@ -222,7 +222,7 @@ impl<T> Buffer<T> {
         print_any_errors();
     }
 
-    fn unbind(&self) {
+    pub fn unbind(&self) {
         unsafe {
             gl::BindBuffer(self.target, 0);
         }
@@ -297,7 +297,7 @@ impl Vao {
         print_any_errors();
     }
 
-    fn unbind(&self) {
+    pub fn unbind(&self) {
         unsafe {
             gl::BindVertexArray(0);
         }

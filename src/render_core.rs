@@ -1,8 +1,9 @@
 //! This file contains the core rendering functionality that is shared between 2D and 3D rendering.
 
-use std::{cell::RefCell, collections::HashMap, fmt::Debug};
+use std::{cell::RefCell, collections::HashMap, f32::consts::PI, fmt::Debug, mem, ptr};
 
-use obj::{load_obj, Obj, TexturedVertex};
+use gl::types::{GLsizeiptr, GLuint};
+use obj::{load_obj, raw::object::Line, Obj, TexturedVertex};
 
 use super::{
     aabb::AABB,
@@ -60,6 +61,15 @@ pub struct ModelComponent {
     model_matrix: nalgebra_glm::Mat4,
     pub shown: bool,
     pub outlined: bool,
+}
+
+pub struct LinePathComponent {
+    vao: GLuint,
+    vbo: GLuint,
+    num_vertices: i32,
+
+    pub color: nalgebra_glm::Vec4,
+    pub position: nalgebra_glm::Vec3,
 }
 
 /// Stores the geometry of a mesh. Meshes are registered in the mesh manager, and can be potentially shared across
@@ -367,8 +377,66 @@ impl RenderContext {
             for i in 0..mesh.geometry.len() {
                 mesh.geometry[i].vbo.unbind();
                 mesh.geometry[i].ibo.unbind();
-                // mesh.geometry[i].vao.unbind();
             }
+        }
+    }
+
+    pub fn draw_line_path(
+        &self,
+        line_path: &LinePathComponent,
+        view_matrix: nalgebra_glm::Mat4,
+        proj_matrix: nalgebra_glm::Mat4,
+    ) {
+        self.set_program(Some("line"));
+        unsafe {
+            gl::Enable(gl::DEPTH_TEST);
+            gl::LineWidth(1.1);
+
+            // Set uniforms
+            let (view_matrix, proj_matrix) = self.camera.borrow().view_proj_matrices();
+            let model_matrix = nalgebra_glm::translate(&nalgebra_glm::one(), &line_path.position);
+
+            let u_model_matrix = self.get_program_uniform("model").unwrap();
+            let u_view_matrix = self.get_program_uniform("view").unwrap();
+            let u_proj_matrix = self.get_program_uniform("projection").unwrap();
+            let u_color = self.get_program_uniform("u_color").unwrap();
+            gl::UniformMatrix4fv(
+                u_model_matrix.id,
+                1,
+                gl::FALSE,
+                &model_matrix.columns(0, 4)[0],
+            );
+            gl::UniformMatrix4fv(
+                u_view_matrix.id,
+                1,
+                gl::FALSE,
+                &view_matrix.columns(0, 4)[0],
+            );
+            gl::UniformMatrix4fv(
+                u_proj_matrix.id,
+                1,
+                gl::FALSE,
+                &proj_matrix.columns(0, 4)[0],
+            );
+            gl::Uniform4f(
+                u_color.id,
+                line_path.color.x,
+                line_path.color.y,
+                line_path.color.z,
+                line_path.color.w,
+            );
+
+            gl::BindBuffer(gl::ARRAY_BUFFER, line_path.vbo);
+            gl::VertexAttribPointer(
+                0,
+                3,
+                gl::FLOAT,
+                gl::FALSE,
+                (3 * mem::size_of::<f32>()) as i32,
+                ptr::null(),
+            );
+            gl::BindVertexArray(line_path.vao);
+            gl::DrawArrays(gl::LINE_LOOP, 0, line_path.num_vertices);
         }
     }
 }
@@ -493,6 +561,93 @@ impl ModelComponent {
     }
 }
 
+impl LinePathComponent {
+    pub fn new(vertices: Vec<f32>) -> Self {
+        let mut vao = 0;
+        let mut vbo = 0;
+
+        // Generate vertices for the elliptical orbit
+        let num_vertices = vertices.len() as i32 / 3; // 3 components per vertex (x,y,z)
+
+        unsafe {
+            // Generate and bind VAO first
+            gl::GenVertexArrays(1, &mut vao);
+            gl::BindVertexArray(vao);
+
+            // Generate and bind VBO
+            gl::GenBuffers(1, &mut vbo);
+            gl::BindBuffer(gl::ARRAY_BUFFER, vbo);
+
+            gl::BindBuffer(gl::ELEMENT_ARRAY_BUFFER, 0);
+
+            // Upload vertex data - ensure we're using the correct size calculation
+            let buffer_size = (vertices.len() * mem::size_of::<f32>()) as GLsizeiptr;
+
+            gl::BufferData(
+                gl::ARRAY_BUFFER,
+                buffer_size,
+                vertices.as_ptr() as *const _,
+                gl::STATIC_DRAW,
+            );
+
+            // Configure vertex attributes - ensure stride and offset are correct
+            gl::EnableVertexAttribArray(0);
+            gl::VertexAttribPointer(
+                0,                                  // attribute index 0
+                3,                                  // 3 components per vertex
+                gl::FLOAT,                          // data type
+                gl::FALSE,                          // normalized
+                (3 * mem::size_of::<f32>()) as i32, // stride - ensure it's i32
+                ptr::null(),                        // offset
+            );
+
+            // Check for any OpenGL errors
+            let err = gl::GetError();
+            if err != gl::NO_ERROR {
+                println!("OpenGL error after setup: {}", err);
+            }
+
+            // Keep VAO bound but unbind VBO
+            gl::BindBuffer(gl::ARRAY_BUFFER, 0);
+        }
+
+        Self {
+            vao,
+            vbo,
+            num_vertices,
+            color: nalgebra_glm::vec4(0.6, 0.9, 0.9, 0.9),
+            position: nalgebra_glm::vec3(0.0, 0.0, 0.0),
+        }
+    }
+
+    pub fn from_orbit(semi_major_axis: f32, eccentricity: f32, segments: i32) -> Self {
+        let vertices = Self::generate_orbit_vertices(semi_major_axis, eccentricity, segments);
+        Self::new(vertices)
+    }
+
+    fn generate_orbit_vertices(semi_major_axis: f32, eccentricity: f32, segments: i32) -> Vec<f32> {
+        let mut vertices = Vec::with_capacity((segments as usize) * 3);
+        let semi_minor_axis = semi_major_axis * (1.0 - eccentricity * eccentricity).sqrt();
+
+        // Ensure we generate the complete loop
+        for i in 0..=segments {
+            // Note: changed to 0..=segments to ensure closure
+            let angle = (i as f32 * 2.0 * PI) / segments as f32;
+
+            // Parametric equations for ellipse
+            let x = semi_major_axis * angle.cos();
+            let y = semi_minor_axis * angle.sin();
+            let z = 0.0;
+
+            vertices.push(x);
+            vertices.push(y);
+            vertices.push(z);
+        }
+
+        vertices
+    }
+}
+
 impl Mesh {
     pub fn new(indices: Vec<u32>, datas: Vec<&Vec<f32>>) -> Self {
         let geometry: Vec<GeometryData> = datas
@@ -516,7 +671,6 @@ impl Mesh {
         for i in 0..geometry.len() {
             geometry[i].vbo.unbind();
             geometry[i].ibo.unbind();
-            // geometry[i].vao.unbind();
         }
 
         let aabb = AABB::from_points(

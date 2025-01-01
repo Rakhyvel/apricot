@@ -566,8 +566,6 @@ impl LinePathComponent {
         let mut vao = 0;
         let mut vbo = 0;
 
-        println!("{:?}", vertices);
-
         // Generate vertices for the elliptical orbit
         let num_vertices = vertices.len() as i32 / 3; // 3 components per vertex (x,y,z)
 

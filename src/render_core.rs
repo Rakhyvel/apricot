@@ -438,6 +438,7 @@ impl RenderContext {
             );
             gl::BindVertexArray(line_path.vao);
             gl::DrawArrays(gl::LINE_LOOP, 0, line_path.num_vertices);
+            gl::BindBuffer(gl::ARRAY_BUFFER, 0);
         }
     }
 }

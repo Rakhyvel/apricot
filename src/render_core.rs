@@ -68,6 +68,7 @@ pub struct LinePathComponent {
     vbo: GLuint,
     num_vertices: i32,
 
+    pub width: f32,
     pub color: nalgebra_glm::Vec4,
     pub position: nalgebra_glm::Vec3,
 }
@@ -390,7 +391,7 @@ impl RenderContext {
         self.set_program(Some("line"));
         unsafe {
             gl::Enable(gl::DEPTH_TEST);
-            gl::LineWidth(1.1);
+            gl::LineWidth(line_path.width);
 
             // Set uniforms
             let model_matrix = nalgebra_glm::translate(&nalgebra_glm::one(), &line_path.position);
@@ -614,6 +615,7 @@ impl LinePathComponent {
             vao,
             vbo,
             num_vertices,
+            width: 2.0,
             color: nalgebra_glm::vec4(0.6, 0.9, 0.9, 0.9),
             position: nalgebra_glm::vec3(0.0, 0.0, 0.0),
         }

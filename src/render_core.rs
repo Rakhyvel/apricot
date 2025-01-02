@@ -64,7 +64,6 @@ pub struct ModelComponent {
 }
 
 pub struct LinePathComponent {
-    vao: GLuint,
     vbo: GLuint,
     num_vertices: i32,
 
@@ -438,9 +437,7 @@ impl RenderContext {
                 ptr::null(),
             );
             gl::EnableVertexAttribArray(0);
-            gl::BindVertexArray(line_path.vao);
             gl::DrawArrays(gl::LINE_LOOP, 0, line_path.num_vertices);
-
             gl::BindBuffer(gl::ARRAY_BUFFER, 0);
         }
     }
@@ -617,7 +614,6 @@ impl LinePathComponent {
         }
 
         Self {
-            vao,
             vbo,
             num_vertices,
             width: 2.0,

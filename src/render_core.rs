@@ -437,7 +437,7 @@ impl RenderContext {
                 (3 * mem::size_of::<f32>()) as i32,
                 ptr::null(),
             );
-            gl::BindVertexArray(line_path.vao);
+            // gl::BindVertexArray(line_path.vao);
             gl::DrawArrays(gl::LINE_LOOP, 0, line_path.num_vertices);
 
             gl::BindBuffer(gl::ARRAY_BUFFER, 0);

@@ -135,6 +135,10 @@ impl RenderContext {
     pub fn render_3d_line_paths(&self, world: &World) {
         let (view_matrix, proj_matrix) = self.camera.borrow().view_proj_matrices();
         for (_entity, line_path) in world.query::<&LinePathComponent>().iter() {
+            println!(
+                "{}: {}, {:?}",
+                line_path.name, line_path.radius, line_path.position
+            );
             self.draw_line_path(line_path, view_matrix, proj_matrix)
         }
     }

@@ -565,7 +565,6 @@ impl ModelComponent {
 
 impl LinePathComponent {
     pub fn new(vertices: Vec<f32>, name: &'static str, radius: f32) -> Self {
-        let mut vao = 0;
         let mut vbo = 0;
 
         // Generate vertices for the elliptical orbit
@@ -573,8 +572,8 @@ impl LinePathComponent {
 
         unsafe {
             // Generate and bind VAO first
-            gl::GenVertexArrays(1, &mut vao);
-            gl::BindVertexArray(vao);
+            // gl::GenVertexArrays(1, &mut vao);
+            // gl::BindVertexArray(vao);
 
             // Generate and bind VBO
             gl::GenBuffers(1, &mut vbo);

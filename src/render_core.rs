@@ -428,8 +428,9 @@ impl RenderContext {
             );
 
             line_path.vertices_buffer.bind();
+            gl::EnableVertexAttribArray(0);
             gl::DrawArrays(gl::LINE_LOOP, 0, line_path.num_vertices);
-            line_path.vertices_buffer.unbind();
+            gl::BindBuffer(gl::ARRAY_BUFFER, 0);
         }
     }
 }
@@ -559,7 +560,6 @@ impl LinePathComponent {
         // let mut vbo = 0;
         let vertices_buffer: Buffer<f32> = Buffer::gen(gl::ARRAY_BUFFER);
         vertices_buffer.set_data(&vertices);
-        vertices_buffer.unbind();
 
         // Generate vertices for the elliptical orbit
         let num_vertices = vertices.len() as i32 / 3; // 3 components per vertex (x,y,z)

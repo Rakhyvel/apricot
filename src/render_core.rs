@@ -1,8 +1,7 @@
 //! This file contains the core rendering functionality that is shared between 2D and 3D rendering.
 
-use std::{cell::RefCell, collections::HashMap, f32::consts::PI, fmt::Debug, mem, ptr};
+use std::{cell::RefCell, collections::HashMap, f32::consts::PI, fmt::Debug};
 
-use gl::types::{GLsizeiptr, GLuint};
 use obj::{load_obj, Obj, TexturedVertex};
 
 use super::{
@@ -558,7 +557,6 @@ impl ModelComponent {
 
 impl LinePathComponent {
     pub fn new(vertices: Vec<f32>, name: &'static str, radius: f32) -> Self {
-        // let mut vbo = 0;
         let vao = Vao::gen();
         let vertices_buffer: Buffer<f32> = Buffer::gen(gl::ARRAY_BUFFER);
 

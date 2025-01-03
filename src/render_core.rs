@@ -570,7 +570,7 @@ impl LinePathComponent {
             vao,
             vertices_buffer,
             num_vertices,
-            width: 1.0,
+            width: 2.0,
             color: nalgebra_glm::vec4(0.7, 0.9, 0.9, 0.9),
             position: nalgebra_glm::vec3(0.0, 0.0, 0.0),
         }

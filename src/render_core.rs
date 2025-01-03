@@ -559,6 +559,9 @@ impl LinePathComponent {
     pub fn new(vertices: Vec<f32>, name: &'static str, radius: f32) -> Self {
         // let mut vbo = 0;
         let vertices_buffer: Buffer<f32> = Buffer::gen(gl::ARRAY_BUFFER);
+        unsafe {
+            gl::EnableVertexAttribArray(0);
+        }
         vertices_buffer.set_data(&vertices);
 
         // Generate vertices for the elliptical orbit
@@ -582,7 +585,6 @@ impl LinePathComponent {
         //     );
 
         //     // Configure vertex attributes - ensure stride and offset are correct
-        //     gl::EnableVertexAttribArray(0);
         //     gl::VertexAttribPointer(
         //         0,                                  // attribute index 0
         //         3,                                  // 3 components per vertex

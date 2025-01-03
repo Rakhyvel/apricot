@@ -68,10 +68,8 @@ pub struct LinePathComponent {
     num_vertices: i32,
 
     pub width: f32,
-    pub radius: f32,
     pub color: nalgebra_glm::Vec4,
     pub position: nalgebra_glm::Vec3,
-    pub name: &'static str,
 }
 
 /// Stores the geometry of a mesh. Meshes are registered in the mesh manager, and can be potentially shared across
@@ -556,7 +554,7 @@ impl ModelComponent {
 }
 
 impl LinePathComponent {
-    pub fn new(vertices: Vec<f32>, name: &'static str, radius: f32) -> Self {
+    pub fn new(vertices: Vec<f32>) -> Self {
         let vao = Vao::gen();
         let vertices_buffer: Buffer<f32> = Buffer::gen(gl::ARRAY_BUFFER);
 
@@ -573,21 +571,14 @@ impl LinePathComponent {
             vertices_buffer,
             num_vertices,
             width: 2.0,
-            radius,
             color: nalgebra_glm::vec4(0.6, 0.9, 0.9, 0.9),
             position: nalgebra_glm::vec3(0.0, 0.0, 0.0),
-            name,
         }
     }
 
-    pub fn from_orbit(
-        semi_major_axis: f32,
-        eccentricity: f32,
-        segments: i32,
-        name: &'static str,
-    ) -> Self {
+    pub fn from_orbit(semi_major_axis: f32, eccentricity: f32, segments: i32) -> Self {
         let vertices = Self::generate_orbit_vertices(semi_major_axis, eccentricity, segments);
-        Self::new(vertices, name, semi_major_axis)
+        Self::new(vertices)
     }
 
     fn generate_orbit_vertices(semi_major_axis: f32, eccentricity: f32, segments: i32) -> Vec<f32> {

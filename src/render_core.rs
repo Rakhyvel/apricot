@@ -64,7 +64,7 @@ pub struct ModelComponent {
 }
 
 pub struct LinePathComponent {
-    vbo: GLuint,
+    vertices_buffer: Buffer<f32>,
     num_vertices: i32,
 
     pub width: f32,
@@ -427,18 +427,9 @@ impl RenderContext {
                 line_path.color.w,
             );
 
-            gl::BindBuffer(gl::ARRAY_BUFFER, line_path.vbo);
-            gl::VertexAttribPointer(
-                0,
-                3,
-                gl::FLOAT,
-                gl::FALSE,
-                (3 * mem::size_of::<f32>()) as i32,
-                ptr::null(),
-            );
-            gl::EnableVertexAttribArray(0);
+            line_path.vertices_buffer.bind();
             gl::DrawArrays(gl::LINE_LOOP, 0, line_path.num_vertices);
-            gl::BindBuffer(gl::ARRAY_BUFFER, 0);
+            line_path.vertices_buffer.unbind();
         }
     }
 }
@@ -565,55 +556,54 @@ impl ModelComponent {
 
 impl LinePathComponent {
     pub fn new(vertices: Vec<f32>, name: &'static str, radius: f32) -> Self {
-        let mut vbo = 0;
+        // let mut vbo = 0;
+        let vertices_buffer: Buffer<f32> = Buffer::gen(gl::ARRAY_BUFFER);
+        vertices_buffer.set_data(&vertices);
+        vertices_buffer.unbind();
 
         // Generate vertices for the elliptical orbit
         let num_vertices = vertices.len() as i32 / 3; // 3 components per vertex (x,y,z)
 
-        unsafe {
-            // Generate and bind VAO first
-            // gl::GenVertexArrays(1, &mut vao);
-            // gl::BindVertexArray(vao);
+        // unsafe {
+        //     // Generate and bind VBO
+        //     gl::GenBuffers(1, &mut vbo);
+        //     gl::BindBuffer(gl::ARRAY_BUFFER, vbo);
 
-            // Generate and bind VBO
-            gl::GenBuffers(1, &mut vbo);
-            gl::BindBuffer(gl::ARRAY_BUFFER, vbo);
+        //     // gl::BindBuffer(gl::ELEMENT_ARRAY_BUFFER, 0);
 
-            gl::BindBuffer(gl::ELEMENT_ARRAY_BUFFER, 0);
+        //     // Upload vertex data - ensure we're using the correct size calculation
+        //     let buffer_size = (vertices.len() * mem::size_of::<f32>()) as GLsizeiptr;
 
-            // Upload vertex data - ensure we're using the correct size calculation
-            let buffer_size = (vertices.len() * mem::size_of::<f32>()) as GLsizeiptr;
+        //     gl::BufferData(
+        //         gl::ARRAY_BUFFER,
+        //         buffer_size,
+        //         vertices.as_ptr() as *const _,
+        //         gl::STATIC_DRAW,
+        //     );
 
-            gl::BufferData(
-                gl::ARRAY_BUFFER,
-                buffer_size,
-                vertices.as_ptr() as *const _,
-                gl::STATIC_DRAW,
-            );
+        //     // Configure vertex attributes - ensure stride and offset are correct
+        //     gl::EnableVertexAttribArray(0);
+        //     gl::VertexAttribPointer(
+        //         0,                                  // attribute index 0
+        //         3,                                  // 3 components per vertex
+        //         gl::FLOAT,                          // data type
+        //         gl::FALSE,                          // normalized
+        //         (3 * mem::size_of::<f32>()) as i32, // stride - ensure it's i32
+        //         ptr::null(),                        // offset
+        //     );
 
-            // Configure vertex attributes - ensure stride and offset are correct
-            gl::EnableVertexAttribArray(0);
-            gl::VertexAttribPointer(
-                0,                                  // attribute index 0
-                3,                                  // 3 components per vertex
-                gl::FLOAT,                          // data type
-                gl::FALSE,                          // normalized
-                (3 * mem::size_of::<f32>()) as i32, // stride - ensure it's i32
-                ptr::null(),                        // offset
-            );
+        //     // Check for any OpenGL errors
+        //     let err = gl::GetError();
+        //     if err != gl::NO_ERROR {
+        //         println!("OpenGL error after setup: {}", err);
+        //     }
 
-            // Check for any OpenGL errors
-            let err = gl::GetError();
-            if err != gl::NO_ERROR {
-                println!("OpenGL error after setup: {}", err);
-            }
-
-            // Keep VAO bound but unbind VBO
-            gl::BindBuffer(gl::ARRAY_BUFFER, 0);
-        }
+        //     // Keep VAO bound but unbind VBO
+        //     gl::BindBuffer(gl::ARRAY_BUFFER, 0);
+        // }
 
         Self {
-            vbo,
+            vertices_buffer,
             num_vertices,
             width: 2.0,
             radius,

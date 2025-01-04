@@ -1,5 +1,5 @@
 //! TODO:
-//! - [ ] Add queries
+//! - [x] Add queries
 //! - [ ] Move to own crate
 //! - [ ] Implement new file syntax, and true identifier tokenization
 //! - [ ] Implement REPL
@@ -30,13 +30,17 @@ use std::{
 
 /// Represents a file after being parsed
 pub struct KartaFile {
+    /// Maps atom string representations to their atom id
     atoms: HashMap<String, AtomId>,
+    /// The AstHeap ID of the root AST expression for this karta file
     root: AstId,
+    /// Heap of all Asts, can be accessed with an AstId
     ast_heap: AstHeap,
 }
 
 impl KartaFile {
-    pub fn new(text: String) -> Result<Self, String> {
+    /// Create and parse a new Karta file from file contents
+    pub fn new(file_contents: String) -> Result<Self, String> {
         let mut atoms = HashMap::new();
         let nil_atom_id = put_atoms_in_set(&mut atoms, String::from(".nil"));
         put_atoms_in_set(&mut atoms, String::from(".t"));
@@ -47,7 +51,7 @@ impl KartaFile {
         ast_heap.create_atom(nil_atom_id);
 
         let mut parser = Parser::new();
-        let root = parser.parse(text, &mut ast_heap, &mut atoms)?;
+        let root = parser.parse(file_contents, &mut ast_heap, &mut atoms)?;
 
         Ok(Self {
             ast_heap,
@@ -56,45 +60,54 @@ impl KartaFile {
         })
     }
 
+    /// Create and parse a new Karta file from a file
     pub fn from_file(filename: &str) -> Result<Self, String> {
-        let mut text: String = match fs::read_to_string(filename) {
+        let mut file_contents: String = match fs::read_to_string(filename) {
             Ok(c) => c,
             Err(x) => return Err(x.to_string()),
         };
-        text.push('\n'); // This is required to make the tokenizer happy
-        Self::new(text)
+        file_contents.push('\n'); // This is required to make the tokenizer happy
+        Self::new(file_contents)
     }
 
+    /// Begin a query of a this Karta file, starting at its root
     pub fn query(&self) -> KartaQuery {
         KartaQuery::new(self)
     }
 
+    /// The Ast Heap of this Karta file
     fn ast_heap(&self) -> &AstHeap {
         &self.ast_heap
     }
 
+    /// The atoms map for this Karta file
     fn atoms(&self) -> &HashMap<String, AtomId> {
         &self.atoms
     }
 }
 
+/// A struct representing a query over a Karta file and it's intermediate result
 pub struct KartaQuery<'a> {
+    /// The Karta file that this query is over
     file: &'a KartaFile,
-    current_result: Option<AstId>,
+    /// The current, immediate result of this query.
+    current_result: Result<AstId, String>,
 }
 
 impl<'a> KartaQuery<'a> {
-    pub fn new(file: &'a KartaFile) -> Self {
+    /// Create a new query with a Karta file and current result set as the file's root.
+    fn new(file: &'a KartaFile) -> Self {
         Self {
             file,
-            current_result: Some(file.root),
+            current_result: Ok(file.root),
         }
     }
 
+    /// Return a new query with it's result being the result of applying the atom to the current result, or an error if any occurs or has occured.
     pub fn get_atom(mut self, field: &str) -> Self {
         let current_result = match self.current_result {
-            Some(x) => x,
-            None => return self,
+            Ok(x) => x,
+            Err(_) => return self,
         };
 
         let root_ast = self
@@ -109,88 +122,98 @@ impl<'a> KartaQuery<'a> {
         };
 
         self.current_result = match root_ast {
-            Ast::Map(map) => Some(map.get(&field_atom_id).copied().unwrap_or(AstId::new(0))),
-            _ => panic!("cannot call `get` on {:?}", root_ast),
+            Ast::Map(map) => Ok(map.get(&field_atom_id).copied().unwrap_or(AstId::new(0))),
+            _ => Err(format!("cannot call `get` on {:?} type AST", root_ast)),
         };
 
         self
     }
 
-    pub fn as_int<T>(&self) -> Option<T>
+    /// Interpret the current result of this query as an integer, or an error if any have occured during the creation of this query
+    pub fn as_int<T>(&self) -> Result<T, String>
     where
         T: From<i64>,
     {
-        if let Some(current_result) = self.current_result {
+        if let Ok(current_result) = self.current_result {
             let ast = self
                 .file
                 .ast_heap()
                 .get(current_result)
                 .expect("not a real AST!");
             match ast {
-                Ast::Int(x) => Some(T::from(*x as i64)),
-                Ast::Float(x) => Some(T::from(*x as i64)),
-                Ast::Char(x) => Some(T::from(*x as i64)),
-                _ => None,
+                Ast::Int(x) => Ok(T::from(*x as i64)),
+                Ast::Float(x) => Ok(T::from(*x as i64)),
+                Ast::Char(x) => Ok(T::from(*x as i64)),
+                _ => Err(format!("cannot convert {:?} to int", ast)),
             }
         } else {
-            None
+            Err(self.current_result.clone().unwrap_err())
         }
     }
 
-    pub fn as_float<T>(&self) -> Option<T>
+    /// Interpret the current result of this query as a float, or an error if any have occured during the creation of this query
+    pub fn as_float<T>(&self) -> Result<T, String>
     where
         T: From<f64>,
     {
-        if let Some(current_result) = self.current_result {
+        if let Ok(current_result) = self.current_result {
             let ast = self
                 .file
                 .ast_heap()
                 .get(current_result)
                 .expect("not a real AST!");
             match ast {
-                Ast::Int(x) => Some(T::from(*x as f64)),
-                Ast::Float(x) => Some(T::from(*x as f64)),
-                Ast::Char(x) => Some(T::from(*x as f64)),
-                _ => panic!("cannot convert {:?} to float", ast),
+                Ast::Int(x) => Ok(T::from(*x as f64)),
+                Ast::Float(x) => Ok(T::from(*x as f64)),
+                Ast::Char(x) => Ok(T::from(*x as f64)),
+                _ => Err(format!("cannot convert {:?} to float", ast)),
             }
         } else {
-            None
+            Err(self.current_result.clone().unwrap_err())
         }
     }
 
-    pub fn as_string(&self) -> Option<&str> {
-        if let Some(current_result) = self.current_result {
+    /// Interpret the current result of this query as a string, or an error if any have occured during the creation of this query
+    pub fn as_string(&self) -> Result<&str, String> {
+        if let Ok(current_result) = self.current_result {
             let ast = self
                 .file
                 .ast_heap()
                 .get(current_result)
                 .expect("not a real AST!");
             match ast {
-                Ast::String(x) => Some(x.as_str()),
-                _ => None,
+                Ast::String(x) => Ok((*x).as_str()),
+                _ => Err(format!("cannot convert {:?} to string", ast)),
             }
         } else {
-            None
+            Err(self.current_result.clone().unwrap_err())
         }
     }
 
-    pub fn truthy(&self) -> bool {
-        let ast = self
-            .file
-            .ast_heap()
-            .get(self.current_result.expect("no value"))
-            .expect("not a real AST!");
-        match ast {
-            Ast::Atom(x) => (*x).as_usize() != 0,
-            _ => true,
+    /// Whether or not the current result of this query is truthy (ie not the .nil atom), or an error if any have occured during the creation of this query
+    pub fn truthy(&self) -> Result<bool, String> {
+        if let Ok(current_result) = self.current_result {
+            let ast = self
+                .file
+                .ast_heap()
+                .get(current_result)
+                .expect("not a real AST!");
+            match ast {
+                Ast::Atom(x) => Ok(x.as_usize() != 0),
+                _ => Ok(true),
+            }
+        } else {
+            Err(self.current_result.clone().unwrap_err())
         }
     }
 
-    pub fn falsey(&self) -> bool {
-        !self.truthy()
+    /// Whether or not the current result of this query is truthy (ie the .nil atom), or an error if any have occured during the creation of this query
+    pub fn falsey(&self) -> Result<bool, String> {
+        Ok(!(self.truthy()?))
     }
 }
 
+/// Puts and returns the ID of an atom
 fn put_atoms_in_set(atoms: &mut HashMap<String, AtomId>, atom: String) -> AtomId {
     if let Some(the_atom) = atoms.get(&atom) {
         return *the_atom;
@@ -201,66 +224,73 @@ fn put_atoms_in_set(atoms: &mut HashMap<String, AtomId>, atom: String) -> AtomId
     }
 }
 
+/// Contains the ASTs used in a Karta file
 struct AstHeap {
     asts: Vec<Ast>,
 }
 
 impl AstHeap {
+    /// Create a new Ast Heap
     fn new() -> Self {
         Self { asts: vec![] }
     }
 
+    /// Inserts a new Ast into the heap, and returns it's ID
     fn insert(&mut self, ast: Ast) -> AstId {
         let retval = AstId::new(self.asts.len());
         self.asts.push(ast);
         retval
     }
 
+    /// Inserts an integer Ast, and returns it's ID
     fn create_int(&mut self, value: i64) -> AstId {
         self.insert(Ast::Int(value))
     }
 
+    /// Inserts a float Ast, and returns it's ID
     fn create_float(&mut self, value: f64) -> AstId {
         self.insert(Ast::Float(value))
     }
 
+    /// Inserts a char Ast, and returns it's ID
     fn create_char(&mut self, value: u8) -> AstId {
         self.insert(Ast::Char(value))
     }
 
+    /// Inserts a string Ast, and returns it's ID
     fn create_string(&mut self, value: String) -> AstId {
         self.insert(Ast::String(value))
     }
 
+    /// Inserts an atom Ast, and returns it's ID
     fn create_atom(&mut self, value: AtomId) -> AstId {
         self.insert(Ast::Atom(value))
     }
 
+    /// Inserts a map Ast, and returns it's ID
     fn create_map(&mut self, value: HashMap<AtomId, AstId>) -> AstId {
         self.insert(Ast::Map(value))
     }
 
-    fn make_nil_atom(&mut self, atoms: &mut HashMap<String, AtomId>) -> AstId {
-        self.create_atom(put_atoms_in_set(atoms, String::from(".nil")))
+    /// Returns the AstId of the nil atom
+    fn nil_atom(&self) -> AstId {
+        AstId::new(0)
     }
 
-    fn make_list_node(
-        &mut self,
-        head_atom: AtomId,
-        head: AstId,
-        tail_atom: AtomId,
-        atoms: &mut HashMap<String, AtomId>,
-    ) -> AstId {
+    /// Creates a linked-list node out of a map Ast
+    fn make_list_node(&mut self, head_atom: AtomId, head: AstId, tail_atom: AtomId) -> AstId {
         let mut fields: HashMap<AtomId, AstId> = HashMap::new();
         fields.insert(head_atom, head);
-        fields.insert(tail_atom, self.make_nil_atom(atoms));
+        fields.insert(tail_atom, self.nil_atom());
         self.create_map(fields)
     }
 
+    /// Retrieves a reference to an Ast for a given ID, if it exists
     fn get(&self, ast_id: AstId) -> Option<&Ast> {
         self.asts.get(ast_id.as_usize())
     }
 
+    /// Retrieves a mutable reference to an Ast for a given ID, if it exists
     fn get_mut(&mut self, ast_id: AstId) -> Option<&mut Ast> {
         self.asts.get_mut(ast_id.as_usize())
     }
@@ -271,10 +301,12 @@ impl AstHeap {
 pub struct AstId(usize);
 
 impl AstId {
+    /// Create a new AstId
     fn new(id: usize) -> Self {
         AstId(id)
     }
 
+    /// Convert an AstId to a usize
     fn as_usize(&self) -> usize {
         self.0
     }
@@ -285,10 +317,12 @@ impl AstId {
 pub struct AtomId(usize);
 
 impl AtomId {
+    /// Create a new AtomId
     fn new(id: usize) -> Self {
         AtomId(id)
     }
 
+    /// Convert an AtomId to a usize
     fn as_usize(&self) -> usize {
         self.0
     }
@@ -307,7 +341,7 @@ enum Ast {
     String(String),
     /// An atomic value
     Atom(AtomId),
-    /// Maps an atom to an Ast within the file
+    /// Maps AtomId's to an Ast within the file
     Map(HashMap<AtomId, AstId>),
 }
 
@@ -330,6 +364,7 @@ enum TokenKind {
 }
 
 impl TokenKind {
+    /// Get the token kind from a string representation
     fn from_string(str: &str) -> Self {
         assert!(str.len() > 0);
         match str {
@@ -347,75 +382,92 @@ impl TokenKind {
 }
 
 #[derive(Clone, Copy, Debug)]
+/// Represents a position in a text file
 struct Span {
+    /// Line number of the file, starts at 1
     line: usize,
+    /// Column number of the file, starts at 1
     col: usize,
 }
 
 #[derive(Clone, Debug)]
+/// Represents a single piece of text in the file
 struct Token {
+    /// Owning string representing the actual text data for this string
     data: String,
+    /// What kind of token this is
     kind: TokenKind,
+    /// Where in the file this token came from
     span: Span,
 }
 
+/// Converts file contents text into a stream of tokens
 struct Tokenizer {
+    /// Where in the file the tokenizer is currently working
     cursor: usize,
-    text: String,
-    line: usize,
-    col: usize,
-    state: State,
+    /// The cursor of the begining of the current token that the tokenizer is working on
     starting_cursor: usize,
+    /// The actual contents of the file
+    file_contents: String,
+    /// The current line number for where the tokenizer is in the file
+    line: usize,
+    /// The current column number for where the tokenizer is in the file
+    col: usize,
+    /// The state of the tokenizer
+    state: TokenizerState,
 }
 
 impl Tokenizer {
-    fn new(text: String) -> Self {
+    /// Create a new tokenizer, taking ownership of the file contents string
+    fn new(file_contents: String) -> Self {
         Self {
             cursor: 0,
-            text,
+            file_contents,
             line: 1,
             col: 1,
-            state: State::None,
+            state: TokenizerState::None,
             starting_cursor: 0,
         }
     }
 
+    /// Convert the file contents string into a stream of tokens
     fn tokenize(&mut self, tokens: &mut Vec<Token>) -> Result<(), String> {
         while !self.eof() {
-            let char = self.text.chars().nth(self.cursor).unwrap(); // yeah probably slow, but it doesn't matter
+            let char = self.file_contents.chars().nth(self.cursor).unwrap(); // yeah probably slow, but it doesn't matter
 
             match self.state {
                 // The none state branches off into various other states depending on the next character
-                State::None if char.is_whitespace() => self.advance(State::Whitespace),
-                State::None if char.is_digit(10) => self.advance(State::Integer),
-                State::None if char == '.' => self.advance(State::Atom),
-                State::None if char == '\'' => self.advance(State::Char),
-                State::None if char == '"' => self.advance(State::String),
-                State::None if char == ';' => self.advance(State::Comment),
-                State::None => self.advance(State::Symbol),
+                TokenizerState::None if char.is_whitespace() => {
+                    self.advance(TokenizerState::Whitespace)
+                }
+                TokenizerState::None if char.is_digit(10) => self.advance(TokenizerState::Integer),
+                TokenizerState::None if char == '.' => self.advance(TokenizerState::Atom),
+                TokenizerState::None if char == '\'' => self.advance(TokenizerState::Char),
+                TokenizerState::None if char == '"' => self.advance(TokenizerState::String),
+                TokenizerState::None if char == ';' => self.advance(TokenizerState::Comment),
+                TokenizerState::None => self.advance(TokenizerState::Symbol),
 
                 // Whitespace state ends when the next char isn't whitespace
-                State::Whitespace if self.eof() || !char.is_whitespace() => {
+                TokenizerState::Whitespace if self.eof() || !char.is_whitespace() => {
                     self.starting_cursor = self.cursor;
-                    self.state = State::None
+                    self.state = TokenizerState::None
                 }
-                State::Whitespace => {
+                TokenizerState::Whitespace => {
                     if char == '\n' {
                         self.line += 1;
                         self.col = 1;
                     }
-                    self.advance(State::Whitespace);
+                    self.advance(TokenizerState::Whitespace);
                 }
 
                 // Integers become floats if a `.` is encountered, otherwise end when the next char isn't a digit
-                State::Integer if char == '.' => self.advance(State::Float),
-                State::Integer if self.eof() || !char.is_digit(10) => {
+                TokenizerState::Integer if char == '.' => self.advance(TokenizerState::Float),
+                TokenizerState::Integer if self.eof() || !char.is_digit(10) => {
                     self.add_token(TokenKind::Integer, tokens);
                 }
-                State::Integer => self.advance(State::Integer),
 
                 // Atoms end when the next char isn't a valid atom character
-                State::Atom
+                TokenizerState::Atom
                     if self.eof()
                         || (!char.is_alphanumeric()
                             && char != '_'
@@ -424,55 +476,52 @@ impl Tokenizer {
                 {
                     self.add_token(TokenKind::Atom, tokens)
                 }
-                State::Atom => self.advance(State::Atom),
 
                 // Strings end at the second single quote
-                State::Char if self.eof() => {
+                TokenizerState::Char if self.eof() => {
                     return Err(String::from("error: char goes to end of file"))
                 }
-                State::Char if char == '\'' => {
-                    self.advance(State::None);
+                TokenizerState::Char if char == '\'' => {
+                    self.advance(TokenizerState::None);
                     self.add_token(TokenKind::Char, tokens);
                 }
-                State::Char => self.advance(State::Char),
 
                 // Strings end at the second double quote
-                State::String if self.eof() => {
+                TokenizerState::String if self.eof() => {
                     return Err(String::from("error: string goes to end of file"))
                 }
-                State::String if char == '"' => {
-                    self.advance(State::None);
+                TokenizerState::String if char == '"' => {
+                    self.advance(TokenizerState::None);
                     self.add_token(TokenKind::String, tokens);
                 }
-                State::String => self.advance(State::String),
 
                 // Symbols end at the end of the file, or if the next token isn't recognized
-                State::Symbol
+                TokenizerState::Symbol
                     if self.eof()
                         || TokenKind::from_string(
-                            &self.text[self.starting_cursor..self.cursor + 1],
+                            &self.file_contents[self.starting_cursor..self.cursor + 1],
                         ) == TokenKind::Identifier =>
                 {
-                    let token_data = &self.text[self.starting_cursor..self.cursor];
+                    let token_data = &self.file_contents[self.starting_cursor..self.cursor];
                     let token_kind = TokenKind::from_string(token_data);
                     self.add_token(token_kind, tokens);
                 }
-                State::Symbol => self.advance(State::Symbol),
 
                 // Floats end at the end of file, or if the character is no longer a digit
-                State::Float if self.eof() || !char.is_digit(10) => {
+                TokenizerState::Float if self.eof() || !char.is_digit(10) => {
                     self.add_token(TokenKind::Float, tokens)
                 }
-                State::Float => self.advance(State::Float),
 
                 // Comments end at newlines
-                State::Comment if char == '\n' => {
+                TokenizerState::Comment if char == '\n' => {
                     self.line += 1;
                     self.col = 1;
                     self.starting_cursor = self.cursor;
-                    self.state = State::None
+                    self.state = TokenizerState::None
                 }
-                State::Comment => self.advance(State::Comment),
+
+                // None of the above transitions passed, just keep the current state and advance the cursor
+                _ => self.advance(self.state),
             }
         }
 
@@ -481,18 +530,21 @@ impl Tokenizer {
         Ok(())
     }
 
+    /// Whether or not the tokenizer is at the end of the file
     fn eof(&self) -> bool {
-        self.text.chars().nth(self.cursor).is_none()
+        self.file_contents.chars().nth(self.cursor).is_none()
     }
 
-    fn advance(&mut self, new_state: State) {
+    /// Advances the cursor and column number, and changes the state to a new state
+    fn advance(&mut self, new_state: TokenizerState) {
         self.cursor += 1;
         self.col += 1;
         self.state = new_state;
     }
 
+    /// Adds the current span as a token to the list of tokens
     fn add_token(&mut self, kind: TokenKind, tokens: &mut Vec<Token>) {
-        let token_data = String::from(&self.text[self.starting_cursor..self.cursor]);
+        let token_data = String::from(&self.file_contents[self.starting_cursor..self.cursor]);
         let token = Token {
             data: token_data,
             kind,
@@ -504,11 +556,13 @@ impl Tokenizer {
         tokens.push(token);
 
         self.starting_cursor = self.cursor;
-        self.state = State::None;
+        self.state = TokenizerState::None;
     }
 }
 
-enum State {
+#[derive(Clone, Copy)]
+/// States that the tokenizer can be in
+enum TokenizerState {
     None,
     Whitespace,
     Integer,
@@ -520,12 +574,14 @@ enum State {
     Comment,
 }
 
+/// Parses a stream of tokens into Asts
 struct Parser {
     cursor: usize,
     tokens: Vec<Token>,
 }
 
 impl Parser {
+    /// Creates a new Parser
     fn new() -> Self {
         Self {
             cursor: 0,
@@ -533,31 +589,36 @@ impl Parser {
         }
     }
 
+    /// Parses file contents into Asts and atoms
     fn parse(
         &mut self,
-        text: String,
+        file_contents: String,
         ast_heap: &mut AstHeap,
         atoms: &mut HashMap<String, AtomId>,
     ) -> Result<AstId, String> {
-        let mut tokenizer = Tokenizer::new(text);
+        let mut tokenizer = Tokenizer::new(file_contents);
         let _ = tokenizer.tokenize(&mut self.tokens).unwrap();
 
         self.parse_expression(ast_heap, atoms)
     }
 
+    /// Returns the token at the begining of the stream without removing it
     fn peek(&self) -> &Token {
         &self.tokens[self.cursor]
     }
 
+    /// Removes and returns the token at the begining of the stream
     fn pop(&mut self) -> &Token {
         self.cursor += 1;
         &self.tokens[self.cursor - 1]
     }
 
+    /// Returns whether or not the parser is at the end of the stream
     fn eos(&self) -> bool {
         self.cursor >= self.tokens.len()
     }
 
+    /// Creates a parser error, with an expectation and what was actually received
     fn parse_error(&self, expected: String, got: String) -> String {
         format!(
             "error: {}:{}: expected {}, got {}",
@@ -568,6 +629,7 @@ impl Parser {
         )
     }
 
+    /// Pops the token at the begining of the stream if it's kind matches the given kind, otherwise None
     fn accept(&mut self, kind: TokenKind) -> Option<&Token> {
         if !self.eos() && self.peek().kind == kind {
             Some(self.pop())
@@ -576,12 +638,14 @@ impl Parser {
         }
     }
 
+    /// Pops the token at the begining of the stream if it's kind matches the given kind, otherwise Err
     fn expect(&mut self, kind: TokenKind) -> Result<&Token, String> {
         let peeked = self.peek().kind;
         let err = self.parse_error(format!("{:?}", kind), format!("{:?}", peeked));
         self.accept(kind).ok_or(err)
     }
 
+    /// Parses an expression
     fn parse_expression(
         &mut self,
         ast_heap: &mut AstHeap,
@@ -624,14 +688,14 @@ impl Parser {
             let tail_atom = put_atoms_in_set(atoms, String::from(".tail"));
 
             if self.accept(TokenKind::RightSquare).is_some() {
-                Ok(ast_heap.make_nil_atom(atoms))
+                Ok(ast_heap.nil_atom())
             } else {
                 let head = self.parse_expression(ast_heap, atoms)?;
-                let retval = ast_heap.make_list_node(head_atom, head, tail_atom, atoms);
+                let retval = ast_heap.make_list_node(head_atom, head, tail_atom);
                 let mut curr_id = retval;
                 while self.accept(TokenKind::Comma).is_some() {
                     let head = self.parse_expression(ast_heap, atoms)?;
-                    let new_map_id = ast_heap.make_list_node(head_atom, head, tail_atom, atoms);
+                    let new_map_id = ast_heap.make_list_node(head_atom, head, tail_atom);
                     let curr_map = if let Ast::Map(map) = ast_heap.get_mut(curr_id).unwrap() {
                         map
                     } else {

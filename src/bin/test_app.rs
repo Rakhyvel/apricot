@@ -32,12 +32,12 @@ impl TestApp {
 
         let res: i64 = hmm_query.as_int().unwrap();
         println!("{:?}", res);
-        println!("truthy?: {}", hmm_query.truthy());
+        println!("truthy?: {}", hmm_query.truthy().unwrap());
 
         let nested_query = k_file.query().get_atom(".nested").get_atom(".maps");
         let res: f64 = nested_query.as_float().unwrap();
         println!("{:?}", res);
-        println!("falsey?: {}", nested_query.falsey());
+        println!("falsey?: {}", nested_query.falsey().unwrap());
 
         let string_query = k_file.query().get_atom(".some-string");
         let res = string_query.as_string().unwrap();

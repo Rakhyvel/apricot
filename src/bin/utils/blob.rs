@@ -1,3 +1,28 @@
+//! TODO:
+//! - [ ] Add queries
+//! - [ ] Move to own crate
+//! - [ ] Implement new file syntax, and true identifier tokenization
+//! - [ ] Implement REPL
+//! - [ ] Add basic operators
+//! - [ ] Add `let` ... `in`
+//! - [ ] Add `where`
+//! - [ ] Maps with fields other than strict atoms
+//! - [ ] Map dereferencing
+//! - [ ] Tuples
+//! - [ ] Extend union operator to maps
+//! - [ ] Sets
+//! - [ ] Extend difference operator to maps
+//! - [ ] Add functions, without much pattern matching
+//! - [ ] Add partial application of functions
+//! - [ ] Add pattern matching to function
+//!     - [ ] Add `match` ... `with`
+//!     - [ ] Exten union, difference, intersection operators to all functors
+//!     - [ ] Add type predicate matching
+//! - [ ] Add imports
+//! - [ ] Add multi-method overloads
+//! - [ ] String interpolation
+//! - [ ] `$` for parens until end of line
+
 use std::{
     collections::HashMap,
     fs::{self},
@@ -5,7 +30,7 @@ use std::{
 
 /// Represents a file after being parsed
 pub struct KartaFile {
-    atoms: HashMap<String, usize>,
+    atoms: HashMap<String, AtomId>,
     root: AstId,
     ast_heap: AstHeap,
 }
@@ -13,12 +38,13 @@ pub struct KartaFile {
 impl KartaFile {
     pub fn new(text: String) -> Result<Self, String> {
         let mut atoms = HashMap::new();
-        put_atoms_in_set(&mut atoms, String::from(".nil"));
+        let nil_atom_id = put_atoms_in_set(&mut atoms, String::from(".nil"));
         put_atoms_in_set(&mut atoms, String::from(".t"));
         put_atoms_in_set(&mut atoms, String::from(".head"));
         put_atoms_in_set(&mut atoms, String::from(".tail"));
 
         let mut ast_heap = AstHeap::new();
+        ast_heap.create_atom(nil_atom_id);
 
         let mut parser = Parser::new();
         let root = parser.parse(text, &mut ast_heap, &mut atoms)?;
@@ -30,7 +56,7 @@ impl KartaFile {
         })
     }
 
-    pub fn from_file(filename: &'static str) -> Result<Self, String> {
+    pub fn from_file(filename: &str) -> Result<Self, String> {
         let mut text: String = match fs::read_to_string(filename) {
             Ok(c) => c,
             Err(x) => return Err(x.to_string()),
@@ -38,13 +64,138 @@ impl KartaFile {
         text.push('\n'); // This is required to make the tokenizer happy
         Self::new(text)
     }
+
+    pub fn query(&self) -> KartaQuery {
+        KartaQuery::new(self)
+    }
+
+    fn ast_heap(&self) -> &AstHeap {
+        &self.ast_heap
+    }
+
+    fn atoms(&self) -> &HashMap<String, AtomId> {
+        &self.atoms
+    }
 }
 
-fn put_atoms_in_set(atoms: &mut HashMap<String, usize>, atom: String) -> usize {
+pub struct KartaQuery<'a> {
+    file: &'a KartaFile,
+    current_result: Option<AstId>,
+}
+
+impl<'a> KartaQuery<'a> {
+    pub fn new(file: &'a KartaFile) -> Self {
+        Self {
+            file,
+            current_result: Some(file.root),
+        }
+    }
+
+    pub fn get_atom(mut self, field: &str) -> Self {
+        let current_result = match self.current_result {
+            Some(x) => x,
+            None => return self,
+        };
+
+        let root_ast = self
+            .file
+            .ast_heap()
+            .get(current_result)
+            .expect("couldn't get current result!?");
+
+        let field_atom_id = match self.file.atoms().get(&String::from(field)) {
+            Some(x) => x,
+            None => return self,
+        };
+
+        self.current_result = match root_ast {
+            Ast::Map(map) => Some(map.get(&field_atom_id).copied().unwrap_or(AstId::new(0))),
+            _ => panic!("cannot call `get` on {:?}", root_ast),
+        };
+
+        self
+    }
+
+    pub fn as_int<T>(&self) -> Option<T>
+    where
+        T: From<i64>,
+    {
+        if let Some(current_result) = self.current_result {
+            let ast = self
+                .file
+                .ast_heap()
+                .get(current_result)
+                .expect("not a real AST!");
+            match ast {
+                Ast::Int(x) => Some(T::from(*x as i64)),
+                Ast::Float(x) => Some(T::from(*x as i64)),
+                Ast::Char(x) => Some(T::from(*x as i64)),
+                _ => None,
+            }
+        } else {
+            None
+        }
+    }
+
+    pub fn as_float<T>(&self) -> Option<T>
+    where
+        T: From<f64>,
+    {
+        if let Some(current_result) = self.current_result {
+            let ast = self
+                .file
+                .ast_heap()
+                .get(current_result)
+                .expect("not a real AST!");
+            match ast {
+                Ast::Int(x) => Some(T::from(*x as f64)),
+                Ast::Float(x) => Some(T::from(*x as f64)),
+                Ast::Char(x) => Some(T::from(*x as f64)),
+                _ => panic!("cannot convert {:?} to float", ast),
+            }
+        } else {
+            None
+        }
+    }
+
+    pub fn as_string(&self) -> Option<&str> {
+        if let Some(current_result) = self.current_result {
+            let ast = self
+                .file
+                .ast_heap()
+                .get(current_result)
+                .expect("not a real AST!");
+            match ast {
+                Ast::String(x) => Some(x.as_str()),
+                _ => None,
+            }
+        } else {
+            None
+        }
+    }
+
+    pub fn truthy(&self) -> bool {
+        let ast = self
+            .file
+            .ast_heap()
+            .get(self.current_result.expect("no value"))
+            .expect("not a real AST!");
+        match ast {
+            Ast::Atom(x) => (*x).as_usize() != 0,
+            _ => true,
+        }
+    }
+
+    pub fn falsey(&self) -> bool {
+        !self.truthy()
+    }
+}
+
+fn put_atoms_in_set(atoms: &mut HashMap<String, AtomId>, atom: String) -> AtomId {
     if let Some(the_atom) = atoms.get(&atom) {
         return *the_atom;
     } else {
-        let the_atom = atoms.len();
+        let the_atom = AtomId::new(atoms.len());
         atoms.insert(atom, the_atom);
         the_atom
     }
@@ -81,39 +232,43 @@ impl AstHeap {
         self.insert(Ast::String(value))
     }
 
-    fn create_atom(&mut self, value: usize) -> AstId {
+    fn create_atom(&mut self, value: AtomId) -> AstId {
         self.insert(Ast::Atom(value))
     }
 
-    fn create_map(&mut self, value: HashMap<usize, AstId>) -> AstId {
+    fn create_map(&mut self, value: HashMap<AtomId, AstId>) -> AstId {
         self.insert(Ast::Map(value))
     }
 
-    fn make_nil_atom(&mut self, atoms: &mut HashMap<String, usize>) -> AstId {
+    fn make_nil_atom(&mut self, atoms: &mut HashMap<String, AtomId>) -> AstId {
         self.create_atom(put_atoms_in_set(atoms, String::from(".nil")))
     }
 
     fn make_list_node(
         &mut self,
-        head_atom: usize,
+        head_atom: AtomId,
         head: AstId,
-        tail_atom: usize,
-        atoms: &mut HashMap<String, usize>,
+        tail_atom: AtomId,
+        atoms: &mut HashMap<String, AtomId>,
     ) -> AstId {
-        let mut fields: HashMap<usize, AstId> = HashMap::new();
+        let mut fields: HashMap<AtomId, AstId> = HashMap::new();
         fields.insert(head_atom, head);
         fields.insert(tail_atom, self.make_nil_atom(atoms));
         self.create_map(fields)
     }
 
-    fn get(&mut self, id: AstId) -> Option<&mut Ast> {
-        self.asts.get_mut(id.as_usize())
+    fn get(&self, ast_id: AstId) -> Option<&Ast> {
+        self.asts.get(ast_id.as_usize())
+    }
+
+    fn get_mut(&mut self, ast_id: AstId) -> Option<&mut Ast> {
+        self.asts.get_mut(ast_id.as_usize())
     }
 }
 
 #[derive(Copy, Clone, Debug)]
 /// Unique identifier of an Ast expression in the file's vector of Asts
-struct AstId(usize);
+pub struct AstId(usize);
 
 impl AstId {
     fn new(id: usize) -> Self {
@@ -125,6 +280,21 @@ impl AstId {
     }
 }
 
+#[derive(Copy, Clone, Debug, Hash, Eq, PartialEq)]
+/// Unique identifier of an Atom in the file's vector of Atoms
+pub struct AtomId(usize);
+
+impl AtomId {
+    fn new(id: usize) -> Self {
+        AtomId(id)
+    }
+
+    fn as_usize(&self) -> usize {
+        self.0
+    }
+}
+
+#[derive(Debug)]
 /// Represents an expression
 enum Ast {
     /// A basic integer
@@ -136,9 +306,9 @@ enum Ast {
     /// A string
     String(String),
     /// An atomic value
-    Atom(usize),
+    Atom(AtomId),
     /// Maps an atom to an Ast within the file
-    Map(HashMap<usize, AstId>),
+    Map(HashMap<AtomId, AstId>),
 }
 
 #[derive(PartialEq, Clone, Copy, Debug)]
@@ -367,12 +537,10 @@ impl Parser {
         &mut self,
         text: String,
         ast_heap: &mut AstHeap,
-        atoms: &mut HashMap<String, usize>,
+        atoms: &mut HashMap<String, AtomId>,
     ) -> Result<AstId, String> {
         let mut tokenizer = Tokenizer::new(text);
         let _ = tokenizer.tokenize(&mut self.tokens).unwrap();
-
-        println!("{:?}", self.tokens);
 
         self.parse_expression(ast_heap, atoms)
     }
@@ -417,7 +585,7 @@ impl Parser {
     fn parse_expression(
         &mut self,
         ast_heap: &mut AstHeap,
-        atoms: &mut HashMap<String, usize>,
+        atoms: &mut HashMap<String, AtomId>,
     ) -> Result<AstId, String> {
         if let Some(token) = self.accept(TokenKind::Integer) {
             Ok(ast_heap.create_int(token.data.parse::<i64>().unwrap()))
@@ -432,7 +600,7 @@ impl Parser {
             let atom_value = put_atoms_in_set(atoms, token.data.clone());
             Ok(ast_heap.create_atom(atom_value))
         } else if let Some(_token) = self.accept(TokenKind::LeftBrace) {
-            let mut children: HashMap<usize, AstId> = HashMap::new();
+            let mut children: HashMap<AtomId, AstId> = HashMap::new();
             loop {
                 let key_ast_id = self.parse_expression(ast_heap, atoms)?;
                 let key = match *ast_heap.get(key_ast_id).unwrap() {
@@ -464,7 +632,7 @@ impl Parser {
                 while self.accept(TokenKind::Comma).is_some() {
                     let head = self.parse_expression(ast_heap, atoms)?;
                     let new_map_id = ast_heap.make_list_node(head_atom, head, tail_atom, atoms);
-                    let curr_map = if let Ast::Map(map) = ast_heap.get(curr_id).unwrap() {
+                    let curr_map = if let Ast::Map(map) = ast_heap.get_mut(curr_id).unwrap() {
                         map
                     } else {
                         panic!("unreachable")

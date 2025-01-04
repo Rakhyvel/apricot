@@ -26,7 +26,23 @@ impl Scene for TestApp {
 
 impl TestApp {
     fn new(_app: &app::App) -> Self {
-        let _ = KartaFile::from_file("src/bin/gui/test.k").unwrap();
+        let k_file = KartaFile::from_file("src/bin/gui/test.k").unwrap();
+
+        let hmm_query = k_file.query().get_atom(".hmm");
+
+        let res: i64 = hmm_query.as_int().unwrap();
+        println!("{:?}", res);
+        println!("truthy?: {}", hmm_query.truthy());
+
+        let nested_query = k_file.query().get_atom(".nested").get_atom(".maps");
+        let res: f64 = nested_query.as_float().unwrap();
+        println!("{:?}", res);
+        println!("falsey?: {}", nested_query.falsey());
+
+        let string_query = k_file.query().get_atom(".some-string");
+        let res = string_query.as_string().unwrap();
+        println!("{:?}", res);
+
         Self {}
     }
 }

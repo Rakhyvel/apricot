@@ -1,3 +1,7 @@
 {
-  .hmm = [1, 2, 3]
+  .hmm = 1000,
+  .nested = {
+    .maps = 2.1
+  },
+  .some-string = "Hello, World!"
 }

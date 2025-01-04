@@ -1,6 +1,7 @@
 //! TODO:
 //! - [x] Add queries
 //! - [ ] Move to own crate
+//! - [ ] Split up into ast.rs, parser.rs, tokenizer.rs, error.rs, query.rs, lib.rs
 //! - [ ] Implement new file syntax, and true identifier tokenization
 //! - [ ] Implement REPL
 //! - [ ] Add basic operators
@@ -25,6 +26,7 @@
 
 use std::{
     collections::HashMap,
+    fmt::Display,
     fs::{self},
 };
 
@@ -39,7 +41,7 @@ pub struct KartaFile {
 }
 
 impl KartaFile {
-    /// Create and parse a new Karta file from file contents
+    /// Create and parse a new Karta file from file contents. Returns an error if tokenization or parsing fails.
     pub fn new(file_contents: String) -> Result<Self, String> {
         let mut atoms = HashMap::new();
         let nil_atom_id = put_atoms_in_set(&mut atoms, String::from(".nil"));
@@ -60,7 +62,7 @@ impl KartaFile {
         })
     }
 
-    /// Create and parse a new Karta file from a file
+    /// Create and parse a new Karta file from a file. Returns an error if reading the file, tokenization, or parsing fails.
     pub fn from_file(filename: &str) -> Result<Self, String> {
         let mut file_contents: String = match fs::read_to_string(filename) {
             Ok(c) => c,
@@ -103,7 +105,8 @@ impl<'a> KartaQuery<'a> {
         }
     }
 
-    /// Return a new query with it's result being the result of applying the atom to the current result, or an error if any occurs or has occured.
+    /// Return a new query with it's result being the result of applying the atom to the current result.
+    /// The result becomes an error if applied to a non-map, or if the previous result was errant.
     pub fn get_atom(mut self, field: &str) -> Self {
         let current_result = match self.current_result {
             Ok(x) => x,
@@ -114,7 +117,7 @@ impl<'a> KartaQuery<'a> {
             .file
             .ast_heap()
             .get(current_result)
-            .expect("couldn't get current result!?");
+            .expect("couldn't get Ast for AstId");
 
         let field_atom_id = match self.file.atoms().get(&String::from(field)) {
             Some(x) => x,
@@ -129,7 +132,8 @@ impl<'a> KartaQuery<'a> {
         self
     }
 
-    /// Interpret the current result of this query as an integer, or an error if any have occured during the creation of this query
+    /// Interpret the current result of this query as an integer.
+    /// Returns an error if the query result cannot be converted to an integer, or if any errors occured during the query process.
     pub fn as_int<T>(&self) -> Result<T, String>
     where
         T: From<i64>,
@@ -139,7 +143,7 @@ impl<'a> KartaQuery<'a> {
                 .file
                 .ast_heap()
                 .get(current_result)
-                .expect("not a real AST!");
+                .expect("couldn't get Ast for AstId");
             match ast {
                 Ast::Int(x) => Ok(T::from(*x as i64)),
                 Ast::Float(x) => Ok(T::from(*x as i64)),
@@ -151,7 +155,8 @@ impl<'a> KartaQuery<'a> {
         }
     }
 
-    /// Interpret the current result of this query as a float, or an error if any have occured during the creation of this query
+    /// Interpret the current result of this query as a float.
+    /// Returns an error if the query result cannot be converted to a float, or if any errors occured during the query process.
     pub fn as_float<T>(&self) -> Result<T, String>
     where
         T: From<f64>,
@@ -161,7 +166,7 @@ impl<'a> KartaQuery<'a> {
                 .file
                 .ast_heap()
                 .get(current_result)
-                .expect("not a real AST!");
+                .expect("couldn't get Ast for AstId");
             match ast {
                 Ast::Int(x) => Ok(T::from(*x as f64)),
                 Ast::Float(x) => Ok(T::from(*x as f64)),
@@ -173,14 +178,15 @@ impl<'a> KartaQuery<'a> {
         }
     }
 
-    /// Interpret the current result of this query as a string, or an error if any have occured during the creation of this query
+    /// Interpret the current result of this query as a string.
+    /// Returns an error if the query result cannot be converted to a string, or if any errors occured during the query process.
     pub fn as_string(&self) -> Result<&str, String> {
         if let Ok(current_result) = self.current_result {
             let ast = self
                 .file
                 .ast_heap()
                 .get(current_result)
-                .expect("not a real AST!");
+                .expect("couldn't get Ast for AstId");
             match ast {
                 Ast::String(x) => Ok((*x).as_str()),
                 _ => Err(format!("cannot convert {:?} to string", ast)),
@@ -190,14 +196,15 @@ impl<'a> KartaQuery<'a> {
         }
     }
 
-    /// Whether or not the current result of this query is truthy (ie not the .nil atom), or an error if any have occured during the creation of this query
+    /// Whether or not the current result of this query is truthy (ie not the .nil atom).
+    /// Propagates any errors that may have occured during the query process.
     pub fn truthy(&self) -> Result<bool, String> {
         if let Ok(current_result) = self.current_result {
             let ast = self
                 .file
                 .ast_heap()
                 .get(current_result)
-                .expect("not a real AST!");
+                .expect("couldn't get Ast for AstId");
             match ast {
                 Ast::Atom(x) => Ok(x.as_usize() != 0),
                 _ => Ok(true),
@@ -207,10 +214,13 @@ impl<'a> KartaQuery<'a> {
         }
     }
 
-    /// Whether or not the current result of this query is truthy (ie the .nil atom), or an error if any have occured during the creation of this query
+    /// Whether or not the current result of this query is truthy (ie the .nil atom).
+    /// Propagates any errors that may have occured during the query process.
     pub fn falsey(&self) -> Result<bool, String> {
         Ok(!(self.truthy()?))
     }
+
+    // TODO: Implement IntoIterator for lists
 }
 
 /// Puts and returns the ID of an atom
@@ -312,6 +322,12 @@ impl AstId {
     }
 }
 
+impl Display for AstId {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "AstId:{}", self.0)
+    }
+}
+
 #[derive(Copy, Clone, Debug, Hash, Eq, PartialEq)]
 /// Unique identifier of an Atom in the file's vector of Atoms
 pub struct AtomId(usize);
@@ -328,8 +344,14 @@ impl AtomId {
     }
 }
 
+impl Display for AtomId {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "AtomId:{}", self.0)
+    }
+}
+
 #[derive(Debug)]
-/// Represents an expression
+/// Represents an expression in the Karta file
 enum Ast {
     /// A basic integer
     Int(i64),
@@ -394,7 +416,7 @@ struct Span {
 /// Represents a single piece of text in the file
 struct Token {
     /// Owning string representing the actual text data for this string
-    data: String,
+    data: String, // TODO: Should figure out how to just use `&'a str` here
     /// What kind of token this is
     kind: TokenKind,
     /// Where in the file this token came from
@@ -549,8 +571,8 @@ impl Tokenizer {
             data: token_data,
             kind,
             span: Span {
-                line: self.col - 1,
-                col: self.line,
+                col: self.col - 1,
+                line: self.line,
             },
         };
         tokens.push(token);

@@ -9,6 +9,7 @@ sdl2 = { version = "0.34.5", features = ["bundled", "ttf", "mixer"], default-fea
 gl = "*"
 nalgebra-glm = "*"
 hecs = "*"
+karta = {git = "https://github.com/Rakhyvel/Karta.git"}
 
 # For reading in textures
 image = "0.25.1"

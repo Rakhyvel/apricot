@@ -4,9 +4,7 @@
 use std::cell::RefCell;
 
 use apricot::app::{self, run, Scene};
-use utils::blob::KartaFile;
-
-mod utils;
+use karta::KartaContext;
 
 fn main() -> Result<(), String> {
     run(
@@ -26,23 +24,14 @@ impl Scene for TestApp {
 
 impl TestApp {
     fn new(_app: &app::App) -> Self {
-        let k_file = KartaFile::from_file("src/bin/gui/test.k").unwrap();
+        let mut retval = Self {};
+        let _ = retval.open_gui();
+        retval
+    }
 
-        let hmm_query = k_file.query().get_atom(".hmm");
-
-        let res: i64 = hmm_query.as_int().unwrap();
-        println!("{:?}", res);
-        println!("truthy?: {}", hmm_query.truthy().unwrap());
-
-        let nested_query = k_file.query().get_atom(".nested").get_atom(".maps");
-        let res: f64 = nested_query.as_float().unwrap();
-        println!("{:?}", res);
-        println!("falsey?: {}", nested_query.falsey().unwrap());
-
-        let string_query = k_file.query().get_atom(".some-string");
-        let res = string_query.as_string().unwrap();
-        println!("{:?}", res);
-
-        Self {}
+    fn open_gui(&mut self) -> Result<(), String> {
+        let mut kctx = KartaContext::new().unwrap();
+        kctx.import_file("core", "gui/test.k")?;
+        Ok(())
     }
 }

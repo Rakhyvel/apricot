@@ -138,7 +138,7 @@ impl RenderContext {
             gl::BlendFunc(gl::SRC_ALPHA, gl::ONE_MINUS_SRC_ALPHA);
         }
         let (view_matrix, proj_matrix) = self.camera.borrow().view_proj_matrices();
-        for (_entity, line_path) in world.query::<&LinePathComponent>().iter() {
+        for line_path in world.query::<&LinePathComponent>().iter() {
             self.draw_line_path(line_path, view_matrix, proj_matrix)
         }
     }

@@ -415,11 +415,9 @@ impl Texture {
         print_any_errors();
     }
 
-    /// Load this texture into it's OpenGL slot
-    pub fn load(&self, path: &Path) -> Result<(), ImageError> {
+    pub fn set_pixels(&self, width: i32, height: i32, data: &[u8]) {
         self.bind();
 
-        let img = image::open(path)?.into_rgba8();
         unsafe {
             gl::TexParameteri(
                 gl::TEXTURE_2D,
@@ -438,18 +436,29 @@ impl Texture {
             gl::TexParameteri(gl::TEXTURE_2D, gl::TEXTURE_MAG_FILTER, gl::NEAREST as GLint);
             print_any_errors();
 
+            // TODO: This re-allocates each time, replace with TexSubImage2D
             gl::TexImage2D(
                 gl::TEXTURE_2D,
                 0,
                 gl::RGBA as i32,
-                img.width() as i32,
-                img.height() as i32,
+                width,
+                height,
                 0,
                 gl::RGBA,
                 gl::UNSIGNED_BYTE,
-                img.as_bytes().as_ptr() as *const _,
+                data.as_ptr() as *const _,
             );
             print_any_errors();
+        }
+    }
+
+    /// Load this texture into it's OpenGL slot
+    pub fn load(&self, path: &Path) -> Result<(), ImageError> {
+        self.bind();
+
+        let img = image::open(path)?.into_rgba8();
+        self.set_pixels(img.width() as i32, img.height() as i32, img.as_bytes());
+        unsafe {
             gl::GenerateMipmap(gl::TEXTURE_2D);
             print_any_errors();
         }

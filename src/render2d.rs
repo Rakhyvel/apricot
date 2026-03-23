@@ -171,7 +171,7 @@ impl RenderContext {
             gl::BlendFunc(gl::SRC_ALPHA, gl::ONE_MINUS_SRC_ALPHA);
         }
 
-        self.set_program_from_id(self.get_program_id_from_name("2d").unwrap());
+        self.set_program_from_id(self.get_program_id_from_name("2d").unwrap()); // TODO: Should be setup automatically
 
         let (view_matrix, proj_matrix) = self.camera_2d.view_proj_matrices();
         let model_matrix: nalgebra_glm::Mat4 = nalgebra_glm::scale(
@@ -207,6 +207,7 @@ impl RenderContext {
             );
         }
 
+        // TODO: We should set this up automatically
         let quad_mesh = self
             .get_mesh_from_id(self.get_mesh_id_from_name("quad-xy").unwrap())
             .unwrap();

@@ -7,7 +7,7 @@ pub struct Ray {
 }
 
 impl Ray {
-    pub fn point_at_distance(&self, distance: f32) -> nalgebra_glm::Vec3 {
+    pub fn at(&self, distance: f32) -> nalgebra_glm::Vec3 {
         self.origin + self.dir.normalize() * distance
     }
 }

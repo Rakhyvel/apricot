@@ -1,6 +1,8 @@
 //! This module implements the Camera structure. Cameras can either be perspective (typical for 3D) or orthographic
 //! (typical for 2D)
 
+use crate::ray::Ray;
+
 use super::frustum::Frustum;
 
 #[derive(Debug, Copy, Clone)]
@@ -35,10 +37,16 @@ pub struct Camera {
     position: nalgebra_glm::Vec3,
     lookat: nalgebra_glm::Vec3,
     up: nalgebra_glm::Vec3,
-    pub projection_kind: ProjectionKind,
 
+    // Projections
+    pub projection_kind: ProjectionKind,
     view_matrix: nalgebra_glm::Mat4,
     proj_matrix: nalgebra_glm::Mat4,
+
+    // Viewport vectors
+    lower_left_corner: nalgebra_glm::Vec3,
+    horizontal: nalgebra_glm::Vec3,
+    vertical: nalgebra_glm::Vec3,
 }
 
 impl Camera {
@@ -56,6 +64,9 @@ impl Camera {
             projection_kind,
             view_matrix: nalgebra_glm::identity(),
             proj_matrix: nalgebra_glm::identity(),
+            lower_left_corner: nalgebra_glm::zero(),
+            horizontal: nalgebra_glm::zero(),
+            vertical: nalgebra_glm::zero(),
         };
         retval.regen_view_proj_matrices();
         retval
@@ -69,9 +80,28 @@ impl Camera {
     /// Regenerates the camera's view and projection matrices. This is _SLOW_!
     pub fn regen_view_proj_matrices(&mut self) {
         let view_matrix = nalgebra_glm::look_at(&self.position, &self.lookat, &self.up);
-        let proj_matrix = match self.projection_kind {
+        let (proj_matrix, lower_left_corner, horiz, vert) = match self.projection_kind {
             ProjectionKind::Perspective { fov, far } => {
-                nalgebra_glm::perspective(800.0 / 600.0, fov, 0.1, far)
+                // Perspective projection
+                let aspect_ratio = 800.0 / 600.0;
+                let proj_matrix = nalgebra_glm::perspective(aspect_ratio, fov, 0.1, far);
+
+                // Viewport spans at near plane
+                let theta = fov / 2.0;
+                let h = (theta).tan() * 1.0; // near plane distance = 1.0
+                let viewport_height = 2.0 * h;
+                let viewport_width = aspect_ratio * viewport_height;
+
+                let w = (self.position - self.lookat).normalize();
+                let u = self.up.cross(&w).normalize();
+                let v = w.cross(&u);
+
+                let lower_left_corner =
+                    self.position - u * (viewport_width / 2.0) - v * (viewport_height / 2.0) - w;
+                let horizontal = u * viewport_width;
+                let vertical = v * viewport_height;
+
+                (proj_matrix, lower_left_corner, horizontal, vertical)
             }
             ProjectionKind::Orthographic {
                 left,
@@ -80,8 +110,19 @@ impl Camera {
                 top,
                 near,
                 far,
-            } => nalgebra_glm::ortho(left, right, bottom, top, near, far),
+            } => {
+                let proj_matrix = nalgebra_glm::ortho(left, right, bottom, top, 0.1, far);
+
+                let horizontal = nalgebra_glm::vec3(right - left, 0.0, 0.0);
+                let vertical = nalgebra_glm::vec3(0.0, top - bottom, 0.0);
+                let lower_left_corner = self.position - horizontal * 0.5 - vertical * 0.5;
+
+                (proj_matrix, lower_left_corner, horizontal, vertical)
+            }
         };
+        self.lower_left_corner = lower_left_corner;
+        self.horizontal = horiz;
+        self.vertical = vert;
 
         self.view_matrix = view_matrix;
         self.proj_matrix = proj_matrix;
@@ -106,6 +147,18 @@ impl Camera {
     pub fn frustum(&self) -> Frustum {
         // TODO: Store frustum!
         Frustum::from_inv_proj_view(self.inv_proj_view(), false)
+    }
+
+    pub fn get_ray(&self, x: f32, y: f32, width: f32, height: f32) -> Ray {
+        let u = x / (width - 1.0);
+        let v = 1.0 - y / (height - 1.0);
+        let dir = (self.lower_left_corner + (self.horizontal * u) + (self.vertical * v)
+            - self.position)
+            .normalize();
+        Ray {
+            origin: self.position,
+            dir,
+        }
     }
 
     /// Sets the position of the camera. This regenerates the view and projection matrix, so is fairly slow.

@@ -55,10 +55,15 @@ pub struct App {
     pub mouse_wheel: f32,
 }
 
+pub struct AppConfig {
+    pub mouse_warp: bool,
+}
+
 /// Starts a new app, with the `init` scene as the first scene in the stack.
 pub fn run(
     window_size: nalgebra_glm::I32Vec2,
     window_title: &'static str,
+    cfg: AppConfig,
     init: &dyn Fn(&App) -> RefCell<Box<dyn Scene>>,
 ) -> Result<(), String> {
     let sdl_context = sdl2::init()?;
@@ -140,12 +145,14 @@ pub fn run(
         while lag >= DELTA_T {
             app.reset_input();
             app.poll_input(&sdl_context);
-            // sdl_context.mouse().warp_mouse_in_window(
-            //     &window,
-            //     app.screen_width / 2,
-            //     app.screen_height / 2,
-            // );
-            // sdl_context.mouse().set_relative_mouse_mode(true);
+            if cfg.mouse_warp {
+                sdl_context.mouse().warp_mouse_in_window(
+                    &window,
+                    window_size.x / 2,
+                    window_size.y / 2,
+                );
+                sdl_context.mouse().set_relative_mouse_mode(true);
+            }
 
             if let Some(scene_ref) = scene_stack.last() {
                 scene_ref.borrow_mut().update(&app);

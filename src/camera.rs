@@ -87,8 +87,8 @@ impl Camera {
                 let proj_matrix = nalgebra_glm::perspective(aspect_ratio, fov, 0.1, far);
 
                 // Viewport spans at near plane
-                let theta = fov / 2.0;
-                let h = (theta).tan() * 1.0; // near plane distance = 1.0
+                let theta = fov.to_radians();
+                let h = (theta / 2.0).tan(); // near plane distance = 1.0
                 let viewport_height = 2.0 * h;
                 let viewport_width = aspect_ratio * viewport_height;
 
@@ -150,11 +150,13 @@ impl Camera {
     }
 
     pub fn get_ray(&self, x: f32, y: f32, width: f32, height: f32) -> Ray {
-        let u = x / (width - 1.0);
-        let v = 1.0 - y / (height - 1.0);
-        let dir = (self.lower_left_corner + (self.horizontal * u) + (self.vertical * v)
+        let u = (x + 0.5) / width;
+        let v = 1.0 - (y + 0.5) / height;
+
+        let dir = (self.lower_left_corner + self.horizontal * u + self.vertical * v
             - self.position)
             .normalize();
+
         Ray {
             origin: self.position,
             dir,

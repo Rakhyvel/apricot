@@ -4,6 +4,8 @@ use std::{cell::RefCell, collections::HashMap, f32::consts::PI, fmt::Debug};
 
 use obj::{load_obj, Obj, TexturedVertex};
 
+use crate::tri::Tri;
+
 use super::{
     aabb::AABB,
     camera::{Camera, ProjectionKind},
@@ -655,6 +657,21 @@ impl Mesh {
         let data = vec![&vertices, &normals, &uv];
 
         Self::new(indices, data)
+    }
+
+    pub fn triangles(&self) -> Vec<Tri> {
+        let verts = &self.geometry[GeometryDataIndex::Vertex as usize].vertex_data;
+        self.indices
+            .chunks(3)
+            .map(|tri| {
+                let (i0, i1, i2) = (tri[0] as usize, tri[1] as usize, tri[2] as usize);
+                Tri {
+                    v0: nalgebra_glm::vec3(verts[i0 * 3], verts[i0 * 3 + 1], verts[i0 * 3 + 2]),
+                    v1: nalgebra_glm::vec3(verts[i1 * 3], verts[i1 * 3 + 1], verts[i1 * 3 + 2]),
+                    v2: nalgebra_glm::vec3(verts[i2 * 3], verts[i2 * 3 + 1], verts[i2 * 3 + 2]),
+                }
+            })
+            .collect()
     }
 
     pub fn geometry(&self) -> &Vec<GeometryData> {

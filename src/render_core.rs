@@ -81,7 +81,7 @@ pub struct Mesh {
 }
 
 /// Actual geometry data for a mesh.
-struct GeometryData {
+pub struct GeometryData {
     ibo: Buffer<u32>,
     vbo: Buffer<f32>,
     vao: Vao,
@@ -655,6 +655,20 @@ impl Mesh {
         let data = vec![&vertices, &normals, &uv];
 
         Self::new(indices, data)
+    }
+
+    pub fn geometry(&self) -> &Vec<GeometryData> {
+        &self.geometry
+    }
+
+    pub fn indices(&self) -> &Vec<u32> {
+        &self.indices
+    }
+}
+
+impl GeometryData {
+    pub fn vertex_data(&self) -> &Vec<f32> {
+        &self.vertex_data
     }
 }
 

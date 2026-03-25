@@ -17,3 +17,4 @@ pub mod render3d;
 pub mod render_core;
 pub mod shadow_map;
 pub mod sphere;
+pub mod tri;

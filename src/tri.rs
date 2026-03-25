@@ -1,3 +1,4 @@
+#[derive(Clone, Copy)]
 pub struct Tri {
     pub v0: nalgebra_glm::Vec3,
     pub v1: nalgebra_glm::Vec3,

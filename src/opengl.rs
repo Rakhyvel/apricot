@@ -239,7 +239,7 @@ impl<T> Buffer<T> {
 
 impl<T> Drop for Buffer<T> {
     fn drop(&mut self) {
-        // self.unbind();
+        self.unbind();
         self.delete();
     }
 }
@@ -314,7 +314,7 @@ impl Vao {
 
 impl Drop for Vao {
     fn drop(&mut self) {
-        // self.unbind();
+        self.unbind();
         self.delete();
     }
 }

@@ -3,13 +3,14 @@
 //! To run this test app, do `cargo run --bin test_app`.
 use std::cell::RefCell;
 
-use apricot::app::{self, run, Scene};
+use apricot::app::{self, run, AppConfig, Scene};
 use karta::KartaContext;
 
 fn main() -> Result<(), String> {
     run(
         nalgebra_glm::I32Vec2::new(640, 360),
         "Apricot Test Application",
+        AppConfig { mouse_warp: false },
         &|app| RefCell::new(Box::new(TestApp::new(app))),
     )
 }

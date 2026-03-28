@@ -49,7 +49,8 @@ pub struct BVHSphereIterator<'a, Object: Copy + Clone> {
 pub struct BVHRayIterator<'a, Object: Copy + Clone> {
     bvh: &'a BVH<Object>, // Reference to the tree
     ray: &'a Ray,
-    stack: Vec<BVHNodeId>,
+    stack: [BVHNodeId; 64],
+    stack_top: usize,
 }
 
 impl<Object: Copy + Clone> BVH<Object> {
@@ -301,11 +302,7 @@ impl<Object: Copy + Clone> BVH<Object> {
             stack.push(self.root_id);
         }
 
-        BVHRayIterator {
-            bvh: self,
-            ray,
-            stack,
-        }
+        BVHRayIterator::new(self, ray)
     }
 
     /// Print a graphviz representation of the BVH at the current moment
@@ -483,22 +480,51 @@ impl<'a, Object: Copy + Clone> Iterator for BVHRayIterator<'a, Object> {
     type Item = Object;
 
     fn next(&mut self) -> Option<Self::Item> {
-        while let Some(current_id) = self.stack.pop() {
+        while let Some(current_id) = self.pop() {
             let current_node = self.bvh.node_at(current_id);
             if !current_node.volume.raycast(self.ray) {
                 continue;
             }
 
             if current_node.left != INVALID_BVH_NODE_ID {
-                self.stack.push(current_node.left);
+                self.push(current_node.left);
             }
             if current_node.right != INVALID_BVH_NODE_ID {
-                self.stack.push(current_node.right);
+                self.push(current_node.right);
             }
             if let Some(object) = current_node.object {
                 return Some(object);
             }
         }
         None
+    }
+}
+
+impl<'a, Object: Copy + Clone> BVHRayIterator<'a, Object> {
+    pub fn new(bvh: &'a BVH<Object>, ray: &'a Ray) -> Self {
+        let mut iter = Self {
+            bvh,
+            ray,
+            stack: [INVALID_BVH_NODE_ID; 64],
+            stack_top: 0,
+        };
+        if bvh.root_id != INVALID_BVH_NODE_ID {
+            iter.push(bvh.root_id)
+        }
+        iter
+    }
+
+    fn push(&mut self, id: BVHNodeId) {
+        self.stack[self.stack_top] = id;
+        self.stack_top += 1;
+    }
+
+    fn pop(&mut self) -> Option<BVHNodeId> {
+        if self.stack_top == 0 {
+            None
+        } else {
+            self.stack_top -= 1;
+            Some(self.stack[self.stack_top])
+        }
     }
 }

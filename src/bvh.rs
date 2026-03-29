@@ -486,12 +486,31 @@ impl<'a, Object: Copy + Clone> Iterator for BVHRayIterator<'a, Object> {
                 continue;
             }
 
-            if current_node.left != INVALID_BVH_NODE_ID {
-                self.push(current_node.left);
+            let left = current_node.left;
+            let right = current_node.right;
+
+            if left != INVALID_BVH_NODE_ID && right != INVALID_BVH_NODE_ID {
+                // Push farther child first so nearer is popped first
+                let left_vol = self.bvh.node_at(left).volume;
+                let right_vol = self.bvh.node_at(right).volume;
+                let left_dist = left_vol.center().metric_distance(&self.ray.origin());
+                let right_dist = right_vol.center().metric_distance(&self.ray.origin());
+                if left_dist < right_dist {
+                    self.push(right);
+                    self.push(left);
+                } else {
+                    self.push(left);
+                    self.push(right);
+                }
+            } else {
+                if left != INVALID_BVH_NODE_ID {
+                    self.push(left)
+                }
+                if right != INVALID_BVH_NODE_ID {
+                    self.push(right)
+                }
             }
-            if current_node.right != INVALID_BVH_NODE_ID {
-                self.push(current_node.right);
-            }
+
             if let Some(object) = current_node.object {
                 return Some(object);
             }

@@ -14,19 +14,27 @@ use super::{frustum::Frustum, plane::Plane, ray::Ray, sphere::Sphere};
 pub struct AABB {
     pub min: nalgebra_glm::Vec3,
     pub max: nalgebra_glm::Vec3,
+    center: nalgebra_glm::Vec3,
 }
 
 #[allow(unused)]
 impl AABB {
     pub fn new() -> Self {
+        let min = nalgebra_glm::vec3(f32::MAX, f32::MAX, f32::MAX);
+        let max = nalgebra_glm::vec3(f32::MIN, f32::MIN, f32::MIN);
         Self {
-            min: nalgebra_glm::vec3(f32::MAX, f32::MAX, f32::MAX),
-            max: nalgebra_glm::vec3(f32::MIN, f32::MIN, f32::MIN),
+            min,
+            max,
+            center: (min + max) * 0.5,
         }
     }
 
     pub fn from_min_max(min: nalgebra_glm::Vec3, max: nalgebra_glm::Vec3) -> Self {
-        Self { min, max }
+        Self {
+            min,
+            max,
+            center: (min + max) * 0.5,
+        }
     }
 
     /// Create an AABB from an iterator of points. This is slow!
@@ -126,7 +134,7 @@ impl AABB {
 
     /// Finds the centerpoint of an AABB
     pub fn center(&self) -> nalgebra_glm::Vec3 {
-        (self.max + self.min) * 0.5
+        self.center
     }
 
     /// Moves an AABB by a vector
@@ -134,6 +142,7 @@ impl AABB {
         Self {
             min: self.min + center,
             max: self.max + center,
+            center: self.center + center,
         }
     }
 
@@ -142,6 +151,7 @@ impl AABB {
         Self {
             min: self.min.component_mul(&factor),
             max: self.max.component_mul(&factor),
+            center: self.center.component_mul(&factor),
         }
     }
 
@@ -151,6 +161,7 @@ impl AABB {
             self.min = nalgebra_glm::min2(&self.min, &corner);
             self.max = nalgebra_glm::max2(&self.max, &corner);
         }
+        self.center = (self.min + self.max) * 0.5;
     }
 
     /// Finds the midpoint of the positive z plane. Useful for shadow mapping.
@@ -164,13 +175,8 @@ impl AABB {
     pub fn transform(&mut self, matrix: nalgebra_glm::Mat4) {
         self.min = (matrix * nalgebra_glm::vec4(self.min.x, self.min.y, self.min.z, 1.0)).xyz();
         self.max = (matrix * nalgebra_glm::vec4(self.max.x, self.max.y, self.max.z, 1.0)).xyz();
+        self.center = (self.min + self.max) * 0.5;
     }
-
-    // I dont think this one is used
-    // pub fn intersect_z(&mut self, other: &AABB) {
-    //     self.min.z = self.min.z.min(other.min.z);
-    //     self.max.z = self.max.z.max(other.max.z);
-    // }
 
     /// Determines whether two AABBs intersect
     pub fn intersects(&self, other: &AABB) -> bool {

@@ -105,25 +105,15 @@ impl AABB {
 
     /// Determines if a ray intersects an AABB
     pub fn raycast(&self, ray: &Ray) -> bool {
-        let inv = nalgebra_glm::vec3(1.0 / ray.dir.x, 1.0 / ray.dir.y, 1.0 / ray.dir.z);
+        let tx1 = (self.min.x - ray.origin().x) * ray.inv_dir().x;
+        let tx2 = (self.max.x - ray.origin().x) * ray.inv_dir().x;
+        let ty1 = (self.min.y - ray.origin().y) * ray.inv_dir().y;
+        let ty2 = (self.max.y - ray.origin().y) * ray.inv_dir().y;
+        let tz1 = (self.min.z - ray.origin().z) * ray.inv_dir().z;
+        let tz2 = (self.max.z - ray.origin().z) * ray.inv_dir().z;
 
-        let tx1 = (self.min.x - ray.origin.x) * inv.x;
-        let tx2 = (self.max.x - ray.origin.x) * inv.x;
-
-        let mut tmin = tx1.min(tx2);
-        let mut tmax = tx1.max(tx2);
-
-        let ty1 = (self.min.y - ray.origin.y) * inv.y;
-        let ty2 = (self.max.y - ray.origin.y) * inv.y;
-
-        tmin = tmin.max(ty1.min(ty2));
-        tmax = tmax.min(ty1.max(ty2));
-
-        let tz1 = (self.min.z - ray.origin.z) * inv.z;
-        let tz2 = (self.max.z - ray.origin.z) * inv.z;
-
-        tmin = tmin.max(tz1.min(tz2));
-        tmax = tmax.min(tz1.max(tz2));
+        let tmin = tx1.min(tx2).max(ty1.min(ty2)).max(tz1.min(tz2));
+        let tmax = tx1.max(tx2).min(ty1.max(ty2)).min(tz1.max(tz2));
 
         tmax >= tmin && tmax >= 0.0
     }

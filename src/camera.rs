@@ -157,10 +157,7 @@ impl Camera {
             - self.position)
             .normalize();
 
-        Ray {
-            origin: self.position,
-            dir,
-        }
+        Ray::new(self.position, dir)
     }
 
     /// Sets the position of the camera. This regenerates the view and projection matrix, so is fairly slow.

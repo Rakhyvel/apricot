@@ -14,6 +14,7 @@ use super::{frustum::Frustum, plane::Plane, ray::Ray, sphere::Sphere};
 pub struct AABB {
     pub min: nalgebra_glm::Vec3,
     pub max: nalgebra_glm::Vec3,
+    // pre-computed
     center: nalgebra_glm::Vec3,
 }
 

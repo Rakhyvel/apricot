@@ -2,6 +2,7 @@
 
 use std::{cell::RefCell, collections::HashMap, f32::consts::PI, fmt::Debug};
 
+use nalgebra_glm::{Mat4, Vec3};
 use obj::{load_obj, Obj, TexturedVertex};
 
 use crate::tri::Tri;
@@ -538,6 +539,13 @@ impl ModelComponent {
 
     pub fn get_model_matrix(&self) -> nalgebra_glm::Mat4 {
         self.model_matrix
+    }
+
+    pub fn get_model_matrix_with_position(&self, position: Vec3) -> Mat4 {
+        nalgebra_glm::scale(
+            &nalgebra_glm::translate(&nalgebra_glm::one(), &position),
+            &self.scale,
+        )
     }
 
     fn regen_model_matrix(&mut self) {

@@ -1,6 +1,9 @@
 use std::borrow::Borrow;
 
-use crate::render_core::LinePathComponent;
+use crate::{
+    high_precision::{self, WorldPosition},
+    render_core::LinePathComponent,
+};
 
 use super::{
     bvh::BVH,
@@ -10,6 +13,7 @@ use super::{
 };
 
 use hecs::{Entity, World};
+use nalgebra_glm::Vec3;
 
 impl RenderContext {
     pub fn render_3d_models_system(
@@ -17,10 +21,13 @@ impl RenderContext {
         world: &mut World,
         directional_light: &DirectionalLightSource,
         bvh: &BVH<Entity>,
+        hp_camera: Option<&high_precision::Camera>,
         debug: bool,
     ) {
+        // Set to "3d" program (defined by user)
         self.set_program_from_id(self.get_program_id_from_name("3d").unwrap());
 
+        // Set the directional light direction
         let u_sun_dir = self.get_program_uniform("u_sun_dir").expect("erm lol");
         unsafe {
             gl::Uniform3f(
@@ -31,6 +38,7 @@ impl RenderContext {
             );
         }
 
+        // TODO: Not sure what goes here
         unsafe {
             gl::Viewport(
                 0,
@@ -45,6 +53,7 @@ impl RenderContext {
             gl::Clear(gl::COLOR_BUFFER_BIT | gl::DEPTH_BUFFER_BIT | gl::STENCIL_BUFFER_BIT);
         }
 
+        // TODO: Not sure what goes here
         let (light_view_matrix, light_proj_matrix) =
             directional_light.shadow_camera.view_proj_matrices();
         let u_light_matrix = Uniform::new(self.get_current_program_id(), "light_mvp").unwrap();
@@ -58,14 +67,30 @@ impl RenderContext {
             );
         }
 
+        // Get the camera frustum, view matrix, and proj matrix
         let camera_frustum = &self.camera.borrow().frustum();
-
         let (view_matrix, proj_matrix) = self.camera.borrow().view_proj_matrices();
+
+        // Render each model in the BVH that's inside the frustum
         for model_id in bvh.iter_frustum(camera_frustum, debug) {
             let model = world.get::<&mut ModelComponent>(model_id).unwrap();
             let mesh = self.get_mesh_from_id(model.mesh_id).unwrap();
             let texture = self.get_texture_from_id(model.texture_id).unwrap();
-            let model_matrix = model.get_model_matrix();
+
+            // If a high precision camera and WorldPosition are both present, compute the model amtrix from
+            // the camera-relative f64 offset cast to f32.
+            // Otherwise, fallback to existing f32 model matrix
+            let model_matrix = match hp_camera {
+                Some(hp) => {
+                    if let Ok(wp) = world.get::<&WorldPosition>(model_id) {
+                        let relative_pos: Vec3 = nalgebra_glm::convert(wp.pos - hp.world_pos);
+                        model.get_model_matrix_with_position(relative_pos)
+                    } else {
+                        model.get_model_matrix()
+                    }
+                }
+                None => model.get_model_matrix(),
+            };
 
             if model.outlined {
                 unsafe {

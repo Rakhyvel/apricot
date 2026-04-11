@@ -157,14 +157,24 @@ impl RenderContext {
         }
     }
 
-    pub fn render_3d_line_paths(&self, world: &World) {
+    pub fn render_3d_line_paths(&self, world: &World, hp_camera: Option<&high_precision::Camera>) {
         unsafe {
             gl::Enable(gl::BLEND);
             gl::BlendFunc(gl::SRC_ALPHA, gl::ONE_MINUS_SRC_ALPHA);
         }
         let (view_matrix, proj_matrix) = self.camera.borrow().view_proj_matrices();
-        for (_entity, line_path) in world.query::<&LinePathComponent>().iter() {
-            self.draw_line_path(line_path, view_matrix, proj_matrix)
+        for (entity, line_path) in world.query::<&LinePathComponent>().iter() {
+            let position = match hp_camera {
+                Some(hp) => {
+                    if let Ok(wp) = world.get::<&WorldPosition>(entity) {
+                        nalgebra_glm::convert(wp.pos - hp.world_pos)
+                    } else {
+                        line_path.position
+                    }
+                }
+                None => line_path.position,
+            };
+            self.draw_line_path_at(line_path, position, view_matrix, proj_matrix)
         }
     }
 }

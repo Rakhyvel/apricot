@@ -384,9 +384,10 @@ impl RenderContext {
         }
     }
 
-    pub fn draw_line_path(
+    pub fn draw_line_path_at(
         &self,
         line_path: &LinePathComponent,
+        position: Vec3,
         view_matrix: nalgebra_glm::Mat4,
         proj_matrix: nalgebra_glm::Mat4,
     ) {
@@ -396,7 +397,7 @@ impl RenderContext {
             gl::LineWidth(line_path.width);
 
             // Set uniforms
-            let model_matrix = nalgebra_glm::translate(&nalgebra_glm::one(), &line_path.position);
+            let model_matrix = nalgebra_glm::translate(&nalgebra_glm::one(), &position);
 
             let u_model_matrix = self.get_program_uniform("model").unwrap();
             let u_view_matrix = self.get_program_uniform("view").unwrap();

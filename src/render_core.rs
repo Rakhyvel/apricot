@@ -30,8 +30,8 @@ pub struct RenderContext {
     program_manager: RefCell<ResourceManager<Program, ProgramId>>,
     font_manager: RefCell<FontManager>,
 
-    // Deletion queue
-    deletion_queue: DeletionQueue,
+    // Queues
+    deletion_queue: RefCell<DeletionQueue>,
 
     // Updated by the app
     pub int_screen_resolution: nalgebra_glm::I32Vec2,
@@ -117,7 +117,7 @@ impl RenderContext {
             program_manager: RefCell::new(ResourceManager::new()),
             font_manager: RefCell::new(FontManager::new()),
 
-            deletion_queue: DeletionQueue::new(),
+            deletion_queue: RefCell::new(DeletionQueue::new()),
 
             int_screen_resolution: nalgebra_glm::I32Vec2::new(0, 0),
             camera_2d: Camera::new(
@@ -337,32 +337,32 @@ impl RenderContext {
         Uniform::new(self.get_current_program_id(), uniform_name)
     }
 
-    pub fn queue_vao_deletion(&mut self, vao: &mut Vao) {
-        self.deletion_queue.queue_vao(vao);
+    pub fn queue_vao_deletion(&self, vao: &mut Vao) {
+        self.deletion_queue.borrow_mut().queue_vao(vao);
     }
 
-    pub fn queue_buffer_deletion<T>(&mut self, buffer: &mut Buffer<T>) {
-        self.deletion_queue.queue_buffer(buffer);
+    pub fn queue_buffer_deletion<T>(&self, buffer: &mut Buffer<T>) {
+        self.deletion_queue.borrow_mut().queue_buffer(buffer);
     }
 
-    pub fn queue_texture_deletion(&mut self, texture: &mut Texture) {
-        self.deletion_queue.queue_texture(texture);
+    pub fn queue_texture_deletion(&self, texture: &mut Texture) {
+        self.deletion_queue.borrow_mut().queue_texture(texture);
     }
 
-    pub fn queue_program_deletion(&mut self, program: &mut Program) {
-        self.deletion_queue.queue_program(program);
+    pub fn queue_program_deletion(&self, program: &mut Program) {
+        self.deletion_queue.borrow_mut().queue_program(program);
     }
 
-    pub fn queue_shader_deletion(&mut self, shader: &mut Shader) {
-        self.deletion_queue.queue_shader(shader);
+    pub fn queue_shader_deletion(&self, shader: &mut Shader) {
+        self.deletion_queue.borrow_mut().queue_shader(shader);
     }
 
-    pub fn queue_fbo_deletion(&mut self, fbo: &mut Fbo) {
-        self.deletion_queue.queue_fbo(fbo);
+    pub fn queue_fbo_deletion(&self, fbo: &mut Fbo) {
+        self.deletion_queue.borrow_mut().queue_fbo(fbo);
     }
 
-    pub fn flush_deletion_queue(&mut self) {
-        self.deletion_queue.flush();
+    pub fn flush_deletion_queue(&self) {
+        self.deletion_queue.borrow_mut().flush();
     }
 
     pub fn draw(

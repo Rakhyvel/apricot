@@ -84,8 +84,7 @@ pub fn run(
 
     let _gl_context = window.gl_create_context().unwrap();
 
-    let _gl =
-        gl::load_with(|s| video_subsystem.gl_get_proc_address(s) as *const std::os::raw::c_void);
+    gl::load_with(|s| video_subsystem.gl_get_proc_address(s) as *const std::os::raw::c_void);
 
     window
         .subsystem()
@@ -122,8 +121,7 @@ pub fn run(
     };
 
     let initial_scene = init(&app);
-    let mut scene_stack: Vec<RefCell<Box<dyn Scene>>> = vec![];
-    scene_stack.push(initial_scene);
+    let scene_stack: Vec<RefCell<Box<dyn Scene>>> = vec![initial_scene];
 
     let time = Instant::now();
     let mut start = time.elapsed().as_millis();
@@ -228,26 +226,23 @@ impl App {
                     self.mouse_wheel = y as f32;
                 }
 
-                Event::Window { win_event, .. } => {
-                    if let WindowEvent::Resized(new_width, new_height) = win_event {
-                        self.window_size = nalgebra_glm::I32Vec2::new(new_width, new_height)
+                Event::Window {
+                    win_event: WindowEvent::Resized(new_width, new_height),
+                    ..
+                } => self.window_size = nalgebra_glm::I32Vec2::new(new_width, new_height),
+
+                Event::KeyDown {
+                    scancode: Some(sc), ..
+                } => {
+                    self.keys[sc as usize] = true;
+                    if self.keys[Scancode::Escape as usize] {
+                        self.running = false
                     }
                 }
 
-                Event::KeyDown { scancode, .. } => match scancode {
-                    Some(sc) => {
-                        self.keys[sc as usize] = true;
-                        if self.keys[Scancode::Escape as usize] {
-                            self.running = false
-                        }
-                    }
-                    None => {}
-                },
-
-                Event::KeyUp { scancode, .. } => match scancode {
-                    Some(sc) => self.keys[sc as usize] = false,
-                    None => {}
-                },
+                Event::KeyUp {
+                    scancode: Some(sc), ..
+                } => self.keys[sc as usize] = false,
 
                 _ => {}
             }

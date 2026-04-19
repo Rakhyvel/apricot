@@ -196,17 +196,17 @@ impl<T> Buffer<T> {
         Buffer::<T> {
             id,
             target,
-            phantom: PhantomData::<T>::default(),
+            phantom: PhantomData::<T> {},
         }
     }
 
     /// Set the buffer's data
-    pub fn set_data(&self, data: &Vec<T>) {
+    pub fn set_data(&self, data: &[T]) {
         self.bind();
         unsafe {
             gl::BufferData(
                 self.target,
-                (data.len() * std::mem::size_of::<T>()) as gl::types::GLsizeiptr,
+                std::mem::size_of_val(data) as gl::types::GLsizeiptr,
                 data.as_ptr() as *const gl::types::GLvoid,
                 gl::STATIC_DRAW,
             );
@@ -340,6 +340,7 @@ impl Uniform {
 // TODO: Rename OpenGlTexture, and rename TextureId to Texture
 #[derive(Clone)]
 /// An OpenGL Texture
+#[derive(Default)]
 pub struct Texture {
     pub id: GLuint,
 }
@@ -357,7 +358,7 @@ impl Texture {
     pub fn from_png(texture_filename: &'static str) -> Self {
         let texture = Texture::new();
         let path = Path::new(texture_filename);
-        texture.load(&path).unwrap();
+        texture.load(path).unwrap();
         texture
     }
 
@@ -581,13 +582,9 @@ impl Drop for Texture {
         print_any_errors();
     }
 }
-impl Default for Texture {
-    fn default() -> Self {
-        Self { id: 0 }
-    }
-}
 
 /// An OpenGL Frame Buffer Object
+#[derive(Default)]
 pub struct Fbo {
     pub id: GLuint,
 }
@@ -615,12 +612,6 @@ impl Fbo {
     pub fn unbind(&self) {
         unsafe { gl::BindFramebuffer(gl::FRAMEBUFFER, 0) }
         print_any_errors();
-    }
-}
-
-impl Default for Fbo {
-    fn default() -> Self {
-        Self { id: 0 }
     }
 }
 

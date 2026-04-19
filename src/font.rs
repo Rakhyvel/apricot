@@ -1,5 +1,6 @@
 //! This module deals with managing fonts
 
+use nalgebra_glm::{vec2, Vec2};
 use sdl2::{
     pixels::Color,
     rect::Rect,
@@ -63,8 +64,31 @@ impl Font {
         retval
     }
 
+    /// Measure how large the text would be if drawn
+    pub fn measure(&self, text: &str) -> Vec2 {
+        let mut width: f32 = 0.0;
+        let mut max_line_width: f32 = 0.0;
+        let mut height: f32 = self.height as f32;
+
+        for c in text.chars() {
+            if c == '\n' {
+                height += self.line_skip as f32;
+                max_line_width = max_line_width.max(width);
+                width = 0.0;
+                continue;
+            }
+            if !c.is_ascii_graphic() && !c.is_whitespace() {
+                continue;
+            }
+            let glyph = self.get_glyph(c as u8);
+            width += glyph.advance as f32;
+        }
+
+        vec2(max_line_width.max(width), height)
+    }
+
     /// Draw text in a font to the screen
-    pub fn draw(&self, pos: nalgebra_glm::Vec2, text: &str, renderer: &RenderContext) {
+    pub fn draw(&self, pos: Vec2, text: &str, renderer: &RenderContext) {
         let mut cursor = pos;
         for c in text.chars() {
             let c_byte: u8 = c as u8;
@@ -113,12 +137,12 @@ impl Font {
                 x_offset = 0;
                 y_offset += self.height;
             }
-            let src_rect = Rect::new(0, 0, surf.width() as u32, surf.height() as u32);
+            let src_rect = Rect::new(0, 0, surf.width(), surf.height());
             let dest_rect = Rect::new(
                 x_offset as i32,
                 y_offset as i32,
-                surf.width() as u32,
-                surf.height() as u32,
+                surf.width(),
+                surf.height(),
             );
             let _ = surf.set_blend_mode(sdl2::render::BlendMode::None);
             let _ = surf.blit(Some(src_rect), &mut mega_surface, Some(dest_rect));
@@ -190,6 +214,12 @@ impl FontManager {
     }
 }
 
+impl Default for FontManager {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl OpaqueId for FontId {
     fn new(id: usize) -> Self {
         FontId(id)
@@ -205,8 +235,8 @@ impl Glyph {
     pub fn new(rect: Rect, advance: i32) -> Self {
         Self {
             rect: Rectangle {
-                pos: nalgebra_glm::vec2(rect.x as f32, rect.y as f32),
-                size: nalgebra_glm::vec2(rect.w as f32, rect.h as f32),
+                pos: vec2(rect.x as f32, rect.y as f32),
+                size: vec2(rect.w as f32, rect.h as f32),
             },
             advance: advance as usize,
         }

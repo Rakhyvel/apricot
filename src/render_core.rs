@@ -167,6 +167,12 @@ impl RenderContext {
         *self.font.borrow()
     }
 
+    pub fn get_current_font(&self) -> Option<std::cell::Ref<'_, Font>> {
+        let id = self.get_current_font_id()?;
+        let manager = self.font_manager.borrow();
+        std::cell::Ref::filter_map(manager, |m| m.get_font_from_id(id)).ok()
+    }
+
     pub fn add_mesh(&self, mesh: Mesh, name: Option<&'static str>) -> MeshId {
         self.mesh_manager.borrow_mut().add(mesh, name)
     }
@@ -271,14 +277,7 @@ impl RenderContext {
 
     pub fn get_font_from_id(&self, id: FontId) -> Option<std::cell::Ref<'_, Font>> {
         let manager = self.font_manager.borrow();
-        if let Some(_font) = manager.get_font_from_id(id) {
-            // Map the Ref<TextureManager> to Ref<Texture>
-            Some(std::cell::Ref::map(manager, |m| {
-                m.get_font_from_id(id).unwrap()
-            }))
-        } else {
-            None
-        }
+        std::cell::Ref::filter_map(manager, |m| m.get_font_from_id(id)).ok()
     }
 
     pub fn get_mesh_id_from_name(&self, name: &'static str) -> Option<MeshId> {

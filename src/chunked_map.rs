@@ -121,9 +121,7 @@ impl Chunk {
 
         let mut i = 0;
         for y in 0..self.chunk_width {
-            let y = y;
             for x in 0..self.chunk_width {
-                let x = x;
                 // Left triangle |\
                 let offsets = vec![(0.0, 0.0), (1.0, 0.0), (0.0, 1.0)];
                 self.add_triangle(
@@ -264,8 +262,7 @@ impl ChunkedPerlinMap {
             nalgebra_glm::floor(&(pos / self.chunk_width as f32)) * self.chunk_width as f32;
         let mut map = PerlinMap::new(self.chunk_width);
         map.generate(self.level_of_detail, 10, self.seed, self.amplitude, chunk_p);
-        let retval = map.get_z_interpolated(pos - chunk_p);
-        retval
+        map.get_z_interpolated(pos - chunk_p)
     }
 
     fn generate_chunks(

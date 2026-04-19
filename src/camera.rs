@@ -108,7 +108,7 @@ impl Camera {
                 right,
                 bottom,
                 top,
-                near,
+                near: _,
                 far,
             } => {
                 let proj_matrix = nalgebra_glm::ortho(left, right, bottom, top, 0.1, far);

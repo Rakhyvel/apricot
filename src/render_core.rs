@@ -469,6 +469,20 @@ impl Default for RenderContext {
     }
 }
 
+impl Drop for RenderContext {
+    fn drop(&mut self) {
+        let mut deletion_queue = self.deletion_queue.borrow_mut();
+
+        self.mesh_manager
+            .borrow_mut()
+            .queue_all(&mut deletion_queue);
+        self.texture_manager
+            .borrow_mut()
+            .queue_all(&mut deletion_queue);
+        deletion_queue.flush();
+    }
+}
+
 impl<Resource, Id: OpaqueId + Debug> ResourceManager<Resource, Id> {
     pub fn new() -> Self {
         Self {
@@ -500,6 +514,26 @@ impl<Resource, Id: OpaqueId> Default for ResourceManager<Resource, Id> {
         Self {
             resources: vec![],
             keys: HashMap::new(),
+        }
+    }
+}
+
+impl ResourceManager<Mesh, MeshId> {
+    pub fn queue_all(&mut self, deletion_queue: &mut DeletionQueue) {
+        for mesh in self.resources.iter_mut() {
+            for geom in mesh.geometry.iter_mut() {
+                deletion_queue.queue_buffer(&mut geom.ibo);
+                deletion_queue.queue_buffer(&mut geom.vbo);
+                deletion_queue.queue_vao(&mut geom.vao);
+            }
+        }
+    }
+}
+
+impl ResourceManager<Texture, TextureId> {
+    pub fn queue_all(&mut self, deletion_queue: &mut DeletionQueue) {
+        for texture in self.resources.iter_mut() {
+            deletion_queue.queue_texture(texture);
         }
     }
 }

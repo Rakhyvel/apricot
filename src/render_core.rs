@@ -163,6 +163,10 @@ impl RenderContext {
         *self.font.borrow_mut() = Some(font);
     }
 
+    pub fn get_current_font_id(&self) -> Option<FontId> {
+        *self.font.borrow()
+    }
+
     pub fn add_mesh(&self, mesh: Mesh, name: Option<&'static str>) -> MeshId {
         self.mesh_manager.borrow_mut().add(mesh, name)
     }

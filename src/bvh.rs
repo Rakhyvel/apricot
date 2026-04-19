@@ -310,8 +310,7 @@ impl<Object: Copy + Clone> BVH<Object> {
         let mut stack = vec![];
         stack.push(self.root_id);
 
-        while stack.len() > 0 {
-            let index = stack.pop().unwrap();
+        while let Some(index) = stack.pop() {
             let node = self.node_at(index);
             println!("{} [label=\"{:?}\"]", index, node.volume);
 
@@ -419,6 +418,12 @@ impl<Object: Copy + Clone> BVH<Object> {
 
     fn set_volume(&mut self, id: BVHNodeId, volume: AABB) {
         self.node_at_mut(id).volume = volume
+    }
+}
+
+impl<Object: Copy + Clone> Default for BVH<Object> {
+    fn default() -> Self {
+        Self::new()
     }
 }
 

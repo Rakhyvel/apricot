@@ -88,6 +88,12 @@ impl AudioManager {
     }
 }
 
+impl Default for AudioManager {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl Drop for AudioManager {
     fn drop(&mut self) {
         println!("Audio manager dropped, btw!");

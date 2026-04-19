@@ -61,8 +61,7 @@ impl AABB {
 
     /// Determines whether or not an AABB intersects with a frustum
     pub fn within_frustum(&self, frustum: &Frustum, debug: bool) -> bool {
-        let mut i = 0;
-        for plane in frustum.planes() {
+        for (i, plane) in frustum.planes().iter().enumerate() {
             let vmax = self.get_furthest_corner(plane);
             let value = plane.normal().dot(&vmax) + plane.dist();
             // println!("{}", value);
@@ -81,7 +80,6 @@ impl AABB {
                 }
                 return in_sphere;
             }
-            i += 1;
         }
         true
     }
@@ -255,5 +253,11 @@ impl AABB {
                 self.min.z
             },
         )
+    }
+}
+
+impl Default for AABB {
+    fn default() -> Self {
+        Self::new()
     }
 }

@@ -5,7 +5,10 @@ use std::{cell::RefCell, collections::HashMap, f32::consts::PI, fmt::Debug};
 use nalgebra_glm::{Mat4, Vec3};
 use obj::{load_obj, Obj, TexturedVertex};
 
-use crate::tri::Tri;
+use crate::{
+    opengl::{DeletionQueue, Fbo, Shader},
+    tri::Tri,
+};
 
 use super::{
     aabb::AABB,
@@ -26,6 +29,9 @@ pub struct RenderContext {
     texture_manager: RefCell<ResourceManager<Texture, TextureId>>,
     program_manager: RefCell<ResourceManager<Program, ProgramId>>,
     font_manager: RefCell<FontManager>,
+
+    // Deletion queue
+    deletion_queue: DeletionQueue,
 
     // Updated by the app
     pub int_screen_resolution: nalgebra_glm::I32Vec2,
@@ -110,6 +116,8 @@ impl RenderContext {
             texture_manager: RefCell::new(ResourceManager::new()),
             program_manager: RefCell::new(ResourceManager::new()),
             font_manager: RefCell::new(FontManager::new()),
+
+            deletion_queue: DeletionQueue::new(),
 
             int_screen_resolution: nalgebra_glm::I32Vec2::new(0, 0),
             camera_2d: Camera::new(
@@ -327,6 +335,34 @@ impl RenderContext {
 
     pub fn get_program_uniform(&self, uniform_name: &str) -> Result<Uniform, &'static str> {
         Uniform::new(self.get_current_program_id(), uniform_name)
+    }
+
+    pub fn queue_vao_deletion(&mut self, vao: &mut Vao) {
+        self.deletion_queue.queue_vao(vao);
+    }
+
+    pub fn queue_buffer_deletion<T>(&mut self, buffer: &mut Buffer<T>) {
+        self.deletion_queue.queue_buffer(buffer);
+    }
+
+    pub fn queue_texture_deletion(&mut self, texture: &mut Texture) {
+        self.deletion_queue.queue_texture(texture);
+    }
+
+    pub fn queue_program_deletion(&mut self, program: &mut Program) {
+        self.deletion_queue.queue_program(program);
+    }
+
+    pub fn queue_shader_deletion(&mut self, shader: &mut Shader) {
+        self.deletion_queue.queue_shader(shader);
+    }
+
+    pub fn queue_fbo_deletion(&mut self, fbo: &mut Fbo) {
+        self.deletion_queue.queue_fbo(fbo);
+    }
+
+    pub fn flush_deletion_queue(&mut self) {
+        self.deletion_queue.flush();
     }
 
     pub fn draw(

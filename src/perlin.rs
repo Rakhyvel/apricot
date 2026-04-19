@@ -77,7 +77,7 @@ impl Particle {
             self.vel += grad / self.volume;
             self.vel += nalgebra_glm::vec3(0.0, 0.1, 0.0);
             if nalgebra_glm::length(&self.vel) > 0.0 {
-                self.vel = (2.0 as f32).sqrt() * nalgebra_glm::normalize(&self.vel);
+                self.vel = (2.0_f32).sqrt() * nalgebra_glm::normalize(&self.vel);
             }
             self.vel.z -= 1.0; // gravity
             self.pos += self.vel;
@@ -107,11 +107,10 @@ impl Particle {
 impl PerlinMap {
     /// Create a new 2D Perlin map
     pub fn new(map_width: usize) -> Self {
-        let mut retval = Self::default();
-
-        retval.map_width = map_width;
-
-        retval
+        Self {
+            map_width,
+            ..Self::default()
+        }
     }
 
     /// Fill in the map with noise
@@ -123,7 +122,7 @@ impl PerlinMap {
         amplitude: f32,
         offset: nalgebra_glm::Vec2,
     ) {
-        assert!(self.cells.len() == 0);
+        assert!(self.cells.is_empty());
         for y in 0..self.map_width {
             for x in 0..self.map_width {
                 self.cells.push(Cell {
@@ -193,17 +192,15 @@ impl PerlinMap {
         in_bound_neighbors.sort_by(|a, b| a.z.partial_cmp(&b.z).unwrap_or(Ordering::Greater));
 
         // Iterate over all sorted neighbors
-        for i in 0..in_bound_neighbors.len() {
-            let npos = in_bound_neighbors[i];
-
+        for npos in in_bound_neighbors {
             // Full height-different between positions
-            let diff = self.height(pos) - in_bound_neighbors[i].z;
+            let diff = self.height(pos) - npos.z;
             if diff == 0.0 {
                 continue;
             }
 
             // The amount of excess difference
-            let excess = if in_bound_neighbors[i].z > 0.1 {
+            let excess = if npos.z > 0.1 {
                 diff.abs() - MAX_DIFF
             } else {
                 diff.abs()
@@ -451,7 +448,7 @@ fn intersect(
     let s = ray_origin - v0;
     let u = f * nalgebra_glm::dot(&s, &h);
 
-    if u < 0.0 || u > 1.0 {
+    if !(0.0..=1.0).contains(&u) {
         return None;
     }
 
@@ -475,6 +472,5 @@ fn tri_normal(
 ) -> nalgebra_glm::Vec3 {
     let edge1 = v1 - v0;
     let edge2 = v2 - v0;
-    let normal = nalgebra_glm::cross(&edge1, &edge2).normalize();
-    normal
+    nalgebra_glm::cross(&edge1, &edge2).normalize()
 }

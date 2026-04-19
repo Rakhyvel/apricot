@@ -72,8 +72,8 @@ pub struct ModelComponent {
 }
 
 pub struct LinePathComponent {
-    vao: Vao,
-    vertices_buffer: Buffer<f32>,
+    pub vao: Vao,
+    pub vertices_buffer: Buffer<f32>,
     num_vertices: i32,
 
     pub width: f32,

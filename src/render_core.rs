@@ -100,7 +100,7 @@ pub enum GeometryDataIndex {
 
 impl RenderContext {
     pub fn new() -> Self {
-        let retval = Self {
+        Self {
             camera: RefCell::new(Camera::default()),
             program: RefCell::new(None),
             color: RefCell::new(nalgebra_glm::vec4(0.0, 0.0, 0.0, 1.0)),
@@ -125,12 +125,7 @@ impl RenderContext {
                     far: 10.0,
                 },
             ),
-        };
-
-        // TODO: Add meshes
-        // TODO: Add textures (?)
-
-        retval
+        }
     }
 
     pub fn set_camera(&self, camera: Camera) {
@@ -139,8 +134,8 @@ impl RenderContext {
 
     pub fn set_program(&self, name: Option<&'static str>) {
         let manager = self.program_manager.borrow();
-        if name.is_some() {
-            let program_id = manager.get_id_from_name(name.unwrap()).unwrap();
+        if let Some(name) = name {
+            let program_id = manager.get_id_from_name(name).unwrap();
             *self.program.borrow_mut() = Some(program_id);
             let program = manager.get_from_id(program_id).unwrap();
             program.set();
@@ -373,7 +368,7 @@ impl RenderContext {
                 gl::TRIANGLES,
                 mesh.indices.len() as i32,
                 gl::UNSIGNED_INT,
-                0 as *const _,
+                std::ptr::null(),
             );
 
             // Unbind all buffers
@@ -437,6 +432,12 @@ impl RenderContext {
     }
 }
 
+impl Default for RenderContext {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl<Resource, Id: OpaqueId + Debug> ResourceManager<Resource, Id> {
     pub fn new() -> Self {
         Self {
@@ -448,8 +449,8 @@ impl<Resource, Id: OpaqueId + Debug> ResourceManager<Resource, Id> {
     pub fn add(&mut self, res: Resource, name: Option<&'static str>) -> Id {
         let id = Id::new(self.resources.len());
         self.resources.push(res);
-        if name.is_some() {
-            self.keys.insert(name.unwrap(), id);
+        if let Some(name) = name {
+            self.keys.insert(name, id);
         }
         id
     }

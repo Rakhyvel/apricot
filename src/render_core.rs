@@ -349,14 +349,6 @@ impl RenderContext {
         self.deletion_queue.borrow_mut().queue_texture(texture);
     }
 
-    pub fn queue_program_deletion(&self, program: &mut Program) {
-        self.deletion_queue.borrow_mut().queue_program(program);
-    }
-
-    pub fn queue_shader_deletion(&self, shader: &mut Shader) {
-        self.deletion_queue.borrow_mut().queue_shader(shader);
-    }
-
     pub fn queue_fbo_deletion(&self, fbo: &mut Fbo) {
         self.deletion_queue.borrow_mut().queue_fbo(fbo);
     }

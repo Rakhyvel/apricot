@@ -64,11 +64,8 @@ impl Shader {
 
 impl Drop for Shader {
     fn drop(&mut self) {
-        if self.id != 0 {
-            eprintln!(
-                "WARNING: Shader {} dropped without being queued for deletion!",
-                self.id
-            );
+        unsafe {
+            gl::DeleteShader(self.id);
         }
     }
 }
@@ -146,11 +143,8 @@ impl Program {
 
 impl Drop for Program {
     fn drop(&mut self) {
-        if self.id != 0 {
-            eprintln!(
-                "WARNING: Program {} dropped without being queued for deletion!",
-                self.id
-            );
+        unsafe {
+            gl::DeleteProgram(self.id);
         }
     }
 }
@@ -351,16 +345,6 @@ impl DeletionQueue {
     pub fn queue_texture(&mut self, texture: &mut Texture) {
         self.textures.push(texture.id);
         texture.id = 0;
-    }
-
-    pub fn queue_program(&mut self, program: &mut Program) {
-        self.programs.push(program.id);
-        program.id = 0;
-    }
-
-    pub fn queue_shader(&mut self, shader: &mut Shader) {
-        self.shaders.push(shader.id);
-        shader.id = 0;
     }
 
     pub fn queue_fbo(&mut self, fbo: &mut Fbo) {

@@ -457,7 +457,7 @@ impl RenderContext {
 
             line_path.vertices_buffer.bind();
             line_path.vao.enable(0);
-            gl::DrawArrays(gl::LINE_LOOP, 0, line_path.num_vertices);
+            gl::DrawArrays(gl::LINE_STRIP, 0, line_path.num_vertices);
             line_path.vertices_buffer.unbind();
         }
     }

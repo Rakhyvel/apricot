@@ -457,8 +457,8 @@ impl RenderContext {
                 line_path.color.w,
             );
 
-            line_path.vertices_buffer.bind();
             gl::BindVertexArray(line_path.vao.id);
+            line_path.vertices_buffer.bind();
             gl::EnableVertexAttribArray(0);
             gl::EnableVertexAttribArray(1);
             gl::DrawArrays(gl::LINE_STRIP, 0, line_path.num_vertices);

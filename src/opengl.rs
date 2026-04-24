@@ -287,7 +287,7 @@ impl Vao {
         self.setup(loc);
     }
 
-    pub fn bind(&self, loc: u32) {
+    fn bind(&self, loc: u32) {
         unsafe {
             gl::EnableVertexAttribArray(loc);
             gl::BindVertexArray(self.id);

@@ -392,8 +392,8 @@ impl RenderContext {
                 mesh.geometry[i].vbo.bind();
                 mesh.geometry[i].ibo.bind();
                 // mesh.geometry[i].vao.enable(i as u32);
-                gl::BindVertexArray(mesh.geometry[i].vao.id);
                 gl::EnableVertexAttribArray(i as u32);
+                // gl::BindVertexArray(mesh.geometry[i].vao.id);
                 gl::VertexAttribPointer(
                     i as u32,
                     3,

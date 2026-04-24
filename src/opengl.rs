@@ -262,6 +262,7 @@ impl Vao {
     }
 
     pub fn set_custom(&self, loc: u32, num_components: i32, stride: i32, offset: i32) {
+        self.bind(loc);
         unsafe {
             gl::EnableVertexAttribArray(loc);
             gl::BindVertexArray(self.id);

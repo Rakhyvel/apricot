@@ -460,6 +460,9 @@ impl RenderContext {
             line_path.vertices_buffer.bind();
             line_path.vao.bind_vao();
             gl::DrawArrays(gl::LINE_STRIP, 0, line_path.num_vertices);
+            unsafe {
+                gl::DisableVertexAttribArray(1);
+            }
             line_path.vertices_buffer.unbind();
 
             gl::Disable(gl::BLEND);

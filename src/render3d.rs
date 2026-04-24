@@ -109,10 +109,6 @@ impl RenderContext {
             directional_light.activate_framebuffer(self.get_current_program_id());
 
             self.draw(mesh.borrow(), model_matrix, view_matrix, proj_matrix);
-
-            unsafe {
-                gl::Disable(gl::CULL_FACE);
-            }
         }
         // println!("{:?}", rendered);
     }

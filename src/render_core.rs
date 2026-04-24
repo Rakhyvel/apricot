@@ -391,10 +391,7 @@ impl RenderContext {
             for i in 0..mesh.geometry.len() {
                 mesh.geometry[i].vbo.bind();
                 mesh.geometry[i].ibo.bind();
-                unsafe {
-                    gl::BindVertexArray(mesh.geometry[i].vao.id);
-                    gl::EnableVertexAttribArray(i as u32);
-                }
+                mesh.geometry[i].vao.enable(i as u32);
             }
 
             // Make the render call!

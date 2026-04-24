@@ -645,7 +645,7 @@ impl LinePathComponent {
         vao.set_custom(1, 1, 4, 3);
 
         // Generate vertices for the elliptical orbit
-        let num_vertices = vertices.len() as i32 / 4; // 4 components per vertex (x,y,z, alpha)
+        let num_vertices = vertices.len() as i32 / 3; // 4 components per vertex (x,y,z, alpha)
 
         vertices_buffer.unbind();
 

@@ -391,17 +391,7 @@ impl RenderContext {
             for i in 0..mesh.geometry.len() {
                 mesh.geometry[i].vbo.bind();
                 mesh.geometry[i].ibo.bind();
-                // mesh.geometry[i].vao.enable(i as u32);
-                gl::BindVertexArray(mesh.geometry[i].vao.id);
-                gl::EnableVertexAttribArray(i as u32);
-                gl::VertexAttribPointer(
-                    i as u32,
-                    3,
-                    gl::FLOAT,
-                    gl::FALSE,
-                    (3 * std::mem::size_of::<f32>()) as i32,
-                    std::ptr::null(),
-                );
+                mesh.geometry[i].vao.enable(i as u32);
             }
 
             // Make the render call!
@@ -469,22 +459,24 @@ impl RenderContext {
 
             gl::BindVertexArray(line_path.vao.id);
             line_path.vertices_buffer.bind();
-
-            println!("binding VAO id: {}", line_path.vao.id);
-            println!("num_vertices: {}", line_path.num_vertices);
-
-            // Check which VAO is actually bound
-            let mut current_vao: i32 = 0;
-            gl::GetIntegerv(gl::VERTEX_ARRAY_BINDING, &mut current_vao);
-            println!("currently bound VAO: {}", current_vao);
-
-            // Check which buffer is actually bound
-            let mut current_buffer: i32 = 0;
-            gl::GetIntegerv(gl::ARRAY_BUFFER_BINDING, &mut current_buffer);
-            println!("currently bound buffer: {}", current_buffer);
-
-            println!("vertices_buffer id: {}", line_path.vertices_buffer.id); // or however you access the id
-
+            gl::EnableVertexAttribArray(0);
+            gl::VertexAttribPointer(
+                0,
+                3,
+                gl::FLOAT,
+                gl::FALSE,
+                (4 * std::mem::size_of::<f32>()) as i32,
+                0 as *const _,
+            );
+            gl::EnableVertexAttribArray(1);
+            gl::VertexAttribPointer(
+                1,
+                1,
+                gl::FLOAT,
+                gl::FALSE,
+                (4 * std::mem::size_of::<f32>()) as i32,
+                (3 * std::mem::size_of::<f32>()) as *const _,
+            );
             gl::DrawArrays(gl::LINE_STRIP, 0, line_path.num_vertices);
             line_path.vertices_buffer.unbind();
 

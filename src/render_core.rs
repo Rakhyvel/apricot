@@ -420,6 +420,8 @@ impl RenderContext {
         self.set_program(Some("line"));
         unsafe {
             gl::Enable(gl::DEPTH_TEST);
+            gl::Enable(gl::BLEND);
+            gl::BlendFunc(gl::SRC_ALPHA, gl::ONE_MINUS_SRC_ALPHA);
             gl::LineWidth(line_path.width);
 
             // Set uniforms
@@ -457,8 +459,11 @@ impl RenderContext {
 
             line_path.vertices_buffer.bind();
             line_path.vao.enable(0);
+            line_path.vao.enable(1); // per-vertex alpha?
             gl::DrawArrays(gl::LINE_STRIP, 0, line_path.num_vertices);
             line_path.vertices_buffer.unbind();
+
+            gl::Disable(gl::BLEND);
         }
     }
 }
@@ -636,10 +641,11 @@ impl LinePathComponent {
         let vertices_buffer: Buffer<f32> = Buffer::gen(gl::ARRAY_BUFFER);
 
         vertices_buffer.set_data(&vertices);
-        vao.set(0);
+        vao.set_custom(0, 3, 4, 0);
+        vao.set_custom(1, 1, 4, 3);
 
         // Generate vertices for the elliptical orbit
-        let num_vertices = vertices.len() as i32 / 3; // 3 components per vertex (x,y,z)
+        let num_vertices = vertices.len() as i32 / 4; // 4 components per vertex (x,y,z, alpha)
 
         vertices_buffer.unbind();
 
@@ -721,7 +727,7 @@ impl Mesh {
     }
 
     pub fn from_obj(obj_file_data: &[u8]) -> Self {
-        let obj: Obj<TexturedVertex> = load_obj(&obj_file_data[..]).unwrap();
+        let obj: Obj<TexturedVertex> = load_obj(obj_file_data).unwrap();
         let vb: Vec<TexturedVertex> = obj.vertices;
 
         let indices = vec_u32_from_vec_u16(&obj.indices);

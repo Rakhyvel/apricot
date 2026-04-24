@@ -458,8 +458,7 @@ impl RenderContext {
             );
 
             line_path.vertices_buffer.bind();
-            line_path.vao.bind(0);
-            line_path.vao.bind(1); // per-vertex alpha?
+            line_path.vao.bind_vao();
             gl::DrawArrays(gl::LINE_STRIP, 0, line_path.num_vertices);
             line_path.vertices_buffer.unbind();
 

@@ -295,13 +295,6 @@ impl Vao {
         print_any_errors();
     }
 
-    pub fn bind_vao(&self) {
-        unsafe {
-            gl::BindVertexArray(self.id);
-        }
-        print_any_errors();
-    }
-
     fn setup(&self, loc: u32) {
         unsafe {
             gl::VertexAttribPointer(

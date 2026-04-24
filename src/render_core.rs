@@ -458,8 +458,6 @@ impl RenderContext {
             );
 
             gl::BindVertexArray(line_path.vao.id);
-            println!("binding VAO id: {}", line_path.vao.id);
-            println!("num_vertices: {}", line_path.num_vertices);
             line_path.vertices_buffer.bind();
             gl::EnableVertexAttribArray(0);
             gl::EnableVertexAttribArray(1);

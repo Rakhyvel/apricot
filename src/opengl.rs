@@ -261,6 +261,22 @@ impl Vao {
         self.setup(loc);
     }
 
+    pub fn set_custom(&self, loc: u32, num_components: i32, stride: i32, offset: i32) {
+        unsafe {
+            gl::BindVertexArray(self.id);
+            gl::EnableVertexAttribArray(loc);
+            gl::VertexAttribPointer(
+                loc,
+                num_components,
+                gl::FLOAT,
+                gl::FALSE,
+                (stride * std::mem::size_of::<f32>() as i32),
+                (offset * std::mem::size_of::<f32>() as i32) as *const _,
+            );
+        }
+        print_any_errors();
+    }
+
     /// Enable this VAO
     pub fn enable(&self, loc: u32) {
         unsafe {

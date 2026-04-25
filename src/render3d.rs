@@ -50,7 +50,6 @@ impl RenderContext {
             gl::CullFace(gl::BACK);
             gl::Enable(gl::DEPTH_TEST);
             gl::StencilOp(gl::KEEP, gl::REPLACE, gl::REPLACE);
-            gl::Clear(gl::COLOR_BUFFER_BIT | gl::DEPTH_BUFFER_BIT | gl::STENCIL_BUFFER_BIT);
         }
 
         // TODO: Not sure what goes here

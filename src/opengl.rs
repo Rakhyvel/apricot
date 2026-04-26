@@ -258,23 +258,12 @@ impl Vao {
     /// Bind and use this VAO
     pub fn set(&self, loc: u32) {
         self.bind(loc);
-        self.setup(loc);
+        self.setup(loc, 3, 3, 0);
     }
 
-    pub fn set_custom(&self, loc: u32, num_components: i32, stride: i32, offset: i32) {
-        unsafe {
-            gl::BindVertexArray(self.id);
-            gl::EnableVertexAttribArray(loc);
-            gl::VertexAttribPointer(
-                loc,
-                num_components,
-                gl::FLOAT,
-                gl::FALSE,
-                (stride * std::mem::size_of::<f32>() as i32),
-                (offset * std::mem::size_of::<f32>() as i32) as *const _,
-            );
-        }
-        print_any_errors();
+    pub fn set_custom(&self, loc: u32, num_components: usize, stride: usize, offset: usize) {
+        self.bind(loc);
+        self.setup(loc, num_components, stride, offset);
     }
 
     /// Enable this VAO
@@ -283,7 +272,7 @@ impl Vao {
             gl::EnableVertexAttribArray(loc);
         }
         print_any_errors();
-        self.setup(loc);
+        self.setup(loc, 3, 3, 0);
     }
 
     fn bind(&self, loc: u32) {
@@ -294,15 +283,15 @@ impl Vao {
         print_any_errors();
     }
 
-    fn setup(&self, loc: u32) {
+    fn setup(&self, loc: u32, num_components: usize, stride: usize, offset: usize) {
         unsafe {
             gl::VertexAttribPointer(
                 loc,
-                3,
+                num_components as i32,
                 gl::FLOAT,
                 gl::FALSE,
-                (3 * std::mem::size_of::<f32>()) as GLint,
-                null(),
+                (stride * std::mem::size_of::<f32>()) as GLint,
+                (offset * std::mem::size_of::<f32>()) as *const _,
             );
         }
         print_any_errors();

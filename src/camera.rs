@@ -47,6 +47,8 @@ pub struct Camera {
     lower_left_corner: nalgebra_glm::Vec3,
     horizontal: nalgebra_glm::Vec3,
     vertical: nalgebra_glm::Vec3,
+
+    aspect_ratio: f32,
 }
 
 impl Camera {
@@ -56,6 +58,7 @@ impl Camera {
         lookat: nalgebra_glm::Vec3,
         up: nalgebra_glm::Vec3,
         projection_kind: ProjectionKind,
+        aspect_ratio: f32,
     ) -> Self {
         let mut retval = Self {
             position,
@@ -67,6 +70,7 @@ impl Camera {
             lower_left_corner: nalgebra_glm::zero(),
             horizontal: nalgebra_glm::zero(),
             vertical: nalgebra_glm::zero(),
+            aspect_ratio,
         };
         retval.regen_view_proj_matrices();
         retval
@@ -82,15 +86,13 @@ impl Camera {
         let view_matrix = nalgebra_glm::look_at(&self.position, &self.lookat, &self.up);
         let (proj_matrix, lower_left_corner, horiz, vert) = match self.projection_kind {
             ProjectionKind::Perspective { fov, far } => {
-                // Perspective projection
-                let aspect_ratio = 800.0 / 600.0;
-                let proj_matrix = nalgebra_glm::perspective(aspect_ratio, fov, 0.1, far);
+                let proj_matrix = nalgebra_glm::perspective(self.aspect_ratio, fov, 0.1, far);
 
                 // Viewport spans at near plane
                 let theta = fov.to_radians();
                 let h = (theta / 2.0).tan(); // near plane distance = 1.0
                 let viewport_height = 2.0 * h;
-                let viewport_width = aspect_ratio * viewport_height;
+                let viewport_width = self.aspect_ratio * viewport_height;
 
                 let w = (self.position - self.lookat).normalize();
                 let u = self.up.cross(&w).normalize();
@@ -169,6 +171,11 @@ impl Camera {
     /// Sets the lookat of the camera. This regenerates the view and projection matrix, so is fairly slow.
     pub fn set_lookat(&mut self, lookat: nalgebra_glm::Vec3) {
         self.lookat = lookat;
+        self.regen_view_proj_matrices()
+    }
+
+    pub fn set_aspect_ratio(&mut self, aspect_ratio: f32) {
+        self.aspect_ratio = aspect_ratio;
         self.regen_view_proj_matrices()
     }
 

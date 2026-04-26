@@ -275,6 +275,13 @@ impl Vao {
         self.setup(loc, 3, 3, 0);
     }
 
+    pub fn enable_custom(&self, loc: u32, num_components: usize, stride: usize, offset: usize) {
+        unsafe {
+            gl::EnableVertexAttribArray(loc);
+        }
+        self.setup(loc, num_components, stride, offset);
+    }
+
     fn bind(&self, loc: u32) {
         unsafe {
             gl::EnableVertexAttribArray(loc);

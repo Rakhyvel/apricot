@@ -179,6 +179,10 @@ impl Camera {
         self.regen_view_proj_matrices()
     }
 
+    pub fn aspect_ratio(&self) -> f32 {
+        self.aspect_ratio
+    }
+
     /// Retrieves the position of the camera
     pub fn position(&self) -> nalgebra_glm::Vec3 {
         self.position

@@ -284,8 +284,8 @@ impl Vao {
 
     fn bind(&self, loc: u32) {
         unsafe {
-            gl::EnableVertexAttribArray(loc);
             gl::BindVertexArray(self.id);
+            gl::EnableVertexAttribArray(loc);
         }
         print_any_errors();
     }

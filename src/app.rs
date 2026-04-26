@@ -229,7 +229,13 @@ impl App {
                 Event::Window {
                     win_event: WindowEvent::Resized(new_width, new_height),
                     ..
-                } => self.window_size = nalgebra_glm::I32Vec2::new(new_width, new_height),
+                } => {
+                    self.window_size = nalgebra_glm::I32Vec2::new(new_width, new_height);
+                    let mut camera = self.renderer.camera.borrow_mut();
+                    let mut camera_2d = self.renderer.camera_2d.borrow_mut();
+                    camera.set_aspect_ratio(new_width as f32 / new_height as f32);
+                    camera_2d.set_aspect_ratio(new_width as f32 / new_height as f32);
+                }
 
                 Event::KeyDown {
                     scancode: Some(sc), ..

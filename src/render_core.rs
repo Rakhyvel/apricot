@@ -134,6 +134,7 @@ impl RenderContext {
                     near: 0.1,
                     far: 10.0,
                 },
+                4.0 / 3.0,
             ),
         }
     }

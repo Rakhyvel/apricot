@@ -262,8 +262,19 @@ impl Vao {
     }
 
     pub fn set_custom(&self, loc: u32, num_components: usize, stride: usize, offset: usize) {
-        self.bind(loc);
-        self.setup(loc, num_components, stride, offset);
+        unsafe {
+            gl::BindVertexArray(self.id);
+            gl::EnableVertexAttribArray(loc);
+            gl::VertexAttribPointer(
+                loc,
+                num_components as i32,
+                gl::FLOAT,
+                gl::FALSE,
+                (stride * std::mem::size_of::<f32>()) as GLint,
+                (offset * std::mem::size_of::<f32>()) as *const _,
+            );
+        }
+        print_any_errors();
     }
 
     /// Enable this VAO

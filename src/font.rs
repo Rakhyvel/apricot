@@ -1,12 +1,7 @@
 //! This module deals with managing fonts
 
 use nalgebra_glm::{vec2, Vec2};
-use sdl2::{
-    pixels::Color,
-    rect::Rect,
-    surface::Surface,
-    ttf::{FontStyle, Sdl2TtfContext},
-};
+use sdl2::{pixels::Color, rect::Rect, surface::Surface, ttf::Sdl2TtfContext};
 use std::{collections::HashMap, path::Path};
 
 use super::{
@@ -29,7 +24,6 @@ pub struct Font {
     _ascender: usize,
     _descender: usize,
     line_skip: usize, //< Used for newlines, the amount of pixels to increment Y cursor by
-    _style: FontStyle,
 }
 
 /// Opaque type used by a FontManager to associate fonts.
@@ -46,7 +40,7 @@ pub struct FontManager {
 
 impl Font {
     /// Create a new font
-    pub fn new(font: &sdl2::ttf::Font, _style: FontStyle, renderer: &RenderContext) -> Self {
+    pub fn new(font: &sdl2::ttf::Font, renderer: &RenderContext) -> Self {
         let height = font.height() as usize;
         let _ascender = font.ascent() as usize;
         let _descender = font.descent() as usize;
@@ -58,7 +52,6 @@ impl Font {
             _ascender,
             _descender,
             line_skip,
-            _style,
         };
         retval.pack_gylphs(font, renderer);
         retval
@@ -107,7 +100,6 @@ impl Font {
                 pos: cursor,
                 size: glyph.rect.size,
             };
-            // TODO: Color mod in the 2D shader
             renderer.copy_texture(dest_rect, self.cache_texture.unwrap(), glyph.rect);
             cursor.x += glyph.advance as f32;
         }
@@ -188,10 +180,11 @@ impl FontManager {
         let id = FontId::new(self.fonts.len());
 
         // Load font here with self.ttf_context, ensuring it has the same lifetime as FontManager
-        let ttf_font = self.ttf_context.load_font(Path::new(path), size).unwrap();
+        let mut ttf_font = self.ttf_context.load_font(Path::new(path), size).unwrap();
+        ttf_font.set_style(style);
 
         // Create a new Font instance with a reference to ttf_font
-        let font = Font::new(&ttf_font, style, renderer);
+        let font = Font::new(&ttf_font, renderer);
 
         self.fonts.push(font);
         self.keys.insert(name, id);

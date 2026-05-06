@@ -100,7 +100,13 @@ impl Font {
                 pos: cursor,
                 size: glyph.rect.size,
             };
-            renderer.copy_texture(dest_rect, self.cache_texture.unwrap(), glyph.rect);
+            let color_mod = renderer.color.borrow();
+            renderer.copy_texture(
+                dest_rect,
+                self.cache_texture.unwrap(),
+                glyph.rect,
+                &color_mod,
+            );
             cursor.x += glyph.advance as f32;
         }
     }

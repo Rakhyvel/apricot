@@ -1,5 +1,7 @@
 use std::borrow::Borrow;
 
+use nalgebra_glm::{vec4, Vec4};
+
 use super::{
     rectangle::Rectangle,
     render_core::{RenderContext, TextureId},
@@ -150,7 +152,12 @@ impl RenderContext {
             let dest = dest_coords[i];
             let texture_dest = spritesheet_coords[i];
 
-            self.copy_texture(dest, nine_slice.texture, texture_dest);
+            self.copy_texture(
+                dest,
+                nine_slice.texture,
+                texture_dest,
+                &vec4(1.0, 1.0, 1.0, 1.0),
+            );
         }
     }
 
@@ -159,8 +166,13 @@ impl RenderContext {
         font.draw(pos, text, self);
     }
 
-    // TODO: Rename `copy_texture` or something, implement `fill_rect` with 2d-color.frag shader
-    pub fn copy_texture(&self, dest: Rectangle, texture_id: TextureId, texture_dest: Rectangle) {
+    pub fn copy_texture(
+        &self,
+        dest: Rectangle,
+        texture_id: TextureId,
+        texture_dest: Rectangle,
+        color_mod: &Vec4,
+    ) {
         let res = self.int_screen_resolution.borrow();
         unsafe {
             gl::Viewport(0, 0, res.x, res.y);
@@ -204,6 +216,16 @@ impl RenderContext {
                 u_sprite_size.id,
                 texture_dest.size.x / texture_width as f32,
                 texture_dest.size.y / texture_height as f32,
+            );
+        }
+        let u_color_mod = self.get_program_uniform("u_color_mod").unwrap();
+        unsafe {
+            gl::Uniform4f(
+                u_color_mod.id,
+                color_mod.x,
+                color_mod.y,
+                color_mod.z,
+                color_mod.w,
             );
         }
 

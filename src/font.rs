@@ -16,6 +16,9 @@ struct Glyph {
     advance: usize,
 }
 
+/// gap between glyphs to prevent texel bleeding
+const GLYPH_PADDING: usize = 1;
+
 /// A cached font
 pub struct Font {
     pub cache_texture: Option<TextureId>,
@@ -112,8 +115,8 @@ impl Font {
     }
 
     fn pack_gylphs(&mut self, font: &sdl2::ttf::Font, renderer: &RenderContext) {
-        let mut x_offset: usize = 0;
-        let mut y_offset: usize = 0;
+        let mut x_offset: usize = GLYPH_PADDING;
+        let mut y_offset: usize = GLYPH_PADDING;
         let mut mega_surface = Surface::new(
             self.height as u32 * 16,
             self.height as u32 * 16,
@@ -131,9 +134,9 @@ impl Font {
             let c = char::from(i as u8);
             let s = c.to_string();
             let mut surf = font.render(&s).blended(color).unwrap();
-            if x_offset + surf.width() as usize > self.height * 16 {
-                x_offset = 0;
-                y_offset += self.height;
+            if x_offset + surf.width() as usize + GLYPH_PADDING > self.height * 16 {
+                x_offset = GLYPH_PADDING;
+                y_offset += self.height + GLYPH_PADDING;
             }
             let src_rect = Rect::new(0, 0, surf.width(), surf.height());
             let dest_rect = Rect::new(
@@ -144,7 +147,7 @@ impl Font {
             );
             let _ = surf.set_blend_mode(sdl2::render::BlendMode::None);
             let _ = surf.blit(Some(src_rect), &mut mega_surface, Some(dest_rect));
-            x_offset += surf.width() as usize;
+            x_offset += surf.width() as usize + GLYPH_PADDING;
 
             let gylph_metrics = font.find_glyph_metrics(c).unwrap();
             self.set_glyph(i, Glyph::new(dest_rect, gylph_metrics.advance));

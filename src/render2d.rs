@@ -190,8 +190,8 @@ impl RenderContext {
             &nalgebra_glm::translate(
                 &nalgebra_glm::one(),
                 &nalgebra_glm::vec3(
-                    1.0 - 2.0 * dest.pos.x / res.x as f32 - dest.size.x / res.x as f32,
-                    1.0 - 2.0 * dest.pos.y / res.y as f32 - dest.size.y / res.y as f32,
+                    1.0 - 2.0 * dest.pos.x.floor() / res.x as f32 - dest.size.x / res.x as f32,
+                    1.0 - 2.0 * dest.pos.y.floor() / res.y as f32 - dest.size.y / res.y as f32,
                     3.0,
                 ),
             ),

@@ -207,7 +207,7 @@ impl RenderContext {
             gl::Uniform2f(
                 u_sprite_offset.id,
                 texture_dest.pos.x / texture_width as f32,
-                texture_dest.pos.y / texture_width as f32,
+                texture_dest.pos.y / texture_height as f32,
             );
         }
         let u_sprite_size = self.get_program_uniform("u_sprite_size").unwrap();

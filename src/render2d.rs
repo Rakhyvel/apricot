@@ -200,24 +200,22 @@ impl RenderContext {
 
         let texture = self.get_texture_from_id(texture_id).unwrap();
         let (texture_width, texture_height) = texture.get_dimensions().unwrap();
-        let inset_x = 0.5 / texture_width as f32;
-        let inset_y = 0.5 / texture_height as f32;
         texture.activate(gl::TEXTURE0);
         texture.associate_uniform(self.get_current_program_id(), 0, "texture0");
         let u_sprite_offset = self.get_program_uniform("u_sprite_offset").unwrap();
         unsafe {
             gl::Uniform2f(
                 u_sprite_offset.id,
-                texture_dest.pos.x / texture_width as f32 + inset_x,
-                texture_dest.pos.y / texture_height as f32 + inset_y,
+                texture_dest.pos.x / texture_width as f32,
+                texture_dest.pos.y / texture_height as f32,
             );
         }
         let u_sprite_size = self.get_program_uniform("u_sprite_size").unwrap();
         unsafe {
             gl::Uniform2f(
                 u_sprite_size.id,
-                texture_dest.size.x / texture_width as f32 - inset_x * 2.0,
-                texture_dest.size.y / texture_height as f32 - inset_y * 2.0,
+                texture_dest.size.x / texture_width as f32,
+                texture_dest.size.y / texture_height as f32,
             );
         }
         let u_color_mod = self.get_program_uniform("u_color_mod").unwrap();

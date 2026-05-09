@@ -112,11 +112,13 @@ impl Font {
     }
 
     fn pack_gylphs(&mut self, font: &sdl2::ttf::Font, renderer: &RenderContext) {
+        let atlas_width = self.height * 32;
+        let atlas_height = self.height * 8;
         let mut x_offset: usize = 0;
         let mut y_offset: usize = 0;
         let mut mega_surface = Surface::new(
-            self.height as u32 * 16,
-            self.height as u32 * 16,
+            atlas_width as u32,
+            atlas_height as u32,
             sdl2::pixels::PixelFormatEnum::RGBA32,
         )
         .unwrap();
@@ -131,9 +133,10 @@ impl Font {
             let c = char::from(i as u8);
             let s = c.to_string();
             let mut surf = font.render(&s).blended(color).unwrap();
-            if x_offset + surf.width() as usize > self.height * 16 {
+
+            if x_offset + surf.width() as usize > atlas_width {
                 x_offset = 0;
-                y_offset += self.height;
+                y_offset += self.height + 4;
             }
             let src_rect = Rect::new(0, 0, surf.width(), surf.height());
             let dest_rect = Rect::new(

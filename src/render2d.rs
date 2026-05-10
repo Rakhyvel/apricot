@@ -1,6 +1,6 @@
 use std::borrow::Borrow;
 
-use nalgebra_glm::{vec4, Vec4};
+use nalgebra_glm::{vec2, vec3, vec4, Mat4, Vec2, Vec4};
 
 use super::{
     rectangle::Rectangle,
@@ -161,7 +161,7 @@ impl RenderContext {
         }
     }
 
-    pub fn draw_text(&self, pos: nalgebra_glm::Vec2, text: &str) {
+    pub fn draw_text(&self, pos: Vec2, text: &str) {
         let font = self.get_font_from_id(self.font.borrow().unwrap()).unwrap();
         font.draw(pos, text, self);
     }
@@ -186,16 +186,16 @@ impl RenderContext {
         self.set_program_from_id(self.get_program_id_from_name("2d").unwrap()); // TODO: Should be setup automatically
 
         let (view_matrix, proj_matrix) = self.camera_2d.view_proj_matrices();
-        let model_matrix: nalgebra_glm::Mat4 = nalgebra_glm::scale(
+        let model_matrix: Mat4 = nalgebra_glm::scale(
             &nalgebra_glm::translate(
                 &nalgebra_glm::one(),
-                &nalgebra_glm::vec3(
+                &vec3(
                     1.0 - 2.0 * dest.pos.x.floor() / res.x as f32 - dest.size.x / res.x as f32,
                     1.0 - 2.0 * dest.pos.y.floor() / res.y as f32 - dest.size.y / res.y as f32,
                     3.0,
                 ),
             ),
-            &nalgebra_glm::vec3(dest.size.x / res.x as f32, dest.size.y / res.y as f32, 0.1),
+            &vec3(dest.size.x / res.x as f32, dest.size.y / res.y as f32, 0.1),
         );
 
         let texture = self.get_texture_from_id(texture_id).unwrap();
@@ -261,21 +261,47 @@ impl RenderContext {
         }
 
         let (view_matrix, proj_matrix) = self.camera_2d.view_proj_matrices();
-        let model_matrix: nalgebra_glm::Mat4 = nalgebra_glm::scale(
+        let model_matrix: Mat4 = nalgebra_glm::scale(
             &nalgebra_glm::translate(
                 &nalgebra_glm::one(),
-                &nalgebra_glm::vec3(
+                &vec3(
                     1.0 - 2.0 * dest.pos.x / res.x as f32 - dest.size.x / res.x as f32,
                     1.0 - 2.0 * dest.pos.y / res.y as f32 - dest.size.y / res.y as f32,
                     3.0,
                 ),
             ),
-            &nalgebra_glm::vec3(dest.size.x / res.x as f32, dest.size.y / res.y as f32, 0.1),
+            &vec3(dest.size.x / res.x as f32, dest.size.y / res.y as f32, 0.1),
         );
 
         let quad_mesh = self
             .get_mesh_from_id(self.get_mesh_id_from_name("quad-xy").unwrap())
             .unwrap();
         self.draw(quad_mesh.borrow(), model_matrix, view_matrix, proj_matrix);
+    }
+
+    pub fn draw_rect(&self, rect: Rectangle, thickness: f32) {
+        // Top
+        self.fill_rect(Rectangle {
+            pos: rect.pos,
+            size: vec2(rect.size.x, thickness),
+        });
+
+        // Bottom
+        self.fill_rect(Rectangle {
+            pos: vec2(rect.pos.x, rect.pos.y + rect.size.y - thickness),
+            size: vec2(rect.size.x, thickness),
+        });
+
+        // Left (inner height only, corners handled by top/bottom)
+        self.fill_rect(Rectangle {
+            pos: vec2(rect.pos.x, rect.pos.y + thickness),
+            size: vec2(thickness, rect.size.y - thickness * 2.0),
+        });
+
+        // Right
+        self.fill_rect(Rectangle {
+            pos: vec2(rect.pos.x + rect.size.x - thickness, rect.pos.y + thickness),
+            size: vec2(thickness, rect.size.y - thickness * 2.0),
+        });
     }
 }

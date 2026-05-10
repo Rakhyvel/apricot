@@ -1,12 +1,17 @@
 //! This file contains the core rendering functionality that is shared between 2D and 3D rendering.
 
-use std::{cell::RefCell, collections::HashMap, f32::consts::PI, fmt::Debug};
+use std::{
+    cell::{Cell, RefCell},
+    collections::HashMap,
+    f32::consts::PI,
+    fmt::Debug,
+};
 
-use nalgebra_glm::{Mat4, Vec3};
+use nalgebra_glm::{Mat4, Vec3, Vec4};
 use obj::{load_obj, Obj, TexturedVertex};
 
 use crate::{
-    opengl::{DeletionQueue, Fbo, Shader},
+    opengl::{DeletionQueue, Fbo},
     tri::Tri,
 };
 
@@ -15,7 +20,21 @@ use super::{
     camera::{Camera, ProjectionKind},
     font::{Font, FontId, FontManager},
     opengl::{Buffer, Program, Texture, Uniform, Vao},
+    rectangle::Rectangle,
 };
+
+pub(crate) enum DrawCommand {
+    FillRect {
+        rect: Rectangle,
+        color: Vec4,
+    },
+    CopyTexture {
+        dest: Rectangle,
+        texture_id: TextureId,
+        texture_dest: Rectangle,
+        color_mod: Vec4,
+    },
+}
 
 pub struct RenderContext {
     // Updated by the user
@@ -32,6 +51,8 @@ pub struct RenderContext {
 
     // Queues
     deletion_queue: RefCell<DeletionQueue>,
+    pub(crate) draw_queue: RefCell<Vec<(i32, DrawCommand)>>,
+    pub(crate) current_draw_layer: Cell<i32>,
 
     // Updated by the app
     pub int_screen_resolution: nalgebra_glm::I32Vec2,
@@ -120,6 +141,8 @@ impl RenderContext {
             font_manager: RefCell::new(FontManager::new()),
 
             deletion_queue: RefCell::new(DeletionQueue::new()),
+            draw_queue: RefCell::new(Vec::new()),
+            current_draw_layer: Cell::new(0),
 
             int_screen_resolution: nalgebra_glm::I32Vec2::new(0, 0),
             camera_2d: Camera::new(
@@ -737,7 +760,7 @@ impl Mesh {
     }
 
     pub fn from_obj(obj_file_data: &[u8]) -> Self {
-        let obj: Obj<TexturedVertex> = load_obj(&obj_file_data[..]).unwrap();
+        let obj: Obj<TexturedVertex> = load_obj(obj_file_data).unwrap();
         let vb: Vec<TexturedVertex> = obj.vertices;
 
         let indices = vec_u32_from_vec_u16(&obj.indices);

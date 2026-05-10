@@ -4,7 +4,7 @@ use nalgebra_glm::{vec2, vec3, vec4, Mat4, Vec2, Vec4};
 
 use super::{
     rectangle::Rectangle,
-    render_core::{RenderContext, TextureId},
+    render_core::{DrawCommand, RenderContext, TextureId},
 };
 
 pub struct NineSlice {
@@ -166,7 +166,31 @@ impl RenderContext {
         font.draw(pos, text, self);
     }
 
+    /// Set the current draw layer. Draw calls on higher layers render on top of lower layers,
+    /// regardless of call order. Layer 0 is the default. Resets to 0 after flush_2d_queue.
+    pub fn set_draw_layer(&self, layer: i32) {
+        self.current_draw_layer.set(layer);
+    }
+
     pub fn copy_texture(
+        &self,
+        dest: Rectangle,
+        texture_id: TextureId,
+        texture_dest: Rectangle,
+        color_mod: &Vec4,
+    ) {
+        self.draw_queue.borrow_mut().push((
+            self.current_draw_layer.get(),
+            DrawCommand::CopyTexture {
+                dest,
+                texture_id,
+                texture_dest,
+                color_mod: *color_mod,
+            },
+        ));
+    }
+
+    fn copy_texture_immediate(
         &self,
         dest: Rectangle,
         texture_id: TextureId,
@@ -183,7 +207,7 @@ impl RenderContext {
             gl::BlendFunc(gl::SRC_ALPHA, gl::ONE_MINUS_SRC_ALPHA);
         }
 
-        self.set_program_from_id(self.get_program_id_from_name("2d").unwrap()); // TODO: Should be setup automatically
+        self.set_program_from_id(self.get_program_id_from_name("2d").unwrap());
 
         let (view_matrix, proj_matrix) = self.camera_2d.view_proj_matrices();
         let model_matrix: Mat4 = nalgebra_glm::scale(
@@ -229,7 +253,6 @@ impl RenderContext {
             );
         }
 
-        // TODO: We should set this up automatically
         let quad_mesh = self
             .get_mesh_from_id(self.get_mesh_id_from_name("quad-xy").unwrap())
             .unwrap();
@@ -237,10 +260,20 @@ impl RenderContext {
     }
 
     pub fn fill_rect(&self, dest: Rectangle) {
+        self.draw_queue.borrow_mut().push((
+            self.current_draw_layer.get(),
+            DrawCommand::FillRect {
+                rect: dest,
+                color: *self.color.borrow(),
+            },
+        ));
+    }
+
+    fn fill_rect_immediate(&self, dest: Rectangle, color: Vec4) {
         let res = self.int_screen_resolution.borrow();
         unsafe {
             gl::Viewport(0, 0, res.x, res.y);
-            gl::Disable(gl::DEPTH_TEST); // Disable depth test for 2D rendering
+            gl::Disable(gl::DEPTH_TEST);
             gl::Enable(gl::CULL_FACE);
             gl::CullFace(gl::BACK);
             gl::Enable(gl::BLEND);
@@ -251,13 +284,7 @@ impl RenderContext {
 
         let u_color = self.get_program_uniform("u_color").unwrap();
         unsafe {
-            gl::Uniform4f(
-                u_color.id,
-                self.color.borrow().x,
-                self.color.borrow().y,
-                self.color.borrow().z,
-                self.color.borrow().w,
-            );
+            gl::Uniform4f(u_color.id, color.x, color.y, color.z, color.w);
         }
 
         let (view_matrix, proj_matrix) = self.camera_2d.view_proj_matrices();
@@ -277,6 +304,29 @@ impl RenderContext {
             .get_mesh_from_id(self.get_mesh_id_from_name("quad-xy").unwrap())
             .unwrap();
         self.draw(quad_mesh.borrow(), model_matrix, view_matrix, proj_matrix);
+    }
+
+    /// Execute all queued 2D draw commands in layer order. Called once per frame after scene.render().
+    pub fn flush_2d_queue(&self) {
+        let commands: Vec<(i32, DrawCommand)> = {
+            let mut queue = self.draw_queue.borrow_mut();
+            queue.sort_by_key(|(layer, _)| *layer);
+            queue.drain(..).collect()
+        };
+        for (_, cmd) in commands {
+            match cmd {
+                DrawCommand::FillRect { rect, color } => self.fill_rect_immediate(rect, color),
+                DrawCommand::CopyTexture {
+                    dest,
+                    texture_id,
+                    texture_dest,
+                    color_mod,
+                } => {
+                    self.copy_texture_immediate(dest, texture_id, texture_dest, &color_mod);
+                }
+            }
+        }
+        self.current_draw_layer.set(0);
     }
 
     pub fn draw_rect(&self, rect: Rectangle, thickness: f32) {

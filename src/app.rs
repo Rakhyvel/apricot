@@ -7,7 +7,7 @@
 //! Scenes can either push new scenes onto the stack, or pop themselves off. This allows for fairly intuitive GUI
 //! management.
 
-use std::cell::RefCell;
+use std::cell::{Cell, RefCell};
 use std::time::Instant;
 
 use sdl2::event::{Event, WindowEvent};
@@ -49,6 +49,8 @@ pub struct App {
     prev_mouse_right_down: bool,
     /// Whether the left mouse button was clicked (ie it was down the previous tick, but is now up)
     pub mouse_left_clicked: bool,
+    /// Whether the current left click event has been
+    click_consumed: Cell<bool>,
     /// Whether the right mouse button was clicked (ie it was down the previous tick, but is now up)
     pub mouse_right_clicked: bool,
     /// The motion of the mouse wheel
@@ -118,6 +120,7 @@ pub fn run(
         mouse_wheel: 0.0,
         seconds: 0.0,
         ticks: 0,
+        click_consumed: Cell::new(false),
     };
 
     let initial_scene = init(&app);
@@ -171,6 +174,7 @@ pub fn run(
                 scene_ref.borrow_mut().render(&app);
                 frames += 1;
             }
+            app.renderer.flush_2d_queue();
             window.gl_swap_window();
         }
 
@@ -188,11 +192,22 @@ pub fn run(
 }
 
 impl App {
+    /// Mark the current left click as consumed
+    pub fn consume_click(&self) {
+        self.click_consumed.set(true);
+    }
+
+    /// Returns true if the current left click for this tick has been consumed
+    pub fn is_click_consumed(&self) -> bool {
+        self.click_consumed.get()
+    }
+
     fn reset_input(&mut self) {
         self.mouse_vel = nalgebra_glm::vec2(0.0, 0.0);
         self.mouse_wheel = 0.0;
         self.prev_mouse_left_down = self.mouse_left_down;
         self.prev_mouse_right_down = self.mouse_right_down;
+        self.click_consumed.set(false);
     }
 
     fn poll_input(&mut self, sdl_context: &Sdl) {

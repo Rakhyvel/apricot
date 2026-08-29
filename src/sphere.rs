@@ -1,3 +1,5 @@
+use crate::ray::Ray;
+
 use super::frustum::Frustum;
 
 #[derive(Debug)]
@@ -18,5 +20,33 @@ impl Sphere {
             }
         }
         true
+    }
+
+    pub fn raycast(&self, ray: &Ray) -> Option<f32> {
+        const EPS: f32 = 1e-4; // I'm sorry Nikita
+
+        let m = ray.origin() - self.center;
+        let b = m.dot(&ray.dir());
+        let c = m.dot(&m) - self.radius * self.radius;
+
+        if c > 0.0 && b > 0.0 {
+            return None; // Outside the sphere and pointing away
+        }
+
+        let discr = b * b - c;
+        if discr < 0.0 {
+            return None;
+        }
+
+        let sqrt_discr = discr.sqrt();
+        let mut t = -b - sqrt_discr;
+        if t < EPS {
+            t = -b + sqrt_discr; // Nearest hit is behind us, try the far side
+            if t < EPS {
+                return None;
+            }
+        }
+
+        Some(t)
     }
 }

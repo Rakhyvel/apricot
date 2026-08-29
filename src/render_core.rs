@@ -102,6 +102,7 @@ pub struct LinePathComponent {
     pub position: nalgebra_glm::Vec3,
 
     pub seam: f32,
+    pub fade: bool,
 }
 
 /// Stores the geometry of a mesh. Meshes are registered in the mesh manager, and can be potentially shared across
@@ -464,6 +465,7 @@ impl RenderContext {
             let u_proj_matrix = self.get_program_uniform("projection").unwrap();
             let u_color = self.get_program_uniform("u_color").unwrap();
             let u_seam = self.get_program_uniform("u_seam").unwrap();
+            let u_fade = self.get_program_uniform("u_fade").unwrap();
             let u_num_vertices = self.get_program_uniform("u_num_vertices").unwrap();
             gl::UniformMatrix4fv(
                 u_model_matrix.id,
@@ -491,6 +493,7 @@ impl RenderContext {
                 line_path.color.w,
             );
             gl::Uniform1f(u_seam.id, line_path.seam);
+            gl::Uniform1i(u_fade.id, line_path.fade as i32);
             gl::Uniform1i(u_num_vertices.id, line_path.num_vertices);
 
             line_path.vertices_buffer.bind();
@@ -689,6 +692,7 @@ impl LinePathComponent {
             color: nalgebra_glm::vec4(0.7, 0.9, 0.9, 0.9),
             position: nalgebra_glm::vec3(0.0, 0.0, 0.0),
             seam: 0.0,
+            fade: true,
         }
     }
 

@@ -23,8 +23,6 @@ impl Sphere {
     }
 
     pub fn raycast(&self, ray: &Ray) -> Option<f32> {
-        const EPS: f32 = 1e-4; // I'm sorry Nikita
-
         let m = ray.origin() - self.center;
         let b = m.dot(&ray.dir());
         let c = m.dot(&m) - self.radius * self.radius;
@@ -40,11 +38,8 @@ impl Sphere {
 
         let sqrt_discr = discr.sqrt();
         let mut t = -b - sqrt_discr;
-        if t < EPS {
+        if t < 0.0 {
             t = -b + sqrt_discr; // Nearest hit is behind us, try the far side
-            if t < EPS {
-                return None;
-            }
         }
 
         Some(t)

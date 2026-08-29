@@ -2,9 +2,11 @@
 
 /// A ray data structure
 pub struct Ray {
+    /// Where the ray starts.
     origin: nalgebra_glm::Vec3,
+    /// The direction of the ray. Normalized on construction.
     dir: nalgebra_glm::Vec3,
-    // pre-computed
+    /// The inverse direction of the ray. Pre-computed on construction.
     inv_dir: nalgebra_glm::Vec3,
 }
 
@@ -12,7 +14,7 @@ impl Ray {
     pub fn new(origin: nalgebra_glm::Vec3, dir: nalgebra_glm::Vec3) -> Self {
         Self {
             origin,
-            dir,
+            dir: dir.normalize(),
             inv_dir: nalgebra_glm::vec3(1.0 / dir.x, 1.0 / dir.y, 1.0 / dir.z),
         }
     }
@@ -30,6 +32,6 @@ impl Ray {
     }
 
     pub fn at(&self, distance: f32) -> nalgebra_glm::Vec3 {
-        self.origin + self.dir.normalize() * distance
+        self.origin + self.dir * distance
     }
 }

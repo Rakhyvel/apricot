@@ -9,7 +9,7 @@ use super::frustum::Frustum;
 /// Which kind of projection the camera uses.
 pub enum ProjectionKind {
     Perspective {
-        fov: f32,
+        fov_rad: f32,
         far: f32,
     },
     Orthographic {
@@ -25,7 +25,7 @@ pub enum ProjectionKind {
 impl Default for ProjectionKind {
     fn default() -> Self {
         Self::Perspective {
-            fov: 3.5,
+            fov_rad: std::f32::consts::FRAC_PI_4,
             far: 1000.0,
         }
     }
@@ -85,11 +85,11 @@ impl Camera {
     pub fn regen_view_proj_matrices(&mut self) {
         let view_matrix = nalgebra_glm::look_at(&self.position, &self.lookat, &self.up);
         let (proj_matrix, lower_left_corner, horiz, vert) = match self.projection_kind {
-            ProjectionKind::Perspective { fov, far } => {
-                let proj_matrix = nalgebra_glm::perspective(self.aspect_ratio, fov, 0.1, far);
+            ProjectionKind::Perspective { fov_rad, far } => {
+                let proj_matrix = nalgebra_glm::perspective(self.aspect_ratio, fov_rad, 0.1, far);
 
                 // Viewport spans at near plane
-                let theta = fov.to_radians();
+                let theta = fov_rad;
                 let h = (theta / 2.0).tan(); // near plane distance = 1.0
                 let viewport_height = 2.0 * h;
                 let viewport_width = self.aspect_ratio * viewport_height;

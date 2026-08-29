@@ -58,3 +58,20 @@ impl Tri {
         Some(inv_det * e2.dot(&q))
     }
 }
+
+impl core::ops::Mul<f32> for Tri {
+    type Output = Tri;
+
+    fn mul(self, rhs: f32) -> Self::Output {
+        Tri::new(self.v0 * rhs, self.v1 * rhs, self.v2 * rhs)
+    }
+}
+
+impl From<Tri> for [f32; 9] {
+    fn from(val: Tri) -> Self {
+        [
+            val.v0.x, val.v0.y, val.v0.z, val.v1.x, val.v1.y, val.v1.z, val.v2.x, val.v2.y,
+            val.v2.z,
+        ]
+    }
+}

@@ -49,6 +49,11 @@ pub struct App {
     prev_mouse_right_down: bool,
     /// Whether the left mouse button was clicked (ie it was down the previous tick, but is now up)
     pub mouse_left_clicked: bool,
+    /// Where the left button went down
+    left_press_pos: nalgebra_glm::Vec2,
+    left_drag_dist: f32,
+    /// Whether the left button is down and has moved beyond the click threshold
+    pub mouse_left_dragging: bool,
     /// Whether the current left click event has been
     click_consumed: Cell<bool>,
     /// Whether the right mouse button was clicked (ie it was down the previous tick, but is now up)
@@ -121,6 +126,9 @@ pub fn run(
         seconds: 0.0,
         ticks: 0,
         click_consumed: Cell::new(false),
+        left_press_pos: nalgebra_glm::::vec2(0.0, 0.0),
+        left_drag_dist: 0.0,
+        mouse_left_dragging: false,
     };
 
     let initial_scene = init(&app);
@@ -270,7 +278,19 @@ impl App {
             }
         }
 
-        self.mouse_left_clicked = !self.prev_mouse_left_down && self.mouse_left_down;
+        const CLICK_SLOP_PX: f32 = 4.0;
+        let pressed = !self.prev_mouse_left_down && self.mouse_left_down;
+        let released = self.prev_mouse_left_down && !self.mouse_left_down;
+        if pressed {
+            self.left_press_pos = self.mouse_pos;
+            self.left_drag_dist = 0.0
+        } else if self.mouse_left_down {
+            let d = nalgebra_glm::distance(&self.mouse_pos, &self.left_press_pos);
+            self.left_drag_dist = self.left_drag_dist.max(d);
+        }
+
+        self.mouse_left_dragging = self.mouse_left_down && self.left_drag_dist > CLICK_SLOP_PX;
+        self.mouse_left_clicked = released && self.left_drag_dist <= CLICK_SLOP_PX;
         self.mouse_right_clicked = !self.prev_mouse_right_down && self.mouse_right_down;
     }
 }

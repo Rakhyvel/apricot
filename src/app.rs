@@ -126,7 +126,7 @@ pub fn run(
         seconds: 0.0,
         ticks: 0,
         click_consumed: Cell::new(false),
-        left_press_pos: nalgebra_glm::::vec2(0.0, 0.0),
+        left_press_pos: nalgebra_glm::vec2(0.0, 0.0),
         left_drag_dist: 0.0,
         mouse_left_dragging: false,
     };

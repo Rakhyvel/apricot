@@ -42,7 +42,7 @@ impl Tri {
         let h = ray.dir().cross(&e2);
         let det = e1.dot(&h);
 
-        let inv_det = 1.0 / det;
+        let inv_det = 1.0 / det; // if det=0.0, this'll fail through the contains check below
         let s = ray.origin() - self.v0;
         let u = inv_det * s.dot(&h);
         if !(0.0..=1.0).contains(&u) {
@@ -55,7 +55,12 @@ impl Tri {
             return None;
         }
 
-        Some(inv_det * e2.dot(&q))
+        let t = inv_det * e2.dot(&q);
+        if t > 0.0 {
+            Some(t)
+        } else {
+            None
+        }
     }
 }
 

@@ -696,6 +696,11 @@ impl LinePathComponent {
         }
     }
 
+    pub fn queue_deletion(&mut self, renderer: &RenderContext) {
+        renderer.queue_vao_deletion(&mut self.vao);
+        renderer.queue_buffer_deletion(&mut self.vertices_buffer);
+    }
+
     pub fn from_orbit(semi_major_axis: f32, eccentricity: f32, segments: i32) -> Self {
         let vertices = Self::generate_orbit_vertices(semi_major_axis, eccentricity, segments);
         Self::new(vertices)

@@ -333,7 +333,7 @@ impl RenderContext {
         unsafe {
             gl::Viewport(0, 0, res.x, res.y);
             gl::Disable(gl::DEPTH_TEST);
-            gl::Enable(gl::CULL_FACE);
+            gl::Disable(gl::CULL_FACE);
             gl::CullFace(gl::BACK);
             gl::Enable(gl::BLEND);
             gl::BlendFunc(gl::SRC_ALPHA, gl::ONE_MINUS_SRC_ALPHA);

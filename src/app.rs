@@ -81,6 +81,8 @@ pub fn run(
     gl_attr.set_context_profile(sdl2::video::GLProfile::Core);
     gl_attr.set_context_version(3, 3);
     gl_attr.set_double_buffer(true);
+    gl_attr.set_multisample_buffers(1);
+    gl_attr.set_multisample_samples(4);
 
     let window = video_subsystem
         .window(window_title, window_size.x as u32, window_size.y as u32)

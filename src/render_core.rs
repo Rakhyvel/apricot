@@ -7,7 +7,7 @@ use std::{
     fmt::Debug,
 };
 
-use nalgebra_glm::{Mat4, Vec3, Vec4};
+use nalgebra_glm::{Mat4, Vec2, Vec3, Vec4};
 use obj::{load_obj, Obj, TexturedVertex};
 
 use crate::{
@@ -26,6 +26,13 @@ use super::{
 pub(crate) enum DrawCommand {
     FillRect {
         rect: Rectangle,
+        color: Vec4,
+    },
+    FillPolygon {
+        center: Vec2,
+        radius: f32,
+        mesh_id: MeshId,
+        rotation: f32,
         color: Vec4,
     },
     CopyTexture {

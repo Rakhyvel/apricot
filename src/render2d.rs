@@ -2,6 +2,8 @@ use std::borrow::Borrow;
 
 use nalgebra_glm::{vec2, vec3, vec4, Mat4, Vec2, Vec4};
 
+use crate::render_core::MeshId;
+
 use super::{
     rectangle::Rectangle,
     render_core::{DrawCommand, RenderContext, TextureId},
@@ -269,6 +271,19 @@ impl RenderContext {
         ));
     }
 
+    pub fn fill_polygon(&self, mesh_id: MeshId, center: Vec2, radius: f32, rotation: f32) {
+        self.draw_queue.borrow_mut().push((
+            self.current_draw_layer.get(),
+            DrawCommand::FillPolygon {
+                center,
+                radius,
+                mesh_id,
+                rotation,
+                color: *self.color.borrow(),
+            },
+        ));
+    }
+
     fn fill_rect_immediate(&self, dest: Rectangle, color: Vec4) {
         let res = self.int_screen_resolution.borrow();
         unsafe {
@@ -306,6 +321,48 @@ impl RenderContext {
         self.draw(quad_mesh.borrow(), model_matrix, view_matrix, proj_matrix);
     }
 
+    fn fill_polygon_immediate(
+        &self,
+        center: Vec2,
+        radius: f32,
+        mesh_id: MeshId,
+        rotation: f32,
+        color: Vec4,
+    ) {
+        let res = self.int_screen_resolution.borrow();
+        unsafe {
+            gl::Viewport(0, 0, res.x, res.y);
+            gl::Disable(gl::DEPTH_TEST);
+            gl::Enable(gl::CULL_FACE);
+            gl::CullFace(gl::BACK);
+            gl::Enable(gl::BLEND);
+            gl::BlendFunc(gl::SRC_ALPHA, gl::ONE_MINUS_SRC_ALPHA);
+        }
+
+        self.set_program_from_id(self.get_program_id_from_name("2d-solid").unwrap());
+
+        let u_color = self.get_program_uniform("u_color").unwrap();
+        unsafe {
+            gl::Uniform4f(u_color.id, color.x, color.y, color.z, color.w);
+        }
+
+        let (view_matrix, proj_matrix) = self.camera_2d.view_proj_matrices();
+        let mut m = nalgebra_glm::translate(
+            &nalgebra_glm::one(),
+            &vec3(
+                1.0 - 2.0 * center.x / res.x as f32,
+                1.0 - 2.0 * center.y / res.y as f32,
+                3.0,
+            ),
+        );
+        m = nalgebra_glm::scale(&m, &vec3(2.0 / res.x as f32, 2.0 / res.y as f32, 1.0));
+        m = nalgebra_glm::rotate_z(&m, rotation);
+        m = nalgebra_glm::scale(&m, &vec3(radius, radius, 0.1));
+
+        let quad_mesh = self.get_mesh_from_id(mesh_id).unwrap();
+        self.draw(quad_mesh.borrow(), m, view_matrix, proj_matrix);
+    }
+
     /// Execute all queued 2D draw commands in layer order. Called once per frame after scene.render().
     pub fn flush_2d_queue(&self) {
         let commands: Vec<(i32, DrawCommand)> = {
@@ -316,6 +373,13 @@ impl RenderContext {
         for (_, cmd) in commands {
             match cmd {
                 DrawCommand::FillRect { rect, color } => self.fill_rect_immediate(rect, color),
+                DrawCommand::FillPolygon {
+                    center,
+                    radius,
+                    mesh_id,
+                    rotation,
+                    color,
+                } => self.fill_polygon_immediate(center, radius, mesh_id, rotation, color),
                 DrawCommand::CopyTexture {
                     dest,
                     texture_id,

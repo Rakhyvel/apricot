@@ -110,6 +110,7 @@ pub struct LinePathComponent {
 
     pub seam: f32,
     pub fade: bool,
+    pub depth_test: bool,
 }
 
 /// Stores the geometry of a mesh. Meshes are registered in the mesh manager, and can be potentially shared across
@@ -461,7 +462,11 @@ impl RenderContext {
     ) {
         self.set_program(Some("line"));
         unsafe {
-            gl::Enable(gl::DEPTH_TEST);
+            if line_path.depth_test {
+                gl::Enable(gl::DEPTH_TEST);
+            } else {
+                gl::Disable(gl::DEPTH_TEST);
+            }
             gl::LineWidth(line_path.width);
 
             // Set uniforms
@@ -700,6 +705,7 @@ impl LinePathComponent {
             position: nalgebra_glm::vec3(0.0, 0.0, 0.0),
             seam: 0.0,
             fade: true,
+            depth_test: true,
         }
     }
 

@@ -27,6 +27,7 @@ pub(crate) enum DrawCommand {
     FillRect {
         rect: Rectangle,
         color: Vec4,
+        scissor: Option<Rectangle>,
     },
     FillPolygon {
         center: Vec2,
@@ -34,12 +35,14 @@ pub(crate) enum DrawCommand {
         mesh_id: MeshId,
         rotation: f32,
         color: Vec4,
+        scissor: Option<Rectangle>,
     },
     CopyTexture {
         dest: Rectangle,
         texture_id: TextureId,
         texture_dest: Rectangle,
         color_mod: Vec4,
+        scissor: Option<Rectangle>,
     },
 }
 
@@ -49,6 +52,7 @@ pub struct RenderContext {
     pub program: RefCell<Option<ProgramId>>,
     pub color: RefCell<nalgebra_glm::Vec4>,
     pub font: RefCell<Option<FontId>>,
+    pub scissor: Cell<Option<Rectangle>>,
 
     // Managers
     mesh_manager: RefCell<ResourceManager<Mesh, MeshId>>,
@@ -143,6 +147,7 @@ impl RenderContext {
             program: RefCell::new(None),
             color: RefCell::new(nalgebra_glm::vec4(0.0, 0.0, 0.0, 1.0)),
             font: RefCell::new(None),
+            scissor: Cell::new(None),
 
             mesh_manager: RefCell::new(ResourceManager::new()),
             texture_manager: RefCell::new(ResourceManager::new()),
@@ -204,6 +209,10 @@ impl RenderContext {
 
     pub fn set_font(&self, font: FontId) {
         *self.font.borrow_mut() = Some(font);
+    }
+
+    pub fn set_scissor(&self, scissor: Option<Rectangle>) {
+        self.scissor.set(scissor)
     }
 
     pub fn get_current_font_id(&self) -> Option<FontId> {

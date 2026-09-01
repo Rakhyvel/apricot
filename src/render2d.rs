@@ -188,6 +188,7 @@ impl RenderContext {
                 texture_id,
                 texture_dest,
                 color_mod: *color_mod,
+                scissor: self.scissor.get(),
             },
         ));
     }
@@ -267,6 +268,7 @@ impl RenderContext {
             DrawCommand::FillRect {
                 rect: dest,
                 color: *self.color.borrow(),
+                scissor: self.scissor.get(),
             },
         ));
     }
@@ -280,6 +282,7 @@ impl RenderContext {
                 mesh_id,
                 rotation,
                 color: *self.color.borrow(),
+                scissor: self.scissor.get(),
             },
         ));
     }
@@ -372,25 +375,56 @@ impl RenderContext {
         };
         for (_, cmd) in commands {
             match cmd {
-                DrawCommand::FillRect { rect, color } => self.fill_rect_immediate(rect, color),
+                DrawCommand::FillRect {
+                    rect,
+                    color,
+                    scissor,
+                } => {
+                    self.apply_scissor(scissor);
+                    self.fill_rect_immediate(rect, color)
+                }
                 DrawCommand::FillPolygon {
                     center,
                     radius,
                     mesh_id,
                     rotation,
                     color,
-                } => self.fill_polygon_immediate(center, radius, mesh_id, rotation, color),
+                    scissor,
+                } => {
+                    self.apply_scissor(scissor);
+                    self.fill_polygon_immediate(center, radius, mesh_id, rotation, color)
+                }
                 DrawCommand::CopyTexture {
                     dest,
                     texture_id,
                     texture_dest,
                     color_mod,
+                    scissor,
                 } => {
+                    self.apply_scissor(scissor);
                     self.copy_texture_immediate(dest, texture_id, texture_dest, &color_mod);
                 }
             }
         }
         self.current_draw_layer.set(0);
+    }
+
+    pub fn apply_scissor(&self, scissor: Option<Rectangle>) {
+        let res = self.int_screen_resolution.borrow();
+        match scissor {
+            Some(r) => unsafe {
+                gl::Enable(gl::SCISSOR_TEST);
+                gl::Scissor(
+                    r.pos.x as i32,
+                    res.y - (r.pos.y + r.size.y) as i32,
+                    r.size.x as i32,
+                    r.size.y as i32,
+                );
+            },
+            None => unsafe {
+                gl::Disable(gl::SCISSOR_TEST);
+            },
+        }
     }
 
     pub fn draw_rect(&self, rect: Rectangle, thickness: f32) {

@@ -54,8 +54,10 @@ pub struct App {
     left_drag_dist: f32,
     /// Whether the left button is down and has moved beyond the click threshold
     pub mouse_left_dragging: bool,
-    /// Whether the current left click event has been
+    /// Whether the current left click event has been consumed
     click_consumed: Cell<bool>,
+    /// Whether the current mouse wheel event has been consumed
+    wheel_consumed: Cell<bool>,
     /// Whether the right mouse button was clicked (ie it was down the previous tick, but is now up)
     pub mouse_right_clicked: bool,
     /// The motion of the mouse wheel
@@ -128,6 +130,7 @@ pub fn run(
         seconds: 0.0,
         ticks: 0,
         click_consumed: Cell::new(false),
+        wheel_consumed: Cell::new(false),
         left_press_pos: nalgebra_glm::vec2(0.0, 0.0),
         left_drag_dist: 0.0,
         mouse_left_dragging: false,
@@ -212,12 +215,21 @@ impl App {
         self.click_consumed.get()
     }
 
+    pub fn consume_wheel(&self) {
+        self.wheel_consumed.set(true);
+    }
+
+    pub fn is_wheel_consumed(&self) {
+        self.wheel_consumed.get();
+    }
+
     fn reset_input(&mut self) {
         self.mouse_vel = nalgebra_glm::vec2(0.0, 0.0);
         self.mouse_wheel = 0.0;
         self.prev_mouse_left_down = self.mouse_left_down;
         self.prev_mouse_right_down = self.mouse_right_down;
         self.click_consumed.set(false);
+        self.wheel_consumed.set(false);
     }
 
     fn poll_input(&mut self, sdl_context: &Sdl) {

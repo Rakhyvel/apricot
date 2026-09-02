@@ -219,8 +219,8 @@ impl App {
         self.wheel_consumed.set(true);
     }
 
-    pub fn is_wheel_consumed(&self) {
-        self.wheel_consumed.get();
+    pub fn is_wheel_consumed(&self) -> bool {
+        self.wheel_consumed.get()
     }
 
     fn reset_input(&mut self) {

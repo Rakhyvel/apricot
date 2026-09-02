@@ -160,6 +160,7 @@ impl RenderContext {
         unsafe {
             gl::Enable(gl::BLEND);
             gl::BlendFunc(gl::SRC_ALPHA, gl::ONE_MINUS_SRC_ALPHA);
+            gl::Disable(gl::MULTISAMPLE);
         }
         let (view_matrix, proj_matrix) = self.camera.borrow().view_proj_matrices();
         for (entity, line_path) in world.query::<&LinePathComponent>().iter() {
@@ -174,6 +175,9 @@ impl RenderContext {
                 None => line_path.position,
             };
             self.draw_line_path_at(line_path, position, view_matrix, proj_matrix)
+        }
+        unsafe {
+            gl::Enable(gl::MULTISAMPLE);
         }
     }
 }

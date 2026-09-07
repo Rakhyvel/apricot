@@ -1,5 +1,7 @@
 //! This module defines a rectangle
 
+use nalgebra_glm::vec2;
+
 #[derive(Default, Copy, Clone)]
 /// A rectangle data structure
 pub struct Rectangle {
@@ -20,5 +22,18 @@ impl Rectangle {
             && self.pos.y <= p.y
             && self.pos.x + self.size.x >= p.x
             && self.pos.y + self.size.y >= p.y
+    }
+
+    pub fn intersect(&self, other: &Self) -> Self {
+        let min_x = self.pos.x.max(other.pos.x);
+        let min_y = self.pos.y.max(other.pos.y);
+
+        let max_x = (self.pos.x + self.size.x).min(other.pos.x + other.size.x);
+        let max_y = (self.pos.y + self.size.y).min(other.pos.y + other.size.y);
+
+        Self {
+            pos: vec2(min_x, min_y),
+            size: vec2(max_x - min_x, max_y - min_y),
+        }
     }
 }

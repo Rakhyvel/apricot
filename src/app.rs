@@ -16,6 +16,8 @@ use sdl2::sys::{SDL_GetPerformanceCounter, SDL_GetPerformanceFrequency};
 use sdl2::video::SwapInterval;
 use sdl2::Sdl;
 
+use crate::rectangle::Rectangle;
+
 use super::render_core::RenderContext;
 
 /// Struct that contains all information about an app, that is passed down to an active `Scene`.
@@ -62,6 +64,8 @@ pub struct App {
     pub mouse_right_clicked: bool,
     /// The motion of the mouse wheel
     pub mouse_wheel: f32,
+    /// A stack of rectangle clips, used for guarding against mouse interaction for things that are scissor'd
+    clip_stack: RefCell<Vec<Rectangle>>,
 }
 
 pub struct AppConfig {
@@ -134,6 +138,7 @@ pub fn run(
         left_press_pos: nalgebra_glm::vec2(0.0, 0.0),
         left_drag_dist: 0.0,
         mouse_left_dragging: false,
+        clip_stack: RefCell::new(vec![]),
     };
 
     let initial_scene = init(&app);
@@ -306,6 +311,25 @@ impl App {
         self.mouse_left_dragging = self.mouse_left_down && self.left_drag_dist > CLICK_SLOP_PX;
         self.mouse_left_clicked = released && self.left_drag_dist <= CLICK_SLOP_PX;
         self.mouse_right_clicked = !self.prev_mouse_right_down && self.mouse_right_down;
+    }
+
+    pub fn push_clip(&self, r: Rectangle) {
+        let mut s = self.clip_stack.borrow_mut();
+        let r = s.last().map_or(r, |prev| prev.intersect(&r)); // intersect with the parent clip so that nesting works
+        s.push(r)
+    }
+
+    pub fn pop_clip(&self) {
+        self.clip_stack.borrow_mut().pop();
+    }
+
+    pub fn mouse_over(&self, r: &Rectangle) -> bool {
+        r.contains_point(&self.mouse_pos)
+            && self
+                .clip_stack
+                .borrow()
+                .last()
+                .is_none_or(|c| c.contains_point(&self.mouse_pos))
     }
 }
 

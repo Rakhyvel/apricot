@@ -340,6 +340,28 @@ impl RenderContext {
         self.texture_manager.borrow().get_id_from_name(name)
     }
 
+    pub fn create_texture_rgba(&self, w: u32, h: u32, bytes: &[u8]) -> TextureId {
+        debug_assert_eq!(
+            bytes.len(),
+            (w * h * 4) as usize,
+            "rgba buffer size mismatch"
+        );
+        let texture = Texture::new();
+        texture.set_pixels(w as i32, h as i32, bytes);
+        self.add_texture(texture, None)
+    }
+
+    pub fn update_texture_rgba(&self, id: TextureId, w: u32, h: u32, bytes: &[u8]) {
+        debug_assert_eq!(
+            bytes.len(),
+            (w * h * 4) as usize,
+            "rgba buffer size mismatch"
+        );
+        if let Some(texture) = self.get_texture_from_id(id) {
+            texture.set_pixels(w as i32, h as i32, bytes);
+        }
+    }
+
     pub fn get_program_id_from_name(&self, name: &'static str) -> Option<ProgramId> {
         self.program_manager.borrow().get_id_from_name(name)
     }
@@ -473,9 +495,11 @@ impl RenderContext {
         unsafe {
             if line_path.depth_test {
                 gl::Enable(gl::DEPTH_TEST);
+                gl::DepthFunc(gl::LEQUAL);
             } else {
                 gl::Disable(gl::DEPTH_TEST);
             }
+            gl::DepthMask(gl::FALSE);
             gl::LineWidth(line_path.width);
 
             // Set uniforms
@@ -521,6 +545,9 @@ impl RenderContext {
             line_path.vao.enable(0);
             gl::DrawArrays(gl::LINE_STRIP, 0, line_path.num_vertices);
             line_path.vertices_buffer.unbind();
+
+            gl::DepthMask(gl::TRUE);
+            gl::DepthFunc(gl::LESS);
         }
     }
 }

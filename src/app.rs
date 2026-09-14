@@ -89,6 +89,7 @@ pub fn run(
     gl_attr.set_double_buffer(true);
     gl_attr.set_multisample_buffers(1);
     gl_attr.set_multisample_samples(4);
+    gl_attr.set_depth_size(24);
 
     let window = video_subsystem
         .window(window_title, window_size.x as u32, window_size.y as u32)

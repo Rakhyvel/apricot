@@ -30,7 +30,7 @@ pub struct App {
 
     // Main loop stuff
     /// Whether or not the app is running
-    pub running: bool,
+    pub running: Cell<bool>,
     /// How many seconds the app has been up
     pub seconds: f32,
     /// How many ticks have occured since the app started
@@ -121,7 +121,7 @@ pub fn run(
         window_size,
         renderer: RenderContext::new(),
         // sdl_context,
-        running: true,
+        running: Cell::new(true),
         keys: [false; 256],
         mouse_pos: nalgebra_glm::vec2(0.0, 0.0),
         mouse_vel: nalgebra_glm::vec2(0.0, 0.0),
@@ -153,7 +153,7 @@ pub fn run(
     let mut elapsed;
     let mut frames = 0;
     const DELTA_T: u128 = 16;
-    while app.running {
+    while app.running.get() {
         app.seconds = time.elapsed().as_secs_f32();
         current = time.elapsed().as_millis();
         elapsed = current - previous;
@@ -243,7 +243,7 @@ impl App {
         for event in event_queue.poll_iter() {
             match event {
                 Event::Quit { .. } => {
-                    self.running = false;
+                    self.running.set(false);
                 }
 
                 Event::MouseMotion {
@@ -286,7 +286,7 @@ impl App {
                 } => {
                     self.keys[sc as usize] = true;
                     if self.keys[Scancode::Escape as usize] {
-                        self.running = false
+                        self.running.set(false)
                     }
                 }
 

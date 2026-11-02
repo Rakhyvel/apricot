@@ -73,7 +73,9 @@ impl Font {
             if !c.is_ascii_graphic() && !c.is_whitespace() {
                 continue;
             }
-            let glyph = self.get_glyph(c as u8);
+            let Some(glyph) = self.get_glyph(c as u8) else {
+                continue;
+            };
             width += glyph.advance as f32;
         }
 
@@ -95,7 +97,9 @@ impl Font {
                 // Don't print out non-graphic characters
                 continue;
             }
-            let glyph = self.get_glyph(c_byte);
+            let Some(glyph) = self.get_glyph(c_byte) else {
+                continue;
+            };
             let dest_rect = Rectangle {
                 pos: cursor,
                 size: glyph.rect.size,
@@ -158,8 +162,13 @@ impl Font {
         self.glyphs[char - 32] = glyph;
     }
 
-    fn get_glyph(&self, char: u8) -> Glyph {
-        self.glyphs[char as usize - 32]
+    fn get_glyph(&self, char: u8) -> Option<Glyph> {
+        let glyph_idx = char as usize - 32;
+        if glyph_idx >= self.glyphs.len() {
+            None
+        } else {
+            Some(self.glyphs[glyph_idx])
+        }
     }
 }
 

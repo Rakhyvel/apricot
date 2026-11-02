@@ -12,10 +12,8 @@ use super::{frustum::Frustum, plane::Plane, ray::Ray, sphere::Sphere};
 ///
 /// AABBs are very simple yet powerful, and are used for a lot of things.
 pub struct AABB {
-    pub min: nalgebra_glm::Vec3,
-    pub max: nalgebra_glm::Vec3,
-    // pre-computed
-    center: nalgebra_glm::Vec3,
+    min: nalgebra_glm::Vec3,
+    max: nalgebra_glm::Vec3,
 }
 
 #[allow(unused)]
@@ -23,19 +21,11 @@ impl AABB {
     pub fn new() -> Self {
         let min = nalgebra_glm::vec3(f32::MAX, f32::MAX, f32::MAX);
         let max = nalgebra_glm::vec3(f32::MIN, f32::MIN, f32::MIN);
-        Self {
-            min,
-            max,
-            center: (min + max) * 0.5,
-        }
+        Self { min, max }
     }
 
     pub fn from_min_max(min: nalgebra_glm::Vec3, max: nalgebra_glm::Vec3) -> Self {
-        Self {
-            min,
-            max,
-            center: (min + max) * 0.5,
-        }
+        Self { min, max }
     }
 
     /// Create an AABB from an iterator of points. This is slow!
@@ -131,9 +121,29 @@ impl AABB {
         Sphere::new(center, nalgebra_glm::distance(&center, &self.min))
     }
 
+    /// Get the minimum extrema point
+    pub fn min(&self) -> nalgebra_glm::Vec3 {
+        self.min
+    }
+
+    /// Get the maximum extrema point
+    pub fn max(&self) -> nalgebra_glm::Vec3 {
+        self.max
+    }
+
+    /// Get a mutable reference to the the minimum extrema point
+    pub fn min_mut(&mut self) -> &mut nalgebra_glm::Vec3 {
+        &mut self.min
+    }
+
+    /// Get a mutable reference to the maximum extrema point
+    pub fn max_mut(&mut self) -> &mut nalgebra_glm::Vec3 {
+        &mut self.max
+    }
+
     /// Finds the centerpoint of an AABB
     pub fn center(&self) -> nalgebra_glm::Vec3 {
-        self.center
+        (self.min + self.max) * 0.5
     }
 
     /// Moves an AABB by a vector
@@ -141,7 +151,6 @@ impl AABB {
         Self {
             min: self.min + center,
             max: self.max + center,
-            center: self.center + center,
         }
     }
 
@@ -150,7 +159,6 @@ impl AABB {
         Self {
             min: self.min.component_mul(&factor),
             max: self.max.component_mul(&factor),
-            center: self.center.component_mul(&factor),
         }
     }
 
@@ -160,7 +168,6 @@ impl AABB {
             self.min = nalgebra_glm::min2(&self.min, &corner);
             self.max = nalgebra_glm::max2(&self.max, &corner);
         }
-        self.center = (self.min + self.max) * 0.5;
     }
 
     /// Finds the midpoint of the positive z plane. Useful for shadow mapping.
@@ -174,7 +181,6 @@ impl AABB {
     pub fn transform(&mut self, matrix: nalgebra_glm::Mat4) {
         self.min = (matrix * nalgebra_glm::vec4(self.min.x, self.min.y, self.min.z, 1.0)).xyz();
         self.max = (matrix * nalgebra_glm::vec4(self.max.x, self.max.y, self.max.z, 1.0)).xyz();
-        self.center = (self.min + self.max) * 0.5;
     }
 
     /// Determines whether two AABBs intersect
@@ -213,9 +219,9 @@ impl AABB {
         self.min.x <= point.x
             && self.min.y <= point.y
             && self.min.z <= point.z
-            && self.max.x <= point.x
-            && self.max.y <= point.y
-            && self.max.z <= point.z
+            && self.max.x >= point.x
+            && self.max.y >= point.y
+            && self.max.z >= point.z
     }
 
     /// Produces the corners of an AABB. This is _SLOW_!

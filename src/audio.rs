@@ -13,6 +13,8 @@ pub struct AudioManager {
     sender: std::sync::mpsc::Sender<SoundCommand>,
 }
 
+const NUM_CHUNKS: usize = 4;
+
 impl AudioManager {
     pub fn new() -> Self {
         // Create a new channel for sending & receiving SoundCommand's
@@ -31,16 +33,20 @@ impl AudioManager {
             .unwrap();
             sdl2::mixer::allocate_channels(4);
 
-            // Create a thread-safe shared vector of 16 Chunks. `None` means they are not playing, `Some` means they are
+            // Create a thread-safe shared vector of NUM_CHUNKS Chunks. `None` means they are not playing, `Some` means they are
             let chunks: Arc<Mutex<Vec<Option<Chunk>>>> =
-                Arc::new(Mutex::new((0..16).map(|_| None).collect()));
+                Arc::new(Mutex::new((0..NUM_CHUNKS).map(|_| None).collect()));
 
             // Pend on commands from the receiver
             for command in receiver {
                 AudioManager::clear_unused_channels(&chunks);
                 match command {
                     SoundCommand::Play(file_path, volume) => {
-                        let sound_file = mixer::Chunk::from_file(&file_path).unwrap();
+                        let Ok(sound_file) = mixer::Chunk::from_file(&file_path) else {
+                            // If the file path isn't good, just ignore it I guess?
+                            println!("Couldn't open file path: {}", file_path);
+                            continue;
+                        };
                         // Lock the `channels` mutex to get exclusive access to the channels vector
                         let mut chunks = chunks.lock().unwrap();
                         // Find the first available (non-None) channel
@@ -71,7 +77,7 @@ impl AudioManager {
 
     fn clear_unused_channels(chunks: &Arc<Mutex<Vec<Option<Chunk>>>>) {
         let mut chunks = chunks.lock().unwrap();
-        for i in 0..16 {
+        for i in 0..NUM_CHUNKS {
             if !mixer::Channel(i as i32).is_playing() {
                 chunks[i] = None
             }

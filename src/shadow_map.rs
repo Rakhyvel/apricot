@@ -125,6 +125,7 @@ impl RenderContext {
             near: aabb_light_space.min().z,
             far: 800.0,
         };
+        directional_light.shadow_camera.regen_view_proj_matrices();
 
         let frustum2 =
             Frustum::from_inv_proj_view(directional_light.shadow_camera.inv_proj_view(), false);

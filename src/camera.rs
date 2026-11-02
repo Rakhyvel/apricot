@@ -110,10 +110,10 @@ impl Camera {
                 right,
                 bottom,
                 top,
-                near: _,
+                near,
                 far,
             } => {
-                let proj_matrix = nalgebra_glm::ortho(left, right, bottom, top, 0.1, far);
+                let proj_matrix = nalgebra_glm::ortho(left, right, bottom, top, near, far);
 
                 let horizontal = nalgebra_glm::vec3(right - left, 0.0, 0.0);
                 let vertical = nalgebra_glm::vec3(0.0, top - bottom, 0.0);

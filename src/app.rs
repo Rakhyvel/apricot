@@ -10,10 +10,8 @@
 use std::cell::{Cell, RefCell};
 use std::time::{Duration, Instant};
 
-use chrono::Duration;
 use sdl2::event::{Event, WindowEvent};
 use sdl2::keyboard::Scancode;
-use sdl2::sys::{SDL_GetPerformanceCounter, SDL_GetPerformanceFrequency};
 use sdl2::video::SwapInterval;
 use sdl2::Sdl;
 
@@ -33,7 +31,7 @@ pub struct App {
     /// Whether or not the app is running
     pub running: Cell<bool>,
     /// How many seconds the app has been up
-    pub seconds: f32,
+    pub seconds: f64,
     /// How many ticks have occured since the app started
     pub ticks: usize,
     /// The update timestep, defaults to 60 times per second.
@@ -56,7 +54,9 @@ pub struct App {
     pub mouse_left_clicked: bool,
     /// Where the left button went down
     left_press_pos: nalgebra_glm::Vec2,
+    right_press_pos: nalgebra_glm::Vec2,
     left_drag_dist: f32,
+    right_drag_dist: f32,
     /// Whether the left button is down and has moved beyond the click threshold
     pub mouse_left_dragging: bool,
     /// Whether the current left click event has been consumed
@@ -141,7 +141,9 @@ pub fn run(
         click_consumed: Cell::new(false),
         wheel_consumed: Cell::new(false),
         left_press_pos: nalgebra_glm::vec2(0.0, 0.0),
+        right_press_pos: nalgebra_glm::vec2(0.0, 0.0),
         left_drag_dist: 0.0,
+        right_drag_dist: 0.0,
         mouse_left_dragging: false,
         clip_stack: RefCell::new(vec![]),
     };
@@ -157,7 +159,7 @@ pub fn run(
     let mut elapsed: Duration;
     let mut frames = 0;
     while app.running.get() {
-        app.seconds = time.elapsed().as_secs_f32();
+        app.seconds = time.elapsed().as_secs_f64();
         current = time.elapsed();
         elapsed = current - previous;
 
@@ -304,19 +306,29 @@ impl App {
         }
 
         const CLICK_SLOP_PX: f32 = 4.0;
-        let pressed = !self.prev_mouse_left_down && self.mouse_left_down;
-        let released = self.prev_mouse_left_down && !self.mouse_left_down;
-        if pressed {
+        let left_pressed = !self.prev_mouse_left_down && self.mouse_left_down;
+        let right_pressed = !self.prev_mouse_right_down && self.mouse_right_down;
+        let left_released = self.prev_mouse_left_down && !self.mouse_left_down;
+        let right_released = self.prev_mouse_right_down && !self.mouse_right_down;
+
+        if left_pressed {
             self.left_press_pos = self.mouse_pos;
             self.left_drag_dist = 0.0
         } else if self.mouse_left_down {
             let d = nalgebra_glm::distance(&self.mouse_pos, &self.left_press_pos);
             self.left_drag_dist = self.left_drag_dist.max(d);
         }
+        if right_pressed {
+            self.right_press_pos = self.mouse_pos;
+            self.right_drag_dist = 0.0
+        } else if self.mouse_right_down {
+            let d = nalgebra_glm::distance(&self.mouse_pos, &self.right_press_pos);
+            self.right_drag_dist = self.right_drag_dist.max(d);
+        }
 
         self.mouse_left_dragging = self.mouse_left_down && self.left_drag_dist > CLICK_SLOP_PX;
-        self.mouse_left_clicked = released && self.left_drag_dist <= CLICK_SLOP_PX;
-        self.mouse_right_clicked = !self.prev_mouse_right_down && self.mouse_right_down;
+        self.mouse_left_clicked = left_released && self.left_drag_dist <= CLICK_SLOP_PX;
+        self.mouse_right_clicked = right_released && self.right_drag_dist <= CLICK_SLOP_PX;
     }
 
     pub fn push_clip(&self, r: Rectangle) {

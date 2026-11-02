@@ -432,7 +432,6 @@ impl Uniform {
 }
 
 // TODO: Rename OpenGlTexture, and rename TextureId to Texture
-#[derive(Clone)]
 /// An OpenGL Texture
 #[derive(Default)]
 pub struct Texture {

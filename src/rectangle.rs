@@ -33,7 +33,7 @@ impl Rectangle {
 
         Self {
             pos: vec2(min_x, min_y),
-            size: vec2(max_x - min_x, max_y - min_y),
+            size: vec2((max_x - min_x).max(0.0), (max_y - min_y).max(0.0)),
         }
     }
 }

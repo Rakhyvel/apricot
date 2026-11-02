@@ -8,8 +8,9 @@
 //! management.
 
 use std::cell::{Cell, RefCell};
-use std::time::Instant;
+use std::time::{Duration, Instant};
 
+use chrono::Duration;
 use sdl2::event::{Event, WindowEvent};
 use sdl2::keyboard::Scancode;
 use sdl2::sys::{SDL_GetPerformanceCounter, SDL_GetPerformanceFrequency};
@@ -35,6 +36,8 @@ pub struct App {
     pub seconds: f32,
     /// How many ticks have occured since the app started
     pub ticks: usize,
+    /// The update timestep, defaults to 60 times per second.
+    pub dt: Duration,
 
     // User input state
     /// Static map of key states, where the boolean at index `k` determines if the scancode `k` is currently pressed
@@ -122,6 +125,7 @@ pub fn run(
         renderer: RenderContext::new(),
         // sdl_context,
         running: Cell::new(true),
+        dt: Duration::from_secs_f64(1.0 / 60.0),
         keys: [false; 256],
         mouse_pos: nalgebra_glm::vec2(0.0, 0.0),
         mouse_vel: nalgebra_glm::vec2(0.0, 0.0),
@@ -146,23 +150,22 @@ pub fn run(
     let scene_stack: Vec<RefCell<Box<dyn Scene>>> = vec![initial_scene];
 
     let time = Instant::now();
-    let mut start = time.elapsed().as_millis();
+    let mut start = time.elapsed();
     let mut current;
-    let mut previous = 0;
-    let mut lag = 0;
-    let mut elapsed;
+    let mut previous = Duration::ZERO;
+    let mut lag = Duration::ZERO;
+    let mut elapsed: Duration;
     let mut frames = 0;
-    const DELTA_T: u128 = 16;
     while app.running.get() {
         app.seconds = time.elapsed().as_secs_f32();
-        current = time.elapsed().as_millis();
+        current = time.elapsed();
         elapsed = current - previous;
 
         previous = current;
         lag += elapsed;
 
         let scene_stale = false;
-        while lag >= DELTA_T {
+        while lag >= app.dt {
             app.reset_input();
             app.poll_input(&sdl_context);
             if cfg.mouse_warp {
@@ -181,7 +184,7 @@ pub fn run(
 
             if !scene_stale {
                 // if scene isn't stale, purge the scene
-                lag -= DELTA_T;
+                lag -= app.dt;
             } else {
                 break;
             }
@@ -197,12 +200,10 @@ pub fn run(
             window.gl_swap_window();
         }
 
-        let end = unsafe { SDL_GetPerformanceCounter() };
-        let freq = unsafe { SDL_GetPerformanceFrequency() };
-        let seconds = (end as f64 - (start as f64)) / (freq as f64);
-        if seconds > 5.0 {
+        let seconds = current - start;
+        if seconds.as_secs_f64() > 5.0 {
             println!("5 seconds;  fps: {}", frames / 5);
-            start = end as u128;
+            start = current;
             frames = 0;
         }
     }
@@ -211,6 +212,10 @@ pub fn run(
 }
 
 impl App {
+    pub fn dt(&self) -> Duration {
+        self.dt
+    }
+
     /// Mark the current left click as consumed
     pub fn consume_click(&self) {
         self.click_consumed.set(true);

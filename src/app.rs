@@ -202,8 +202,8 @@ pub fn run(
             window.gl_swap_window();
         }
 
-        let seconds = current - start;
-        if seconds.as_secs_f64() > 5.0 {
+        let seconds_since_fps_report = current - start;
+        if seconds_since_fps_report.as_secs_f64() > 5.0 {
             println!("5 seconds;  fps: {}", frames / 5);
             start = current;
             frames = 0;

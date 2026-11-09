@@ -121,8 +121,8 @@ impl RenderContext {
             left: aabb_light_space.min.x,
             right: aabb_light_space.max.x,
             bottom: aabb_light_space.min.y,
-            top: aabb_light_space.max.y,
-            near: -aabb_light_space.min.z,
+            top: -aabb_light_space.max.y,
+            near: aabb_light_space.min.z,
             far: 800.0,
         };
 

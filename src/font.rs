@@ -16,10 +16,15 @@ struct Glyph {
     advance: usize,
 }
 
+const ASCII_FIRST_PRINTABLE_CHAR: u8 = 32;
+const ASCII_LAST_PRINTABLE_CHAR: u8 = 127;
+const ASCII_NUM_PRINTABLE_CHARS: usize =
+    (ASCII_LAST_PRINTABLE_CHAR - ASCII_FIRST_PRINTABLE_CHAR) as usize;
+
 /// A cached font
 pub struct Font {
     pub cache_texture: Option<TextureId>,
-    glyphs: [Glyph; 95], //< All 95 printable ASCII glyphs
+    glyphs: [Glyph; ASCII_NUM_PRINTABLE_CHARS], //< All 95 printable ASCII glyphs
     height: usize,
     _ascender: usize,
     _descender: usize,
@@ -47,7 +52,7 @@ impl Font {
         let line_skip = font.recommended_line_spacing() as usize;
         let mut retval = Self {
             cache_texture: None,
-            glyphs: [Glyph::default(); 95],
+            glyphs: [Glyph::default(); ASCII_NUM_PRINTABLE_CHARS],
             height,
             _ascender,
             _descender,
@@ -131,8 +136,8 @@ impl Font {
             b: 255,
             a: 255,
         };
-        for i in 32..127 {
-            let c = char::from(i as u8);
+        for i in ASCII_FIRST_PRINTABLE_CHAR..ASCII_LAST_PRINTABLE_CHAR {
+            let c = char::from(i);
             let s = c.to_string();
             let mut surf = font.render(&s).blended(color).unwrap();
             if x_offset + surf.width() as usize > self.height * 16 {
@@ -151,25 +156,39 @@ impl Font {
             x_offset += surf.width() as usize;
 
             let gylph_metrics = font.find_glyph_metrics(c).unwrap();
-            self.set_glyph(i, Glyph::new(dest_rect, gylph_metrics.advance));
+            self.set_glyph(i, Glyph::new(dest_rect, gylph_metrics.advance))
+                .expect("`i` should be within the valid glyph range");
         }
 
         let font_texture = Texture::from_surface(mega_surface);
         self.cache_texture = Some(renderer.add_texture(font_texture, None));
     }
 
-    fn set_glyph(&mut self, char: usize, glyph: Glyph) {
-        self.glyphs[char - 32] = glyph;
+    fn set_glyph(&mut self, char: u8, glyph: Glyph) -> Result<(), ()> {
+        let Some(glyph_idx) = glyph_idx_from_byte(char) else {
+            return Err(());
+        };
+
+        self.glyphs[glyph_idx] = glyph;
+        Ok(())
     }
 
     fn get_glyph(&self, char: u8) -> Option<Glyph> {
-        let glyph_idx = char as usize - 32;
-        if glyph_idx >= self.glyphs.len() {
+        let glyph_idx = glyph_idx_from_byte(char)?;
+        if glyph_idx as usize >= self.glyphs.len() {
             None
         } else {
             Some(self.glyphs[glyph_idx])
         }
     }
+}
+
+fn glyph_idx_from_byte(char: u8) -> Option<usize> {
+    if !(ASCII_FIRST_PRINTABLE_CHAR..ASCII_LAST_PRINTABLE_CHAR).contains(&char) {
+        return None;
+    }
+
+    Some((char - ASCII_FIRST_PRINTABLE_CHAR) as usize)
 }
 
 impl FontManager {

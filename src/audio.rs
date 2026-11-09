@@ -31,7 +31,7 @@ impl AudioManager {
                 1_024,
             )
             .unwrap();
-            sdl2::mixer::allocate_channels(4);
+            sdl2::mixer::allocate_channels(NUM_CHUNKS as i32);
 
             // Create a thread-safe shared vector of NUM_CHUNKS Chunks. `None` means they are not playing, `Some` means they are
             let chunks: Arc<Mutex<Vec<Option<Chunk>>>> =

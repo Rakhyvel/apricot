@@ -118,11 +118,11 @@ impl RenderContext {
         // Create an Orthographic Projection around the light-space AABB
         let aabb_light_space = AABB::from_points(light_view_frustum.corners());
         directional_light.shadow_camera.projection_kind = ProjectionKind::Orthographic {
-            left: aabb_light_space.min().x,
-            right: aabb_light_space.max().x,
-            bottom: aabb_light_space.min().y,
-            top: aabb_light_space.max().y,
-            near: aabb_light_space.min().z,
+            left: aabb_light_space.min.x,
+            right: aabb_light_space.max.x,
+            bottom: aabb_light_space.min.y,
+            top: aabb_light_space.max.y,
+            near: aabb_light_space.min.z,
             far: 800.0,
         };
         directional_light.shadow_camera.regen_view_proj_matrices();

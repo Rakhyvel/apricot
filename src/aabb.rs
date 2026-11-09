@@ -12,8 +12,8 @@ use super::{frustum::Frustum, plane::Plane, ray::Ray, sphere::Sphere};
 ///
 /// AABBs are very simple yet powerful, and are used for a lot of things.
 pub struct AABB {
-    min: nalgebra_glm::Vec3,
-    max: nalgebra_glm::Vec3,
+    pub min: nalgebra_glm::Vec3,
+    pub max: nalgebra_glm::Vec3,
 }
 
 #[allow(unused)]
@@ -119,26 +119,6 @@ impl AABB {
     pub fn bounding_sphere(&self) -> Sphere {
         let center = self.center();
         Sphere::new(center, nalgebra_glm::distance(&center, &self.min))
-    }
-
-    /// Get the minimum extrema point
-    pub fn min(&self) -> nalgebra_glm::Vec3 {
-        self.min
-    }
-
-    /// Get the maximum extrema point
-    pub fn max(&self) -> nalgebra_glm::Vec3 {
-        self.max
-    }
-
-    /// Get a mutable reference to the the minimum extrema point
-    pub fn min_mut(&mut self) -> &mut nalgebra_glm::Vec3 {
-        &mut self.min
-    }
-
-    /// Get a mutable reference to the maximum extrema point
-    pub fn max_mut(&mut self) -> &mut nalgebra_glm::Vec3 {
-        &mut self.max
     }
 
     /// Finds the centerpoint of an AABB

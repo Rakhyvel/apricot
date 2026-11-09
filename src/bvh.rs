@@ -77,8 +77,8 @@ impl<Object: Copy + Clone> BVH<Object> {
             Self::AABB_EXTENSION,
         );
         let mut new_aabb = self.get_volume(proxy_id);
-        *new_aabb.min_mut() -= r;
-        *new_aabb.max_mut() += r;
+        new_aabb.min -= r;
+        new_aabb.max += r;
         self.set_volume(proxy_id, new_aabb);
 
         self.insert_leaf(proxy_id);
@@ -118,26 +118,26 @@ impl<Object: Copy + Clone> BVH<Object> {
             Self::AABB_EXTENSION,
             Self::AABB_EXTENSION,
         );
-        *new_aabb.min_mut() -= r;
-        *new_aabb.max_mut() += r;
+        new_aabb.min -= r;
+        new_aabb.max += r;
 
         // Predict AABB displacement.
         let d = Self::AABB_MULTIPLIER * displacement;
 
         if d.x < 0.0 {
-            new_aabb.min_mut().x += d.x;
+            new_aabb.min.x += d.x;
         } else {
-            new_aabb.max_mut().x += d.x;
+            new_aabb.max.x += d.x;
         }
         if d.y < 0.0 {
-            new_aabb.min_mut().y += d.y;
+            new_aabb.min.y += d.y;
         } else {
-            new_aabb.max_mut().y += d.y;
+            new_aabb.max.y += d.y;
         }
         if d.z < 0.0 {
-            new_aabb.min_mut().z += d.z;
+            new_aabb.min.z += d.z;
         } else {
-            new_aabb.max_mut().z += d.z;
+            new_aabb.max.z += d.z;
         }
         self.set_volume(proxy_id, new_aabb);
 

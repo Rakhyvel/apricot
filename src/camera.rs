@@ -13,6 +13,7 @@ pub enum ProjectionKind {
         far: f32,
     },
     Orthographic {
+        // TODO: Should these just be an AABB?
         left: f32,
         right: f32,
         bottom: f32,

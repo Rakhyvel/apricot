@@ -214,10 +214,6 @@ pub fn run(
 }
 
 impl App {
-    pub fn dt(&self) -> Duration {
-        self.dt
-    }
-
     /// Mark the current left click as consumed
     pub fn consume_click(&self) {
         self.click_consumed.set(true);

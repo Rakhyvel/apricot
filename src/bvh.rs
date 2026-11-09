@@ -105,7 +105,7 @@ impl<Object: Copy + Clone> BVH<Object> {
         assert!((proxy_id as usize) < self.nodes.len());
         assert!(self.node_at(proxy_id).is_leaf());
 
-        if self.get_volume(proxy_id).intersects(aabb) {
+        if self.get_volume(proxy_id).contains(aabb) {
             return false;
         }
 

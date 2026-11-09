@@ -111,7 +111,7 @@ impl RenderContext {
         directional_light
             .shadow_camera
             .set_lookat(directional_light.shadow_camera.position() - directional_light.light_dir);
-        let (light_view_matrix, light_proj_matrix) =
+        let (light_view_matrix, _light_proj_matrix) =
             directional_light.shadow_camera.view_proj_matrices();
         let light_view_frustum = screen_frustum.transform(light_view_matrix);
 
@@ -122,10 +122,14 @@ impl RenderContext {
             right: aabb_light_space.max.x,
             bottom: aabb_light_space.min.y,
             top: aabb_light_space.max.y,
-            near: aabb_light_space.min.z,
+            near: -aabb_light_space.min.z,
             far: 800.0,
         };
+
+        // Regen the view and proj matrixes after the projection bounds change
         directional_light.shadow_camera.regen_view_proj_matrices();
+        let (light_view_matrix, light_proj_matrix) =
+            directional_light.shadow_camera.view_proj_matrices();
 
         let frustum2 =
             Frustum::from_inv_proj_view(directional_light.shadow_camera.inv_proj_view(), false);

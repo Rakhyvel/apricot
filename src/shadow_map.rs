@@ -69,7 +69,7 @@ impl RenderContext {
         }
 
         // Use a simple depth shader program
-        self.set_program_from_id(self.get_program_id_from_name("shadow").unwrap());
+        self.set_program_from_id(self.builtins.program_shadow);
 
         // Compute the camera frustum corners
         let (view_matrix, proj_matrix) = self.camera.borrow().view_proj_matrices();

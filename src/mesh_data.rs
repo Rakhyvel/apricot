@@ -84,6 +84,7 @@ impl MeshData {
         self.positions.len() / 3
     }
 
+    #[cfg(test)]
     fn position(&self, i: u32) -> Vec3 {
         let i = i as usize * 3;
         vec3(
@@ -93,6 +94,7 @@ impl MeshData {
         )
     }
 
+    #[cfg(test)]
     fn normal(&self, i: u32) -> Vec3 {
         let i = i as usize * 3;
         vec3(self.normals[i], self.normals[i + 1], self.normals[i + 2])

@@ -29,6 +29,8 @@ impl RenderContext {
         self.get_program_uniform("u_color")
             .set_vec4(&vec4(1.0, 1.0, 1.0, 1.0));
         self.get_program_uniform("u_shadows").set_i32(1);
+        self.get_program_uniform("u_shadow_texel")
+            .set_f32(directional_light.texel_size());
         self.get_program_uniform("u_sun_dir")
             .set_vec3(&directional_light.light_dir);
 

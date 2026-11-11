@@ -59,7 +59,7 @@ impl Scene for SpinningCube {
             &vec3(0.3, 1.0, 0.2).normalize(),
         );
         let floor = nalgebra_glm::scale(
-            &nalgebra_glm::translate(&nalgebra_glm::identity(), &vec3(0.0, -1.0, 0.0)),
+            &nalgebra_glm::translate(&nalgebra_glm::identity(), &vec3(0.0, -0.5, 0.0)),
             &vec3(10.0, 1.0, 10.0),
         );
 

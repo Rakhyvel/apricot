@@ -564,7 +564,7 @@ impl Texture {
             gl::TexImage2D(
                 gl::TEXTURE_2D,
                 0,
-                gl::DEPTH_COMPONENT as GLint,
+                gl::DEPTH_COMPONENT32F as GLint,
                 width,
                 height,
                 0,

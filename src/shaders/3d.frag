@@ -31,5 +31,4 @@ void main() {
     float diffuse = max(dot(n, l), 0.0) * shadow_visibility();
     vec4 base = texture(texture0, v_uv) * u_color;
     color = vec4(base.rgb * (0.2 + 0.8 * diffuse), base.a);
-    color = vec4(vec3(shadow_visibility()), 1.0);
 }

@@ -4,7 +4,6 @@ use nalgebra_glm::{vec3, vec4, Mat4, Vec3};
 use crate::{camera::ProjectionKind, render_core::MeshId};
 
 use super::{
-    aabb::AABB,
     bvh::BVH,
     camera::Camera,
     frustum::Frustum,
@@ -22,6 +21,7 @@ pub struct DirectionalLightSource {
     depth_map: Texture,
     light_view: Mat4,
     light_proj: Mat4,
+    texel_size: f32,
 }
 
 #[derive(Clone, Copy)]
@@ -29,6 +29,7 @@ pub(crate) struct ActiveLight {
     pub light_dir: Vec3,
     pub light_proj_view: Mat4,
     pub depth_map: gl::types::GLuint,
+    pub texel_size: f32,
 }
 
 impl DirectionalLightSource {
@@ -48,6 +49,7 @@ impl DirectionalLightSource {
             depth_map,
             light_view: Mat4::identity(),
             light_proj: Mat4::identity(),
+            texel_size: 0.0,
         }
     }
 
@@ -88,6 +90,7 @@ impl DirectionalLightSource {
         // Measure the camera frustum from a light at the origin
         let light_rot = nalgebra_glm::look_at(&Vec3::zeros(), &-dir, &up);
         let texel = 2.0 * radius / self.frame_buffer_size as f32;
+        self.texel_size = texel;
         let mut c = (light_rot * vec4(center.x, center.y, center.z, 1.0)).xyz();
         c.x = (c.x / texel).floor() * texel;
         c.y = (c.y / texel).floor() * texel;
@@ -120,7 +123,12 @@ impl DirectionalLightSource {
             light_dir: self.light_dir.normalize(),
             light_proj_view: self.light_proj_view(),
             depth_map: self.depth_map.id,
+            texel_size: self.texel_size,
         }
+    }
+
+    pub(crate) fn texel_size(&self) -> f32 {
+        self.texel_size
     }
 }
 
@@ -155,7 +163,7 @@ impl RenderContext {
             gl::Enable(gl::CULL_FACE);
             gl::CullFace(gl::BACK);
             gl::Enable(gl::POLYGON_OFFSET_FILL);
-            gl::PolygonOffset(2.0, 1.0);
+            gl::PolygonOffset(1.0, 1.0);
             gl::Clear(gl::DEPTH_BUFFER_BIT)
         }
         self.set_program_from_id(self.builtins.program_shadow);

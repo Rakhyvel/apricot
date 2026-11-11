@@ -544,6 +544,8 @@ impl RenderContext {
                     .set_mat4(&light.light_proj_view);
                 self.get_program_uniform("u_shadows").set_i32(1);
                 self.get_program_uniform("shadow_map").set_i32(1); // texture unit 1
+                self.get_program_uniform("u_shadow_texel")
+                    .set_f32(light.texel_size);
                 unsafe {
                     gl::ActiveTexture(gl::TEXTURE1);
                     gl::BindTexture(gl::TEXTURE_2D, light.depth_map);

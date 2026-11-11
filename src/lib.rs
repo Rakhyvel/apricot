@@ -7,6 +7,7 @@ pub mod chunked_map;
 pub mod font;
 pub mod frustum;
 pub mod high_precision;
+pub mod mesh_data;
 pub mod opengl;
 pub mod perlin;
 pub mod physics;

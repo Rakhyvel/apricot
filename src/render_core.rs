@@ -11,6 +11,7 @@ use nalgebra_glm::{Mat4, Vec2, Vec3, Vec4};
 use obj::{load_obj, Obj, TexturedVertex};
 
 use crate::{
+    mesh_data::MeshData,
     opengl::{DeletionQueue, Fbo},
     tri::Tri,
 };
@@ -818,6 +819,13 @@ impl Mesh {
         let data = vec![&vertices, &normals, &uv];
 
         Self::new(indices, data)
+    }
+
+    pub fn from_data(data: &MeshData) -> Self {
+        Self::new(
+            data.indices.clone(),
+            vec![&data.positions, &data.normals, &data.uvs],
+        )
     }
 
     pub fn triangles(&self) -> Vec<Tri> {

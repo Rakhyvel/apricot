@@ -202,7 +202,7 @@ impl FontManager {
         }
     }
 
-    /// Add a new font to the manager and retrieve it's ID
+    /// Add a new font from a .ttf/.otf to the manager and retrieve it's ID
     pub fn add_font(
         &mut self,
         path: &'static str,
@@ -211,15 +211,34 @@ impl FontManager {
         style: sdl2::ttf::FontStyle,
         renderer: &RenderContext,
     ) -> FontId {
+        let font = {
+            let mut ttf_font = self.ttf_context.load_font(Path::new(path), size).unwrap();
+            ttf_font.set_style(style);
+            Font::new(&ttf_font, renderer)
+        };
+        self.push(font, name)
+    }
+
+    /// Add a font from .ttf/.otf bytes in memory
+    pub fn add_font_from_bytes(
+        &mut self,
+        bytes: &[u8],
+        name: &'static str,
+        size: u16,
+        style: sdl2::ttf::FontStyle,
+        renderer: &RenderContext,
+    ) -> FontId {
+        let font = {
+            let rwops = sdl2::rwops::RWops::from_bytes(bytes).unwrap();
+            let mut ttf_font = self.ttf_context.load_font_from_rwops(rwops, size).unwrap();
+            ttf_font.set_style(style);
+            Font::new(&ttf_font, renderer)
+        };
+        self.push(font, name)
+    }
+
+    fn push(&mut self, font: Font, name: &'static str) -> FontId {
         let id = FontId::new(self.fonts.len());
-
-        // Load font here with self.ttf_context, ensuring it has the same lifetime as FontManager
-        let mut ttf_font = self.ttf_context.load_font(Path::new(path), size).unwrap();
-        ttf_font.set_style(style);
-
-        // Create a new Font instance with a reference to ttf_font
-        let font = Font::new(&ttf_font, renderer);
-
         self.fonts.push(font);
         self.keys.insert(name, id);
         id

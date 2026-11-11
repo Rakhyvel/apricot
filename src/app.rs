@@ -36,6 +36,8 @@ pub struct App {
     pub ticks: usize,
     /// The update timestep, defaults to 60 times per second.
     pub dt: Duration,
+    /// Frames rendered in the last second
+    pub fps: u32,
 
     // User input state
     /// Static map of key states, where the boolean at index `k` determines if the scancode `k` is currently pressed
@@ -138,6 +140,7 @@ pub fn run(
         mouse_wheel: 0.0,
         seconds: 0.0,
         ticks: 0,
+        fps: 0,
         click_consumed: Cell::new(false),
         wheel_consumed: Cell::new(false),
         left_press_pos: nalgebra_glm::vec2(0.0, 0.0),
@@ -203,10 +206,14 @@ pub fn run(
         }
 
         let seconds_since_fps_report = current - start;
-        if seconds_since_fps_report.as_secs_f64() > 5.0 {
+        if seconds_since_fps_report > Duration::from_secs(5) {
             println!("5 seconds;  fps: {}", frames / 5);
             start = current;
             frames = 0;
+        }
+
+        if seconds_since_fps_report >= Duration::from_secs(1) {
+            app.fps = (frames as f64 / seconds_since_fps_report.as_secs_f64()).round() as u32;
         }
     }
 

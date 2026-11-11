@@ -25,6 +25,8 @@ use super::{
     rectangle::Rectangle,
 };
 
+const DEFAULT_FONT: &[u8] = include_bytes!("fonts/Not Jam Mono Clean 16.ttf");
+
 pub(crate) enum DrawCommand {
     FillRect {
         rect: Rectangle,
@@ -81,6 +83,7 @@ pub struct Builtins {
     pub program_shadow: ProgramId,
     pub program_line: ProgramId,
     pub white_texture: TextureId,
+    pub font: FontId,
     pub quad: MeshId,
     pub cube: MeshId,
     pub plane: MeshId,
@@ -195,12 +198,13 @@ impl RenderContext {
                 white.set_pixels(1, 1, &[255; 4]);
                 textures.add(white, Some("white"))
             },
+            font: FontId::new(0),
             quad: meshes.add(Mesh::from_data(&MeshData::quad()), Some("quad")),
             cube: meshes.add(Mesh::from_data(&MeshData::cube()), Some("cube")),
             plane: meshes.add(Mesh::from_data(&MeshData::plane()), Some("plane")),
         };
 
-        Self {
+        let mut renderer = Self {
             camera: RefCell::new(Camera::default()),
             program: RefCell::new(None),
             color: RefCell::new(nalgebra_glm::vec4(0.0, 0.0, 0.0, 1.0)),
@@ -233,7 +237,12 @@ impl RenderContext {
                 4.0 / 3.0,
             ),
             builtins,
-        }
+        };
+
+        renderer.builtins.font =
+            renderer.add_font_from_bytes(DEFAULT_FONT, "default", 16, sdl2::ttf::FontStyle::NORMAL);
+        renderer.set_font(renderer.builtins.font);
+        renderer
     }
 
     pub fn set_camera(&self, camera: Camera) {
@@ -334,6 +343,18 @@ impl RenderContext {
         self.font_manager
             .borrow_mut()
             .add_font(path, name, size, style, self)
+    }
+
+    pub fn add_font_from_bytes(
+        &self,
+        bytes: &[u8],
+        name: &'static str,
+        size: u16,
+        style: sdl2::ttf::FontStyle,
+    ) -> FontId {
+        self.font_manager
+            .borrow_mut()
+            .add_font_from_bytes(bytes, name, size, style, self)
     }
 
     pub fn get_mesh(&self, name: &'static str) -> Option<std::cell::Ref<'_, Mesh>> {

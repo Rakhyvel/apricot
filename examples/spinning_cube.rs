@@ -69,8 +69,7 @@ impl Scene for SpinningCube {
         });
 
         // Render the cube and floor
-        renderer.set_color(vec4(0.53, 0.81, 0.92, 1.0));
-        renderer.clear();
+        renderer.clear(vec4(0.53, 0.81, 0.92, 1.0));
         renderer.draw_mesh(renderer.builtins.cube, cube, vec4(1.0, 0.6, 0.25, 1.0));
         renderer.draw_mesh(renderer.builtins.plane, floor, vec4(1.0, 1.0, 1.0, 1.0));
 

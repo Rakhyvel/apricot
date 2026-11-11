@@ -507,10 +507,9 @@ impl RenderContext {
         self.deletion_queue.borrow_mut().flush();
     }
 
-    pub fn clear(&self) {
-        let color_ref = self.color.borrow_mut();
+    pub fn clear(&self, color: Vec4) {
         unsafe {
-            gl::ClearColor(color_ref.x, color_ref.y, color_ref.z, color_ref.w);
+            gl::ClearColor(color.x, color.y, color.z, color.w);
             gl::Clear(gl::COLOR_BUFFER_BIT | gl::DEPTH_BUFFER_BIT | gl::STENCIL_BUFFER_BIT);
         }
     }

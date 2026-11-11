@@ -388,7 +388,7 @@ impl RenderContext {
         }
     }
 
-    pub fn get_program_uniform(&self, uniform_name: &str) -> Result<Uniform, &'static str> {
+    pub fn get_program_uniform(&self, uniform_name: &str) -> Uniform {
         Uniform::new(self.get_current_program_id(), uniform_name)
     }
 
@@ -427,29 +427,14 @@ impl RenderContext {
         view_matrix: nalgebra_glm::Mat4,
         proj_matrix: nalgebra_glm::Mat4,
     ) {
-        let u_model_matrix: Uniform = self.get_program_uniform("u_model_matrix").unwrap();
-        let u_view_matrix = self.get_program_uniform("u_view_matrix").unwrap();
-        let u_proj_matrix = self.get_program_uniform("u_proj_matrix").unwrap();
-        unsafe {
-            gl::UniformMatrix4fv(
-                u_model_matrix.id,
-                1,
-                gl::FALSE,
-                &model_matrix.columns(0, 4)[0],
-            );
-            gl::UniformMatrix4fv(
-                u_view_matrix.id,
-                1,
-                gl::FALSE,
-                &view_matrix.columns(0, 4)[0],
-            );
-            gl::UniformMatrix4fv(
-                u_proj_matrix.id,
-                1,
-                gl::FALSE,
-                &proj_matrix.columns(0, 4)[0],
-            );
+        self.get_program_uniform("u_model_matrix")
+            .set_mat4(&model_matrix);
+        self.get_program_uniform("u_view_matrix")
+            .set_mat4(&view_matrix);
+        self.get_program_uniform("u_proj_matrix")
+            .set_mat4(&proj_matrix);
 
+        unsafe {
             // Setup geometry for rendering
             mesh.vao.bind();
 
@@ -483,46 +468,25 @@ impl RenderContext {
             }
             gl::DepthMask(gl::FALSE);
             gl::LineWidth(line_path.width);
+        }
 
-            // Set uniforms
-            let model_matrix = nalgebra_glm::translate(&nalgebra_glm::one(), &position);
+        // Set uniforms
+        let model_matrix = nalgebra_glm::translate(&nalgebra_glm::one(), &position);
+        self.get_program_uniform("u_model_matrix")
+            .set_mat4(&model_matrix);
+        self.get_program_uniform("u_view_matrix")
+            .set_mat4(&view_matrix);
+        self.get_program_uniform("u_projection_matrix")
+            .set_mat4(&proj_matrix);
+        self.get_program_uniform("u_color")
+            .set_vec4(&line_path.color);
+        self.get_program_uniform("u_seam").set_f32(line_path.seam);
+        self.get_program_uniform("u_fade")
+            .set_i32(line_path.fade as i32);
+        self.get_program_uniform("u_num_vertices")
+            .set_i32(line_path.num_vertices);
 
-            let u_model_matrix = self.get_program_uniform("model").unwrap();
-            let u_view_matrix = self.get_program_uniform("view").unwrap();
-            let u_proj_matrix = self.get_program_uniform("projection").unwrap();
-            let u_color = self.get_program_uniform("u_color").unwrap();
-            let u_seam = self.get_program_uniform("u_seam").unwrap();
-            let u_fade = self.get_program_uniform("u_fade").unwrap();
-            let u_num_vertices = self.get_program_uniform("u_num_vertices").unwrap();
-            gl::UniformMatrix4fv(
-                u_model_matrix.id,
-                1,
-                gl::FALSE,
-                &model_matrix.columns(0, 4)[0],
-            );
-            gl::UniformMatrix4fv(
-                u_view_matrix.id,
-                1,
-                gl::FALSE,
-                &view_matrix.columns(0, 4)[0],
-            );
-            gl::UniformMatrix4fv(
-                u_proj_matrix.id,
-                1,
-                gl::FALSE,
-                &proj_matrix.columns(0, 4)[0],
-            );
-            gl::Uniform4f(
-                u_color.id,
-                line_path.color.x,
-                line_path.color.y,
-                line_path.color.z,
-                line_path.color.w,
-            );
-            gl::Uniform1f(u_seam.id, line_path.seam);
-            gl::Uniform1i(u_fade.id, line_path.fade as i32);
-            gl::Uniform1i(u_num_vertices.id, line_path.num_vertices);
-
+        unsafe {
             line_path.vao.bind();
             gl::DrawArrays(gl::LINE_STRIP, 0, line_path.num_vertices);
             line_path.vao.unbind();

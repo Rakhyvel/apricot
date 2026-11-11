@@ -229,32 +229,19 @@ impl RenderContext {
         let (texture_width, texture_height) = texture.get_dimensions().unwrap();
         texture.activate(gl::TEXTURE0);
         texture.associate_uniform(self.get_current_program_id(), 0, "texture0");
-        let u_sprite_offset = self.get_program_uniform("u_sprite_offset").unwrap();
-        unsafe {
-            gl::Uniform2f(
-                u_sprite_offset.id,
-                texture_dest.pos.x / texture_width as f32,
-                texture_dest.pos.y / texture_height as f32,
-            );
-        }
-        let u_sprite_size = self.get_program_uniform("u_sprite_size").unwrap();
-        unsafe {
-            gl::Uniform2f(
-                u_sprite_size.id,
-                texture_dest.size.x / texture_width as f32,
-                texture_dest.size.y / texture_height as f32,
-            );
-        }
-        let u_color_mod = self.get_program_uniform("u_color_mod").unwrap();
-        unsafe {
-            gl::Uniform4f(
-                u_color_mod.id,
-                color_mod.x,
-                color_mod.y,
-                color_mod.z,
-                color_mod.w,
-            );
-        }
+        let sprite_offset = vec2(
+            texture_dest.pos.x / texture_width as f32,
+            texture_dest.pos.y / texture_height as f32,
+        );
+        let sprite_size = vec2(
+            texture_dest.size.x / texture_width as f32,
+            texture_dest.size.y / texture_height as f32,
+        );
+        self.get_program_uniform("u_sprite_offset")
+            .set_vec2(&sprite_offset);
+        self.get_program_uniform("u_sprite_size")
+            .set_vec2(&sprite_size);
+        self.get_program_uniform("u_color").set_vec4(color_mod);
 
         let quad_mesh = self
             .get_mesh_from_id(self.get_mesh_id_from_name("quad-xy").unwrap())
@@ -299,11 +286,7 @@ impl RenderContext {
         }
 
         self.set_program_from_id(self.get_program_id_from_name("2d-solid").unwrap());
-
-        let u_color = self.get_program_uniform("u_color").unwrap();
-        unsafe {
-            gl::Uniform4f(u_color.id, color.x, color.y, color.z, color.w);
-        }
+        self.get_program_uniform("u_color").set_vec4(&color);
 
         let (view_matrix, proj_matrix) = self.camera_2d.view_proj_matrices();
         let model_matrix: Mat4 = nalgebra_glm::scale(
@@ -343,11 +326,7 @@ impl RenderContext {
         }
 
         self.set_program_from_id(self.get_program_id_from_name("2d-solid").unwrap());
-
-        let u_color = self.get_program_uniform("u_color").unwrap();
-        unsafe {
-            gl::Uniform4f(u_color.id, color.x, color.y, color.z, color.w);
-        }
+        self.get_program_uniform("u_color").set_vec4(&color);
 
         let (view_matrix, proj_matrix) = self.camera_2d.view_proj_matrices();
         let mut m = nalgebra_glm::translate(

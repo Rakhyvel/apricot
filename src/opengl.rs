@@ -10,6 +10,7 @@ use std::{
 use gl::types::{GLchar, GLenum, GLint, GLuint};
 
 use image::{EncodableLayout, ImageError};
+use nalgebra_glm::{Mat4, Vec2, Vec3, Vec4};
 
 /// An OpenGL Shader
 pub struct Shader {
@@ -399,15 +400,31 @@ pub struct Uniform {
 }
 
 impl Uniform {
-    // Create a new OpenGL uniform
-    pub fn new(program: u32, name: &str) -> Result<Self, &'static str> {
-        let cname: CString = CString::new(name).expect("CString::new failed");
-        let location: GLint = unsafe { gl::GetUniformLocation(program, cname.as_ptr()) };
+    // Lookup `name` in `program`. If the program doesn't use it, `id` is -1 and the setters do nothing.
+    pub fn new(program: u32, name: &str) -> Self {
+        let cname: CString = CString::new(name).expect("uniform name contains a null byte");
+        let id: GLint = unsafe { gl::GetUniformLocation(program, cname.as_ptr()) };
         print_any_errors();
-        if location == -1 {
-            return Err("Couldn't get a uniform location");
-        }
-        Ok(Uniform { id: location })
+        Uniform { id }
+    }
+
+    pub fn set_mat4(&self, m: &Mat4) {
+        unsafe { gl::UniformMatrix4fv(self.id, 1, gl::FALSE, m.as_ptr()) }
+    }
+    pub fn set_vec4(&self, v: &Vec4) {
+        unsafe { gl::Uniform4f(self.id, v.x, v.y, v.z, v.w) }
+    }
+    pub fn set_vec3(&self, v: &Vec3) {
+        unsafe { gl::Uniform3f(self.id, v.x, v.y, v.z) }
+    }
+    pub fn set_vec2(&self, v: &Vec2) {
+        unsafe { gl::Uniform2f(self.id, v.x, v.y) }
+    }
+    pub fn set_f32(&self, x: f32) {
+        unsafe { gl::Uniform1f(self.id, x) }
+    }
+    pub fn set_i32(&self, x: i32) {
+        unsafe { gl::Uniform1i(self.id, x) }
     }
 }
 

@@ -28,15 +28,8 @@ impl RenderContext {
         self.set_program_from_id(self.get_program_id_from_name("3d").unwrap());
 
         // Set the directional light direction
-        let u_sun_dir = self.get_program_uniform("u_sun_dir").expect("erm lol");
-        unsafe {
-            gl::Uniform3f(
-                u_sun_dir.id,
-                directional_light.light_dir.x,
-                directional_light.light_dir.y,
-                directional_light.light_dir.z,
-            );
-        }
+        self.get_program_uniform("u_sun_dir")
+            .set_vec3(&directional_light.light_dir);
 
         // TODO: Not sure what goes here
         unsafe {
@@ -55,16 +48,8 @@ impl RenderContext {
         // TODO: Not sure what goes here
         let (light_view_matrix, light_proj_matrix) =
             directional_light.shadow_camera.view_proj_matrices();
-        let u_light_matrix = Uniform::new(self.get_current_program_id(), "light_mvp").unwrap();
         let light_proj_view = light_proj_matrix * light_view_matrix;
-        unsafe {
-            gl::UniformMatrix4fv(
-                u_light_matrix.id,
-                1,
-                gl::FALSE,
-                &light_proj_view.columns(0, 4)[0],
-            );
-        }
+        Uniform::new(self.get_current_program_id(), "light_mvp").set_mat4(&light_proj_view); // TODO: What's the uniform name here?
 
         // Get the camera frustum, view matrix, and proj matrix
         let camera_frustum = &self.camera.borrow().frustum();
@@ -122,16 +107,8 @@ impl RenderContext {
         self.set_program_from_id(self.get_program_id_from_name("3d-solid").unwrap());
         let camera_frustum = &self.camera.borrow().frustum();
 
-        let u_color = self.get_program_uniform("u_color").unwrap();
-        unsafe {
-            gl::Uniform4f(
-                u_color.id,
-                self.color.borrow().x,
-                self.color.borrow().y,
-                self.color.borrow().z,
-                self.color.borrow().w,
-            );
-        }
+        self.get_program_uniform("u_color")
+            .set_vec4(&self.color.borrow());
 
         let (view_matrix, proj_matrix) = self.camera.borrow().view_proj_matrices();
         for model_id in bvh.iter_frustum(camera_frustum, false) {

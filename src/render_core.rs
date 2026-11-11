@@ -120,24 +120,12 @@ pub struct LinePathComponent {
 /// Stores the geometry of a mesh. Meshes are registered in the mesh manager, and can be potentially shared across
 /// multiple models.
 pub struct Mesh {
-    geometry: Vec<GeometryData>,
+    vao: Vao,
+    vbos: Vec<Buffer<f32>>,
+    ibo: Buffer<u32>,
+    positions: Vec<f32>,
     indices: Vec<u32>,
     aabb: AABB,
-}
-
-/// Actual geometry data for a mesh.
-pub struct GeometryData {
-    ibo: Buffer<u32>,
-    vbo: Buffer<f32>,
-    vao: Vao,
-    vertex_data: Vec<f32>,
-}
-
-pub enum GeometryDataIndex {
-    Vertex = 0,
-    Normal = 1,
-    Texture = 2,
-    Color = 3,
 }
 
 impl RenderContext {
@@ -462,11 +450,7 @@ impl RenderContext {
             );
 
             // Setup geometry for rendering
-            for i in 0..mesh.geometry.len() {
-                mesh.geometry[i].vbo.bind();
-                mesh.geometry[i].ibo.bind();
-                mesh.geometry[i].vao.enable(i as u32);
-            }
+            mesh.vao.bind();
 
             // Make the render call!
             gl::DrawElements(
@@ -476,11 +460,8 @@ impl RenderContext {
                 std::ptr::null(),
             );
 
-            // Unbind all buffers
-            for i in 0..mesh.geometry.len() {
-                mesh.geometry[i].vbo.unbind();
-                mesh.geometry[i].ibo.unbind();
-            }
+            // Unbind the VAO
+            mesh.vao.unbind();
         }
     }
 
@@ -541,10 +522,9 @@ impl RenderContext {
             gl::Uniform1i(u_fade.id, line_path.fade as i32);
             gl::Uniform1i(u_num_vertices.id, line_path.num_vertices);
 
-            line_path.vertices_buffer.bind();
-            line_path.vao.enable(0);
+            line_path.vao.bind();
             gl::DrawArrays(gl::LINE_STRIP, 0, line_path.num_vertices);
-            line_path.vertices_buffer.unbind();
+            line_path.vao.unbind();
 
             gl::DepthMask(gl::TRUE);
             gl::DepthFunc(gl::LESS);
@@ -610,11 +590,11 @@ impl<Resource, Id: OpaqueId> Default for ResourceManager<Resource, Id> {
 impl ResourceManager<Mesh, MeshId> {
     pub fn queue_all(&mut self, deletion_queue: &mut DeletionQueue) {
         for mesh in self.resources.iter_mut() {
-            for geom in mesh.geometry.iter_mut() {
-                deletion_queue.queue_buffer(&mut geom.ibo);
-                deletion_queue.queue_buffer(&mut geom.vbo);
-                deletion_queue.queue_vao(&mut geom.vao);
+            for vbo in mesh.vbos.iter_mut() {
+                deletion_queue.queue_buffer(vbo);
             }
+            deletion_queue.queue_buffer(&mut mesh.ibo);
+            deletion_queue.queue_vao(&mut mesh.vao);
         }
     }
 }
@@ -723,14 +703,15 @@ impl LinePathComponent {
     pub fn new(vertices: Vec<f32>) -> Self {
         let vao = Vao::gen();
         let vertices_buffer: Buffer<f32> = Buffer::gen(gl::ARRAY_BUFFER);
-
         vertices_buffer.set_data(&vertices);
-        vao.set(0);
+
+        vao.attrib(0, &vertices_buffer, 3, 3, 0);
+
+        vao.unbind();
+        vertices_buffer.unbind();
 
         // Generate vertices for the elliptical orbit
         let num_vertices = vertices.len() as i32 / 3; // 3 components per vertex (x,y,z)
-
-        vertices_buffer.unbind();
 
         Self {
             vao,
@@ -780,38 +761,46 @@ impl LinePathComponent {
 
 impl Mesh {
     pub fn new(indices: Vec<u32>, datas: Vec<&Vec<f32>>) -> Self {
-        let geometry: Vec<GeometryData> = datas
+        assert!(
+            !datas.is_empty(),
+            "The `datas` parameter vec can't be empty"
+        );
+
+        let vao = Vao::gen();
+        let ibo = Buffer::<u32>::gen(gl::ELEMENT_ARRAY_BUFFER);
+        ibo.set_data(&indices);
+
+        let vbos: Vec<Buffer<f32>> = datas
             .iter()
-            .map(|data| GeometryData {
-                ibo: Buffer::<u32>::gen(gl::ELEMENT_ARRAY_BUFFER),
-                vao: Vao::gen(),
-                vbo: Buffer::<f32>::gen(gl::ARRAY_BUFFER),
-                vertex_data: data.to_vec(),
+            .enumerate()
+            .map(|(i, data)| {
+                let vbo = Buffer::<f32>::gen(gl::ARRAY_BUFFER);
+                vbo.set_data(data); // binds ARRAY_BUFFER to `vbo`
+                vao.attrib(i as u32, &vbo, 3, 3, 0); // slot `i` reads from vbo
+                vbo
             })
             .collect();
 
-        // Allocate VRAM buffers (this is slow!)
-        for i in 0..geometry.len() {
-            geometry[i].vbo.set_data(&geometry[i].vertex_data);
-            geometry[i].ibo.set_data(&indices);
-            geometry[i].vao.set(i as u32)
+        vao.set_index_buffer(&ibo);
+
+        // Unbind the VAO and any left over array buffer
+        vao.unbind();
+        unsafe {
+            gl::BindBuffer(gl::ARRAY_BUFFER, 0);
         }
 
-        // Unbind all buffers
-        for i in 0..geometry.len() {
-            geometry[i].vbo.unbind();
-            geometry[i].ibo.unbind();
-        }
-
+        let positions = datas[0].clone();
         let aabb = AABB::from_points(
-            geometry[GeometryDataIndex::Vertex as usize]
-                .vertex_data
+            positions
                 .chunks(3)
                 .map(|p| nalgebra_glm::vec3(p[0], p[1], p[2])),
         );
 
         Mesh {
-            geometry,
+            vao,
+            vbos,
+            ibo,
+            positions,
             indices,
             aabb,
         }
@@ -832,7 +821,7 @@ impl Mesh {
     }
 
     pub fn triangles(&self) -> Vec<Tri> {
-        let verts = &self.geometry[GeometryDataIndex::Vertex as usize].vertex_data;
+        let verts = &self.positions;
         self.indices
             .chunks(3)
             .map(|tri| {
@@ -846,18 +835,12 @@ impl Mesh {
             .collect()
     }
 
-    pub fn geometry(&self) -> &Vec<GeometryData> {
-        &self.geometry
+    pub fn positions(&self) -> &[f32] {
+        &self.positions
     }
 
     pub fn indices(&self) -> &Vec<u32> {
         &self.indices
-    }
-}
-
-impl GeometryData {
-    pub fn vertex_data(&self) -> &Vec<f32> {
-        &self.vertex_data
     }
 }
 

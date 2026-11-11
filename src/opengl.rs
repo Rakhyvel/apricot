@@ -255,15 +255,26 @@ impl Vao {
         Vao { id }
     }
 
-    /// Bind and use this VAO
-    pub fn set(&self, loc: u32) {
-        self.bind(loc);
-        self.setup(loc, 3, 3, 0);
-    }
-
-    pub fn set_custom(&self, loc: u32, num_components: usize, stride: usize, offset: usize) {
+    /// Bind this VAO. All attributes or index state recorded into it becomes active.
+    pub fn bind(&self) {
         unsafe {
             gl::BindVertexArray(self.id);
+        }
+        print_any_errors();
+    }
+
+    /// Point slot `loc` of this VAO at `vbo`
+    pub fn attrib(
+        &self,
+        loc: u32,
+        vbo: &Buffer<f32>,
+        num_components: usize,
+        stride: usize,
+        offset: usize,
+    ) {
+        self.bind();
+        vbo.bind();
+        unsafe {
             gl::EnableVertexAttribArray(loc);
             gl::VertexAttribPointer(
                 loc,
@@ -277,44 +288,13 @@ impl Vao {
         print_any_errors();
     }
 
-    /// Enable this VAO
-    pub fn enable(&self, loc: u32) {
-        unsafe {
-            gl::EnableVertexAttribArray(loc);
-        }
-        print_any_errors();
-        self.setup(loc, 3, 3, 0);
+    /// Attach `ibo` as this VAO's index buffer
+    pub fn set_index_buffer(&self, ibo: &Buffer<u32>) {
+        self.bind();
+        ibo.bind();
     }
 
-    pub fn enable_custom(&self, loc: u32, num_components: usize, stride: usize, offset: usize) {
-        unsafe {
-            gl::EnableVertexAttribArray(loc);
-        }
-        self.setup(loc, num_components, stride, offset);
-    }
-
-    fn bind(&self, loc: u32) {
-        unsafe {
-            gl::BindVertexArray(self.id);
-            gl::EnableVertexAttribArray(loc);
-        }
-        print_any_errors();
-    }
-
-    fn setup(&self, loc: u32, num_components: usize, stride: usize, offset: usize) {
-        unsafe {
-            gl::VertexAttribPointer(
-                loc,
-                num_components as i32,
-                gl::FLOAT,
-                gl::FALSE,
-                (stride * std::mem::size_of::<f32>()) as GLint,
-                (offset * std::mem::size_of::<f32>()) as *const _,
-            );
-        }
-        print_any_errors();
-    }
-
+    /// Unbind this VAO
     pub fn unbind(&self) {
         unsafe {
             gl::BindVertexArray(0);

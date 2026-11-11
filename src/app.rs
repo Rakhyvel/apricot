@@ -279,6 +279,7 @@ impl App {
                     self.window_size = nalgebra_glm::I32Vec2::new(new_width, new_height);
                     let mut camera = self.renderer.camera.borrow_mut();
                     camera.set_aspect_ratio(new_width as f32 / new_height as f32);
+                    unsafe { gl::Viewport(0, 0, new_width, new_height) };
                     self.renderer
                         .camera_2d
                         .set_aspect_ratio(new_width as f32 / new_height as f32);

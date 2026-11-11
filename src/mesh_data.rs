@@ -80,6 +80,25 @@ impl MeshData {
         data
     }
 
+    pub fn plane() -> Self {
+        Self {
+            positions: vec![
+                -0.5, 0.0, 0.5, //
+                0.5, 0.0, 0.5, //
+                0.5, 0.0, -0.5, //
+                -0.5, 0.0, -0.5,
+            ],
+            normals: [0.0, 1.0, 0.0].repeat(4),
+            uvs: vec![
+                0.0, 0.0, 0.0, //
+                1.0, 0.0, 0.0, //
+                1.0, 1.0, 0.0, //
+                0.0, 1.0, 0.0,
+            ],
+            indices: vec![0, 1, 2, 0, 2, 3],
+        }
+    }
+
     pub fn vertex_count(&self) -> usize {
         self.positions.len() / 3
     }
@@ -140,5 +159,10 @@ mod tests {
         let cube = MeshData::cube();
         check(&cube);
         assert!(cube.positions.iter().all(|p| p.abs() == 0.5));
+    }
+
+    #[test]
+    fn plane_is_valid() {
+        check(&MeshData::plane());
     }
 }

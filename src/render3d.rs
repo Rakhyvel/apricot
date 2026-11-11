@@ -7,7 +7,6 @@ use crate::{
 
 use super::{
     bvh::BVH,
-    opengl::*,
     render_core::{ModelComponent, RenderContext},
     shadow_map::DirectionalLightSource,
 };
@@ -29,8 +28,7 @@ impl RenderContext {
 
         self.get_program_uniform("u_color")
             .set_vec4(&vec4(1.0, 1.0, 1.0, 1.0));
-
-        // Set the directional light direction
+        self.get_program_uniform("u_shadows").set_i32(1);
         self.get_program_uniform("u_sun_dir")
             .set_vec3(&directional_light.light_dir);
 
@@ -48,11 +46,8 @@ impl RenderContext {
             gl::StencilOp(gl::KEEP, gl::REPLACE, gl::REPLACE);
         }
 
-        // TODO: Not sure what goes here
-        let (light_view_matrix, light_proj_matrix) =
-            directional_light.shadow_camera.view_proj_matrices();
-        let light_proj_view = light_proj_matrix * light_view_matrix;
-        Uniform::new(self.get_current_program_id(), "light_mvp").set_mat4(&light_proj_view); // TODO: What's the uniform name here?
+        self.get_program_uniform("light_mvp")
+            .set_mat4(&directional_light.light_proj_view());
 
         // Get the camera frustum, view matrix, and proj matrix
         let camera_frustum = &self.camera.borrow().frustum();

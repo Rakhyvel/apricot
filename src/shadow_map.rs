@@ -1,43 +1,112 @@
-use std::borrow::Borrow;
-
 use hecs::{Entity, World};
+use nalgebra_glm::{vec3, vec4, Mat4, Vec3};
+
+use crate::{camera::ProjectionKind, render_core::MeshId};
 
 use super::{
     aabb::AABB,
     bvh::BVH,
-    camera::{Camera, ProjectionKind},
+    camera::Camera,
     frustum::Frustum,
     opengl::{Fbo, Texture},
     render_core::{ModelComponent, RenderContext},
 };
 
 pub struct DirectionalLightSource {
-    pub shadow_camera: Camera,
+    /// Direction towards the light
+    pub light_dir: nalgebra_glm::Vec3,
+    pub shadow_distance: f32,
+    pub caster_distance: f32,
     frame_buffer: Fbo,
     frame_buffer_size: i32,
     depth_map: Texture,
-    pub light_dir: nalgebra_glm::Vec3,
+    light_view: Mat4,
+    light_proj: Mat4,
+}
+
+#[derive(Clone, Copy)]
+pub(crate) struct ActiveLight {
+    pub light_dir: Vec3,
+    pub light_proj_view: Mat4,
+    pub depth_map: gl::types::GLuint,
 }
 
 impl DirectionalLightSource {
-    pub fn new(
-        shadow_camera: Camera,
-        light_dir: nalgebra_glm::Vec3,
-        frame_buffer_size: i32,
-    ) -> Self {
+    pub fn new(light_dir: Vec3, shadow_map_size: i32) -> Self {
         let depth_map = Texture::new();
-        depth_map.load_depth_buffer(frame_buffer_size, frame_buffer_size);
+        depth_map.load_depth_buffer(shadow_map_size, shadow_map_size);
         let frame_buffer = Fbo::new();
         frame_buffer.bind();
         depth_map.post_bind();
         frame_buffer.unbind();
         Self {
-            shadow_camera,
-            frame_buffer,
-            frame_buffer_size,
-            depth_map,
             light_dir: light_dir.normalize(),
+            shadow_distance: 50.0,
+            caster_distance: 100.0,
+            frame_buffer,
+            frame_buffer_size: shadow_map_size,
+            depth_map,
+            light_view: Mat4::identity(),
+            light_proj: Mat4::identity(),
         }
+    }
+
+    /// Fit the light's orthographic view box around everything `camera` can see
+    pub fn fit_to_camera(&mut self, camera: &Camera) {
+        self.fit_to_slice(camera, 0.1, self.shadow_distance);
+    }
+
+    pub fn fit_to_slice(&mut self, camera: &Camera, near: f32, far: f32) {
+        let (view, cam_proj) = camera.view_proj_matrices();
+        let proj = match camera.projection_kind {
+            ProjectionKind::Perspective {
+                fov_rad,
+                far: cam_far,
+            } => nalgebra_glm::perspective(camera.aspect_ratio(), fov_rad, near, far.min(cam_far)),
+            ProjectionKind::Orthographic { .. } => cam_proj,
+        };
+
+        let corners =
+            Frustum::from_inv_proj_view(nalgebra_glm::inverse(&(proj * view)), false).corners();
+
+        // Bounding sphere of the slice
+        let center = corners.iter().fold(Vec3::zeros(), |sum, c| sum + c) / 8.0;
+        let radius = corners
+            .iter()
+            .map(|c| (c - center).norm())
+            .fold(0.0, f32::max);
+        let radius = (radius * 16.0).ceil() / 16.0; // prevent frame-to-frame camera float noise
+
+        let dir = self.light_dir.normalize();
+        // look_at breaks if `up` is parallel to the view direction
+        let up = if dir.y.abs() > 0.99 {
+            vec3(0.0, 0.0, 1.0)
+        } else {
+            vec3(0.0, 1.0, 0.0)
+        };
+
+        // Measure the camera frustum from a light at the origin
+        let light_rot = nalgebra_glm::look_at(&Vec3::zeros(), &-dir, &up);
+        let texel = 2.0 * radius / self.frame_buffer_size as f32;
+        let mut c = (light_rot * vec4(center.x, center.y, center.z, 1.0)).xyz();
+        c.x = (c.x / texel).floor() * texel;
+        c.y = (c.y / texel).floor() * texel;
+        let center = (nalgebra_glm::inverse(&light_rot) * vec4(c.x, c.y, c.z, 1.0)).xyz();
+
+        let eye = center + dir * radius;
+        self.light_view = nalgebra_glm::look_at(&eye, &center, &up);
+        self.light_proj = nalgebra_glm::ortho(
+            -radius,
+            radius,
+            -radius,
+            radius,
+            -self.caster_distance,
+            2.0 * radius,
+        );
+    }
+
+    pub fn light_proj_view(&self) -> Mat4 {
+        self.light_proj * self.light_view
     }
 
     pub fn activate_framebuffer(&self, program_id: u32) {
@@ -45,112 +114,92 @@ impl DirectionalLightSource {
         self.depth_map
             .associate_uniform(program_id, 1, "shadow_map");
     }
+
+    pub(crate) fn active(&self) -> ActiveLight {
+        ActiveLight {
+            light_dir: self.light_dir.normalize(),
+            light_proj_view: self.light_proj_view(),
+            depth_map: self.depth_map.id,
+        }
+    }
+}
+
+/// Passed to the closure in `RenderContext::shadow_pass`. Meshes drawn through it cast shadows.
+pub struct ShadowPass<'a> {
+    renderer: &'a RenderContext,
+    light_view: Mat4,
+    light_proj: Mat4,
+}
+
+impl ShadowPass<'_> {
+    pub fn draw(&self, mesh_id: MeshId, model: Mat4) {
+        let mesh = self.renderer.get_mesh_from_id(mesh_id).unwrap();
+        self.renderer
+            .draw(&mesh, model, self.light_view, self.light_proj)
+    }
 }
 
 impl RenderContext {
-    pub fn directional_light_system(
+    /// Render onto `light`'s shadow map, fitted to the current camera.
+    pub fn shadow_pass(
         &self,
-        directional_light: &mut DirectionalLightSource,
-        world: &mut World,
-        bvh: &BVH<Entity>,
+        light: &mut DirectionalLightSource,
+        draw_casters: impl FnOnce(&ShadowPass),
     ) {
-        directional_light.frame_buffer.bind();
+        light.fit_to_camera(&self.camera.borrow());
+
+        light.frame_buffer.bind();
+        unsafe {
+            gl::Viewport(0, 0, light.frame_buffer_size, light.frame_buffer_size);
+            gl::Enable(gl::DEPTH_TEST);
+            gl::Enable(gl::CULL_FACE);
+            gl::CullFace(gl::BACK);
+            gl::Enable(gl::POLYGON_OFFSET_FILL);
+            gl::PolygonOffset(2.0, 1.0);
+            gl::Clear(gl::DEPTH_BUFFER_BIT)
+        }
+        self.set_program_from_id(self.builtins.program_shadow);
+
+        draw_casters(&ShadowPass {
+            renderer: self,
+            light_view: light.light_view,
+            light_proj: light.light_proj,
+        });
+
+        light.frame_buffer.unbind();
         unsafe {
             gl::Viewport(
                 0,
                 0,
-                directional_light.frame_buffer_size,
-                directional_light.frame_buffer_size,
+                self.int_screen_resolution.x,
+                self.int_screen_resolution.y,
             );
-            gl::Enable(gl::CULL_FACE);
-            gl::CullFace(gl::FRONT);
-            gl::Enable(gl::DEPTH_TEST);
-            gl::Clear(gl::DEPTH_BUFFER_BIT)
+            gl::Disable(gl::POLYGON_OFFSET_FILL);
+            gl::CullFace(gl::BACK);
         }
+        self.active_light.set(Some(light.active()));
+    }
 
-        // Use a simple depth shader program
-        self.set_program_from_id(self.builtins.program_shadow);
+    /// Stop lighting `draw_mesh` with the last shaddow pass's light
+    pub fn clear_light(&self) {
+        self.active_light.set(None);
+    }
 
-        // Compute the camera frustum corners
-        let (view_matrix, proj_matrix) = self.camera.borrow().view_proj_matrices();
-        let inv_proj_view = nalgebra_glm::inverse(&(proj_matrix * view_matrix));
-        let screen_frustum = Frustum::from_inv_proj_view(inv_proj_view, false);
-
-        // Transform the screen-world-frustum corners to light-view-space (1st time)
-        // Move shadow camera to world-space origin (kinda arbitrary)
-        directional_light
-            .shadow_camera
-            .set_position(nalgebra_glm::zero());
-        // Have it point along the world-space light direction
-        directional_light
-            .shadow_camera
-            .set_lookat(directional_light.shadow_camera.position() - directional_light.light_dir);
-        // Calculate the view and proj matrices for this
-        let (light_view_matrix, _light_proj_view_matrix) =
-            directional_light.shadow_camera.view_proj_matrices();
-        // Transform the world-space screen frustum into light-view-space
-        let light_view_frustum = screen_frustum.transform(light_view_matrix);
-
-        // Calculate an AABB for the light-view-space frustum
-        let aabb_light_space = AABB::from_points(light_view_frustum.corners());
-
-        // Calculate a light-space AABB for the world
-        // let mut world_aabb_light_space = AABB::new();
-        // world_aabb_light_space.transform(light_view_matrix);
-        // aabb_light_space.intersect_z(&world_aabb_light_space);
-
-        // Calculate the mid-point of the near-plane on the light-view-frustum
-        let light_pos_light_space = aabb_light_space.pos_z_plane_midpoint();
-        let light_pos_world_space =
-            (nalgebra_glm::inverse(&light_view_matrix)) * light_pos_light_space;
-
-        // Transform the screen-world-frustum to light-space (2nd time)
-        directional_light
-            .shadow_camera
-            .set_position(light_pos_world_space.xyz());
-        directional_light
-            .shadow_camera
-            .set_lookat(directional_light.shadow_camera.position() - directional_light.light_dir);
-        let (light_view_matrix, _light_proj_matrix) =
-            directional_light.shadow_camera.view_proj_matrices();
-        let light_view_frustum = screen_frustum.transform(light_view_matrix);
-
-        // Create an Orthographic Projection around the light-space AABB
-        let aabb_light_space = AABB::from_points(light_view_frustum.corners());
-        directional_light.shadow_camera.projection_kind = ProjectionKind::Orthographic {
-            left: aabb_light_space.min.x,
-            right: aabb_light_space.max.x,
-            bottom: aabb_light_space.min.y,
-            top: -aabb_light_space.max.y,
-            near: aabb_light_space.min.z,
-            far: 800.0,
-        };
-
-        // Regen the view and proj matrixes after the projection bounds change
-        directional_light.shadow_camera.regen_view_proj_matrices();
-        let (light_view_matrix, light_proj_matrix) =
-            directional_light.shadow_camera.view_proj_matrices();
-
-        let frustum2 =
-            Frustum::from_inv_proj_view(directional_light.shadow_camera.inv_proj_view(), false);
-
-        for model_id in bvh.iter_frustum(&frustum2, false) {
-            let model = world.get::<&ModelComponent>(model_id).unwrap();
-            let mesh = self.get_mesh_from_id(model.mesh_id).unwrap();
-            let texture = self.get_texture_from_id(model.texture_id).unwrap();
-            let model_matrix = model.get_model_matrix();
-
-            texture.activate(gl::TEXTURE0);
-            texture.associate_uniform(self.get_current_program_id(), 0, "texture0");
-            self.draw(
-                mesh.borrow(),
-                model_matrix,
-                light_view_matrix,
-                light_proj_matrix,
-            )
-        }
-        // println!("rendered: {}", rendered);
-
-        directional_light.frame_buffer.unbind();
+    pub fn directional_light_system(
+        &self,
+        light: &mut DirectionalLightSource,
+        world: &mut World,
+        bvh: &BVH<Entity>,
+    ) {
+        self.shadow_pass(light, |pass| {
+            let light_frustum = Frustum::from_inv_proj_view(
+                nalgebra_glm::inverse(&(pass.light_proj * pass.light_view)),
+                false,
+            );
+            for id in bvh.iter_frustum(&light_frustum, false) {
+                let model = world.get::<&ModelComponent>(id).unwrap();
+                pass.draw(model.mesh_id, model.get_model_matrix());
+            }
+        });
     }
 }

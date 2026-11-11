@@ -573,9 +573,9 @@ impl Texture {
                 std::ptr::null(),
             );
             print_any_errors();
-            gl::TexParameteri(gl::TEXTURE_2D, gl::TEXTURE_MIN_FILTER, gl::NEAREST as GLint);
+            gl::TexParameteri(gl::TEXTURE_2D, gl::TEXTURE_MIN_FILTER, gl::LINEAR as GLint);
             print_any_errors();
-            gl::TexParameteri(gl::TEXTURE_2D, gl::TEXTURE_MAG_FILTER, gl::NEAREST as GLint);
+            gl::TexParameteri(gl::TEXTURE_2D, gl::TEXTURE_MAG_FILTER, gl::LINEAR as GLint);
             print_any_errors();
             gl::TexParameteri(
                 gl::TEXTURE_2D,
@@ -594,6 +594,17 @@ impl Texture {
                 gl::TEXTURE_2D,
                 gl::TEXTURE_BORDER_COLOR,
                 border_color.as_ptr(),
+            );
+            print_any_errors();
+            gl::TexParameteri(
+                gl::TEXTURE_2D,
+                gl::TEXTURE_COMPARE_MODE,
+                gl::COMPARE_REF_TO_TEXTURE as GLint,
+            );
+            gl::TexParameteri(
+                gl::TEXTURE_2D,
+                gl::TEXTURE_COMPARE_FUNC,
+                gl::LEQUAL as GLint,
             );
             print_any_errors();
         }

@@ -13,6 +13,7 @@ use obj::{load_obj, Obj, TexturedVertex};
 use crate::{
     mesh_data::MeshData,
     opengl::{create_program, DeletionQueue, Fbo},
+    shadow_map::ActiveLight,
     tri::Tri,
 };
 
@@ -67,6 +68,7 @@ pub struct RenderContext {
     pub(crate) current_draw_layer: Cell<i32>,
 
     // Updated by the app
+    pub(crate) active_light: Cell<Option<ActiveLight>>,
     pub int_screen_resolution: nalgebra_glm::I32Vec2,
     pub camera_2d: Camera,
     pub builtins: Builtins,
@@ -81,6 +83,7 @@ pub struct Builtins {
     pub white_texture: TextureId,
     pub quad: MeshId,
     pub cube: MeshId,
+    pub plane: MeshId,
 }
 
 struct ResourceManager<Resource, Id: OpaqueId> {
@@ -194,6 +197,7 @@ impl RenderContext {
             },
             quad: meshes.add(Mesh::from_data(&MeshData::quad()), Some("quad")),
             cube: meshes.add(Mesh::from_data(&MeshData::cube()), Some("cube")),
+            plane: meshes.add(Mesh::from_data(&MeshData::plane()), Some("plane")),
         };
 
         Self {
@@ -203,15 +207,16 @@ impl RenderContext {
             font: RefCell::new(None),
             scissor: Cell::new(None),
 
-            mesh_manager: RefCell::new(ResourceManager::new()),
-            texture_manager: RefCell::new(ResourceManager::new()),
-            program_manager: RefCell::new(ResourceManager::new()),
+            mesh_manager: RefCell::new(meshes),
+            texture_manager: RefCell::new(textures),
+            program_manager: RefCell::new(programs),
             font_manager: RefCell::new(FontManager::new()),
 
             deletion_queue: RefCell::new(DeletionQueue::new()),
             draw_queue: RefCell::new(Vec::new()),
             current_draw_layer: Cell::new(0),
 
+            active_light: Cell::new(None),
             int_screen_resolution: nalgebra_glm::I32Vec2::new(0, 0),
             camera_2d: Camera::new(
                 nalgebra_glm::vec3(0.0, 0.0, 0.0),
@@ -529,6 +534,29 @@ impl RenderContext {
         }
         self.set_program_from_id(self.builtins.program_3d);
         self.get_program_uniform("u_color").set_vec4(&color);
+        self.get_program_uniform("shadow_map").set_i32(1);
+
+        match self.active_light.get() {
+            Some(light) => {
+                self.get_program_uniform("u_sun_dir")
+                    .set_vec3(&light.light_dir);
+                self.get_program_uniform("light_mvp")
+                    .set_mat4(&light.light_proj_view);
+                self.get_program_uniform("u_shadows").set_i32(1);
+                self.get_program_uniform("shadow_map").set_i32(1); // texture unit 1
+                unsafe {
+                    gl::ActiveTexture(gl::TEXTURE1);
+                    gl::BindTexture(gl::TEXTURE_2D, light.depth_map);
+                    gl::ActiveTexture(gl::TEXTURE0);
+                }
+            }
+            None => {
+                self.get_program_uniform("u_sun_dir")
+                    .set_vec3(&Vec3::zeros());
+                self.get_program_uniform("u_shadows").set_i32(0);
+            }
+        }
+
         let white = self
             .get_texture_from_id(self.builtins.white_texture)
             .unwrap();

@@ -15,6 +15,30 @@ pub struct NineSlice {
 }
 
 impl RenderContext {
+    fn draw_2d(
+        &self,
+        mesh_id: MeshId,
+        model: Mat4,
+        texture_id: TextureId,
+        sprite_offset: Vec2,
+        sprite_size: Vec2,
+        color: Vec4,
+    ) {
+        self.set_program_from_id(self.builtins.program_2d);
+        let texture = self.get_texture_from_id(texture_id).unwrap();
+        texture.activate(gl::TEXTURE0);
+        texture.associate_uniform(self.get_current_program_id(), 0, "texture0");
+        self.get_program_uniform("u_sprite_offset")
+            .set_vec2(&sprite_offset);
+        self.get_program_uniform("u_sprite_size")
+            .set_vec2(&sprite_size);
+        self.get_program_uniform("u_color").set_vec4(&color);
+
+        let (view, proj) = self.camera_2d.view_proj_matrices();
+        let mesh = self.get_mesh_from_id(mesh_id).unwrap();
+        self.draw(&mesh, model, view, proj);
+    }
+
     pub fn render_nine_slice(&self, nine_slice: NineSlice, dest: Rectangle) {
         if dest.size.x < 2.0 * nine_slice.border || dest.size.y < 2.0 * nine_slice.border {
             panic!("Too small! {}", nine_slice.border)
@@ -210,9 +234,6 @@ impl RenderContext {
             gl::BlendFunc(gl::SRC_ALPHA, gl::ONE_MINUS_SRC_ALPHA);
         }
 
-        self.set_program_from_id(self.get_program_id_from_name("2d").unwrap());
-
-        let (view_matrix, proj_matrix) = self.camera_2d.view_proj_matrices();
         let model_matrix: Mat4 = nalgebra_glm::scale(
             &nalgebra_glm::translate(
                 &nalgebra_glm::one(),
@@ -225,28 +246,25 @@ impl RenderContext {
             &vec3(dest.size.x / res.x as f32, dest.size.y / res.y as f32, 0.1),
         );
 
-        let texture = self.get_texture_from_id(texture_id).unwrap();
-        let (texture_width, texture_height) = texture.get_dimensions().unwrap();
-        texture.activate(gl::TEXTURE0);
-        texture.associate_uniform(self.get_current_program_id(), 0, "texture0");
-        let sprite_offset = vec2(
-            texture_dest.pos.x / texture_width as f32,
-            texture_dest.pos.y / texture_height as f32,
-        );
-        let sprite_size = vec2(
-            texture_dest.size.x / texture_width as f32,
-            texture_dest.size.y / texture_height as f32,
-        );
-        self.get_program_uniform("u_sprite_offset")
-            .set_vec2(&sprite_offset);
-        self.get_program_uniform("u_sprite_size")
-            .set_vec2(&sprite_size);
-        self.get_program_uniform("u_color").set_vec4(color_mod);
-
-        let quad_mesh = self
-            .get_mesh_from_id(self.get_mesh_id_from_name("quad-xy").unwrap())
+        let (w, h) = self
+            .get_texture_from_id(texture_id)
+            .unwrap()
+            .get_dimensions()
             .unwrap();
-        self.draw(quad_mesh.borrow(), model_matrix, view_matrix, proj_matrix);
+        let sprite_offset = vec2(texture_dest.pos.x / w as f32, texture_dest.pos.y / h as f32);
+        let sprite_size = vec2(
+            texture_dest.size.x / w as f32,
+            texture_dest.size.y / h as f32,
+        );
+
+        self.draw_2d(
+            self.builtins.quad,
+            model_matrix,
+            texture_id,
+            sprite_offset,
+            sprite_size,
+            *color_mod,
+        );
     }
 
     pub fn fill_rect(&self, dest: Rectangle) {
@@ -285,10 +303,6 @@ impl RenderContext {
             gl::BlendFunc(gl::SRC_ALPHA, gl::ONE_MINUS_SRC_ALPHA);
         }
 
-        self.set_program_from_id(self.get_program_id_from_name("2d-solid").unwrap());
-        self.get_program_uniform("u_color").set_vec4(&color);
-
-        let (view_matrix, proj_matrix) = self.camera_2d.view_proj_matrices();
         let model_matrix: Mat4 = nalgebra_glm::scale(
             &nalgebra_glm::translate(
                 &nalgebra_glm::one(),
@@ -301,10 +315,14 @@ impl RenderContext {
             &vec3(dest.size.x / res.x as f32, dest.size.y / res.y as f32, 0.1),
         );
 
-        let quad_mesh = self
-            .get_mesh_from_id(self.get_mesh_id_from_name("quad-xy").unwrap())
-            .unwrap();
-        self.draw(quad_mesh.borrow(), model_matrix, view_matrix, proj_matrix);
+        self.draw_2d(
+            self.builtins.quad,
+            model_matrix,
+            self.builtins.white_texture,
+            vec2(0.0, 0.0),
+            vec2(1.0, 1.0),
+            color,
+        );
     }
 
     fn fill_polygon_immediate(
@@ -325,11 +343,7 @@ impl RenderContext {
             gl::BlendFunc(gl::SRC_ALPHA, gl::ONE_MINUS_SRC_ALPHA);
         }
 
-        self.set_program_from_id(self.get_program_id_from_name("2d-solid").unwrap());
-        self.get_program_uniform("u_color").set_vec4(&color);
-
-        let (view_matrix, proj_matrix) = self.camera_2d.view_proj_matrices();
-        let mut m = nalgebra_glm::translate(
+        let mut model_matrix = nalgebra_glm::translate(
             &nalgebra_glm::one(),
             &vec3(
                 1.0 - 2.0 * center.x / res.x as f32,
@@ -337,12 +351,21 @@ impl RenderContext {
                 3.0,
             ),
         );
-        m = nalgebra_glm::scale(&m, &vec3(2.0 / res.x as f32, 2.0 / res.y as f32, 1.0));
-        m = nalgebra_glm::rotate_z(&m, rotation);
-        m = nalgebra_glm::scale(&m, &vec3(radius, radius, 0.1));
+        model_matrix = nalgebra_glm::scale(
+            &model_matrix,
+            &vec3(2.0 / res.x as f32, 2.0 / res.y as f32, 1.0),
+        );
+        model_matrix = nalgebra_glm::rotate_z(&model_matrix, rotation);
+        model_matrix = nalgebra_glm::scale(&model_matrix, &vec3(radius, radius, 0.1));
 
-        let quad_mesh = self.get_mesh_from_id(mesh_id).unwrap();
-        self.draw(quad_mesh.borrow(), m, view_matrix, proj_matrix);
+        self.draw_2d(
+            mesh_id,
+            model_matrix,
+            self.builtins.white_texture,
+            vec2(0.0, 0.0),
+            vec2(1.0, 1.0),
+            color,
+        );
     }
 
     /// Execute all queued 2D draw commands in layer order. Called once per frame after scene.render().

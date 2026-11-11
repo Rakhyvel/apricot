@@ -13,7 +13,7 @@ use super::{
 };
 
 use hecs::{Entity, World};
-use nalgebra_glm::Vec3;
+use nalgebra_glm::{vec4, Vec3};
 
 impl RenderContext {
     pub fn render_3d_models_system(
@@ -25,7 +25,10 @@ impl RenderContext {
         debug: bool,
     ) {
         // Set to "3d" program (defined by user)
-        self.set_program_from_id(self.get_program_id_from_name("3d").unwrap());
+        self.set_program_from_id(self.builtins.program_3d);
+
+        self.get_program_uniform("u_color")
+            .set_vec4(&vec4(1.0, 1.0, 1.0, 1.0));
 
         // Set the directional light direction
         self.get_program_uniform("u_sun_dir")
@@ -104,7 +107,7 @@ impl RenderContext {
             gl::Enable(gl::STENCIL_TEST);
             gl::Disable(gl::DEPTH_TEST);
         }
-        self.set_program_from_id(self.get_program_id_from_name("3d-solid").unwrap());
+        self.set_program_from_id(self.builtins.program_3d_solid);
         let camera_frustum = &self.camera.borrow().frustum();
 
         self.get_program_uniform("u_color")

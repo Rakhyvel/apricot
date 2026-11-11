@@ -12,7 +12,7 @@ use obj::{load_obj, Obj, TexturedVertex};
 
 use crate::{
     mesh_data::MeshData,
-    opengl::{DeletionQueue, Fbo},
+    opengl::{create_program, DeletionQueue, Fbo},
     tri::Tri,
 };
 
@@ -69,6 +69,18 @@ pub struct RenderContext {
     // Updated by the app
     pub int_screen_resolution: nalgebra_glm::I32Vec2,
     pub camera_2d: Camera,
+    pub builtins: Builtins,
+}
+
+pub struct Builtins {
+    pub program_2d: ProgramId,
+    pub program_3d: ProgramId,
+    pub program_3d_solid: ProgramId,
+    pub program_shadow: ProgramId,
+    pub program_line: ProgramId,
+    pub white_texture: TextureId,
+    pub quad: MeshId,
+    pub cube: MeshId,
 }
 
 struct ResourceManager<Resource, Id: OpaqueId> {
@@ -131,6 +143,59 @@ pub struct Mesh {
 
 impl RenderContext {
     pub fn new() -> Self {
+        fn builtin(vert: &'static str, frag: &'static str) -> Program {
+            create_program(vert, frag).expect("apricot built-in shader failed to compile")
+        }
+
+        let mut programs = ResourceManager::new();
+        let mut textures = ResourceManager::new();
+        let mut meshes = ResourceManager::new();
+
+        let builtins = Builtins {
+            program_2d: programs.add(
+                builtin(
+                    include_str!("shaders/2d.vert"),
+                    include_str!("shaders/2d.frag"),
+                ),
+                Some("2d"),
+            ),
+            program_3d: programs.add(
+                builtin(
+                    include_str!("shaders/3d.vert"),
+                    include_str!("shaders/3d.frag"),
+                ),
+                Some("3d"),
+            ),
+            program_3d_solid: programs.add(
+                builtin(
+                    include_str!("shaders/3d.vert"),
+                    include_str!("shaders/solid-color.frag"),
+                ),
+                Some("3d-solid"),
+            ),
+            program_shadow: programs.add(
+                builtin(
+                    include_str!("shaders/shadow.vert"),
+                    include_str!("shaders/shadow.frag"),
+                ),
+                Some("shadow"),
+            ),
+            program_line: programs.add(
+                builtin(
+                    include_str!("shaders/line.vert"),
+                    include_str!("shaders/line.frag"),
+                ),
+                Some("line"),
+            ),
+            white_texture: {
+                let white = Texture::new();
+                white.set_pixels(1, 1, &[255; 4]);
+                textures.add(white, Some("white"))
+            },
+            quad: meshes.add(Mesh::from_data(&MeshData::quad()), Some("quad")),
+            cube: meshes.add(Mesh::from_data(&MeshData::cube()), Some("cube")),
+        };
+
         Self {
             camera: RefCell::new(Camera::default()),
             program: RefCell::new(None),
@@ -162,6 +227,7 @@ impl RenderContext {
                 },
                 4.0 / 3.0,
             ),
+            builtins,
         }
     }
 
@@ -246,8 +312,11 @@ impl RenderContext {
     }
 
     pub fn add_program(&self, program: Program, name: Option<&'static str>) -> ProgramId {
-        let retval = self.program_manager.borrow_mut().add(program, name);
-        retval
+        let mut manager = self.program_manager.borrow_mut();
+        match name {
+            Some(name) => manager.add_or_replace(program, name),
+            None => manager.add(program, None),
+        }
     }
 
     pub fn add_font(
@@ -451,6 +520,26 @@ impl RenderContext {
         }
     }
 
+    /// Draw `mesh_id` with the built-in 3D shader from the current camera, tinted `color`.
+    pub fn draw_mesh(&self, mesh_id: MeshId, model: Mat4, color: Vec4) {
+        unsafe {
+            gl::Enable(gl::DEPTH_TEST); // the 2D pass turns this off
+            gl::Enable(gl::CULL_FACE);
+            gl::CullFace(gl::BACK);
+        }
+        self.set_program_from_id(self.builtins.program_3d);
+        self.get_program_uniform("u_color").set_vec4(&color);
+        let white = self
+            .get_texture_from_id(self.builtins.white_texture)
+            .unwrap();
+        white.activate(gl::TEXTURE0);
+        white.associate_uniform(self.get_current_program_id(), 0, "texture0");
+
+        let (view, proj) = self.camera.borrow().view_proj_matrices();
+        let mesh = self.get_mesh_from_id(mesh_id).unwrap();
+        self.draw(&mesh, model, view, proj);
+    }
+
     pub fn draw_line_path_at(
         &self,
         line_path: &LinePathComponent,
@@ -458,7 +547,7 @@ impl RenderContext {
         view_matrix: nalgebra_glm::Mat4,
         proj_matrix: nalgebra_glm::Mat4,
     ) {
-        self.set_program(Some("line"));
+        self.set_program_from_id(self.builtins.program_line);
         unsafe {
             if line_path.depth_test {
                 gl::Enable(gl::DEPTH_TEST);
@@ -476,7 +565,7 @@ impl RenderContext {
             .set_mat4(&model_matrix);
         self.get_program_uniform("u_view_matrix")
             .set_mat4(&view_matrix);
-        self.get_program_uniform("u_projection_matrix")
+        self.get_program_uniform("u_proj_matrix")
             .set_mat4(&proj_matrix);
         self.get_program_uniform("u_color")
             .set_vec4(&line_path.color);
@@ -532,6 +621,16 @@ impl<Resource, Id: OpaqueId + Debug> ResourceManager<Resource, Id> {
             self.keys.insert(name, id);
         }
         id
+    }
+
+    pub fn add_or_replace(&mut self, res: Resource, name: &'static str) -> Id {
+        match self.keys.get(name).copied() {
+            Some(id) => {
+                self.resources[id.as_usize()] = res;
+                id
+            }
+            None => self.add(res, Some(name)),
+        }
     }
 
     pub fn get_from_id(&self, id: Id) -> Option<&Resource> {

@@ -22,4 +22,5 @@ pub mod render2d;
 pub mod render_core;
 pub mod shadow_map;
 pub mod sphere;
+pub mod terrain;
 pub mod tri;

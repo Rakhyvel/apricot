@@ -1,4 +1,5 @@
-//! Endless perlin noise terrain you can fly around, built a chunk at a time as you get near it.
+//! Endless perlin noise terrain you can fly around, built a chunk at a time as you get near it,
+//! with trees scattered over the flatter grassy parts.
 //! WASD  - fly around
 //! Space - go up
 //! Shift - go down
@@ -17,10 +18,13 @@ use apricot::{
     error::Error,
     fly_controller::FlyController,
     input::Scancode,
+    mesh_data::MeshData,
     model_set::{Model, ModelSet},
     perlin,
-    render_core::RenderContext,
+    rectangle::Rectangle,
+    render_core::{MeshId, RenderContext},
     shadow_map::DirectionalLightSource,
+    terrain::{normal_at, scatter},
 };
 use nalgebra_glm::{vec2, vec3, vec4};
 
@@ -35,6 +39,20 @@ const HEIGHT: f32 = 24.0;
 /// Everything below this (0 to 1) gets flattened into lakes
 const WATER_LEVEL: f32 = 0.3;
 const SEED: i32 = 42;
+/// How many spots per chunk get tried for a tree
+const TREE_ATTEMPTS: u32 = 60;
+/// How close two trees can be
+const TREE_SPACING: f32 = 4.0;
+/// How steep the ground can be for a tree. 0 is flat, 1 is a cliff
+const TREE_MAX_SLOPE: f32 = 0.25;
+
+/// Everything in the model set
+#[derive(Clone, Copy, PartialEq, Eq, Hash)]
+enum Thing {
+    Chunk(ChunkCoord),
+    Trunk(ChunkCoord, usize),
+    Leaves(ChunkCoord, usize),
+}
 
 fn main() -> Result<(), Error> {
     run(
@@ -51,7 +69,10 @@ struct Terrain {
     fly: FlyController,
     light: DirectionalLightSource,
     grid: ChunkGrid,
-    chunks: ModelSet<ChunkCoord>,
+    models: ModelSet<Thing>,
+    trunk: MeshId,
+    leaves: MeshId,
+    chunk_count: usize,
 }
 
 impl Terrain {
@@ -72,19 +93,56 @@ impl Terrain {
             fly,
             light,
             grid: ChunkGrid::new(CHUNK_CELLS),
-            chunks: ModelSet::new(),
+            models: ModelSet::new(),
+            trunk: app.renderer.builtins.cube,
+            leaves: app.renderer.add_mesh_data(MeshData::icosphere(1), None),
+            chunk_count: 0,
         }
     }
 
-    /// Build a chunk's mesh and texture, and add it to the set
+    /// Build a chunk's ground and trees, and add them to the set
     fn build_chunk(&mut self, renderer: &RenderContext, chunk: ChunkCoord) {
         let origin = self.grid.origin(chunk);
-        let mesh =
-            renderer.add_mesh_data(self.grid.mesh(chunk, |x, z| height(x, z) * HEIGHT), None);
+        let mesh = renderer.add_mesh_data(self.grid.mesh(chunk, ground), None);
         let colors = terrain_colors(origin.x, origin.z);
         let texture = renderer.create_texture_rgba(CHUNK_CELLS, CHUNK_CELLS, &colors);
         let model = Model::new(mesh, texture, nalgebra_glm::translation(&origin));
-        self.chunks.insert(renderer, chunk, model);
+        self.models.insert(renderer, Thing::Chunk(chunk), model);
+        self.chunk_count += 1;
+
+        // Trees on grass that isn't too steep. Seeding by chunk means a chunk always grows the same trees
+        let size = self.grid.chunk_size();
+        let area = Rectangle::new(origin.x, origin.z, size, size);
+        let seed = ((chunk.0 as u64) << 32) ^ (chunk.1 as u32 as u64);
+        let spots = scatter(area, TREE_ATTEMPTS, TREE_SPACING, seed, |p| {
+            let h = height(p.x, p.y);
+            let slope = 1.0 - normal_at(ground, p.x, p.y).y;
+            h > WATER_LEVEL + 0.05 && h < 0.65 && slope < TREE_MAX_SLOPE
+        });
+
+        let white = renderer.builtins.white_texture;
+        for (i, p) in spots.into_iter().enumerate() {
+            // A little size variety, so it doesn't look like a tree farm
+            let scale = 0.8 + 0.6 * perlin::noise(p.x, p.y, 0.7, 1, SEED + 1);
+            let base = vec3(p.x, ground(p.x, p.y) - 0.2, p.y);
+
+            let trunk = nalgebra_glm::scale(
+                &nalgebra_glm::translation(&(base + vec3(0.0, 0.75 * scale, 0.0))),
+                &(vec3(0.3, 1.5, 0.3) * scale),
+            );
+            let mut trunk = Model::new(self.trunk, white, trunk);
+            trunk.tint = vec4(0.45, 0.3, 0.2, 1.0);
+            self.models.insert(renderer, Thing::Trunk(chunk, i), trunk);
+
+            let leaves = nalgebra_glm::scale(
+                &nalgebra_glm::translation(&(base + vec3(0.0, 2.6 * scale, 0.0))),
+                &(vec3(1.2, 1.8, 1.2) * scale),
+            );
+            let mut leaves = Model::new(self.leaves, white, leaves);
+            leaves.tint = vec4(0.2, 0.5, 0.2, 1.0);
+            self.models
+                .insert(renderer, Thing::Leaves(chunk, i), leaves);
+        }
     }
 }
 
@@ -103,7 +161,7 @@ impl Scene for Terrain {
             .grid
             .chunks_near(self.fly.position, VIEW_RADIUS)
             .into_iter()
-            .filter(|chunk| self.chunks.get(*chunk).is_none())
+            .filter(|chunk| self.models.get(Thing::Chunk(*chunk)).is_none())
             .take(CHUNKS_PER_TICK)
             .collect();
         for chunk in missing {
@@ -114,14 +172,19 @@ impl Scene for Terrain {
     fn render(&mut self, app: &App) {
         let renderer = &app.renderer;
 
-        renderer.shadow_pass(&mut self.light, |pass| self.chunks.draw_shadows(pass));
+        renderer.shadow_pass(&mut self.light, |pass| self.models.draw_shadows(pass));
 
         renderer.clear(vec4(0.6, 0.8, 0.95, 1.0));
-        self.chunks.draw(renderer);
+        self.models.draw(renderer);
 
         renderer.draw_text(
             vec2(10.0, 10.0),
-            &format!("{} FPS, {} chunks", app.fps, self.chunks.len()),
+            &format!(
+                "{} FPS, {} chunks, {} models",
+                app.fps,
+                self.chunk_count,
+                self.models.len()
+            ),
             vec4(0.1, 0.1, 0.1, 1.0),
         );
     }
@@ -134,6 +197,11 @@ fn height(x: f32, z: f32) -> f32 {
     // Most noise lands near the middle, so stretch it out, then flatten the low parts into lakes.
     // No cap on top, or the peaks get sliced flat
     ((n - 0.35) / 0.3).max(WATER_LEVEL)
+}
+
+/// The ground's actual height in world units, what the meshes are built from
+fn ground(x: f32, z: f32) -> f32 {
+    height(x, z) * HEIGHT
 }
 
 /// One color per cell of the chunk starting at (`x0`, `z0`), by how high it is. The heightmap

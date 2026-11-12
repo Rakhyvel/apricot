@@ -4,6 +4,7 @@ pub mod audio;
 pub mod bvh;
 pub mod camera;
 pub mod chunked_map;
+pub mod error;
 pub mod font;
 pub mod frustum;
 pub mod high_precision;

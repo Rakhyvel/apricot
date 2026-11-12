@@ -1,21 +1,23 @@
 //! A basic hello-world program showing off a spinning cube.
 //! Run with `cargo run --example spinning_cube`.
 
-use std::{cell::RefCell, f32::consts::FRAC_PI_4};
+use std::f32::consts::FRAC_PI_4;
 
 use apricot::{
     app::{run, App, AppConfig, Scene},
     camera::{Camera, ProjectionKind},
+    error::Error,
     shadow_map::DirectionalLightSource,
 };
 use nalgebra_glm::{vec2, vec3, vec4};
 
-fn main() -> Result<(), String> {
+fn main() -> Result<(), Error> {
     run(
-        nalgebra_glm::I32Vec2::new(800, 600),
-        "Spinning Cube",
-        AppConfig { mouse_warp: false },
-        &|app| RefCell::new(Box::new(SpinningCube::new(app))),
+        AppConfig {
+            title: "Spinning Cube",
+            ..Default::default()
+        },
+        SpinningCube::new,
     )
 }
 
@@ -41,7 +43,7 @@ impl SpinningCube {
 
         Self {
             angle: 0.0,
-            light: DirectionalLightSource::new(vec3(0.5, 1.0, 0.3), 2048),
+            light: DirectionalLightSource::new(vec3(0.5, 1.0, 0.3), 2048).unwrap(),
         }
     }
 }

@@ -11,6 +11,7 @@ use nalgebra_glm::{Mat4, Vec2, Vec3, Vec4};
 use obj::{load_obj, Obj, TexturedVertex};
 
 use crate::{
+    error::Error,
     mesh_data::MeshData,
     opengl::{create_program, DeletionQueue, Fbo},
     shadow_map::ActiveLight,
@@ -148,7 +149,7 @@ pub struct Mesh {
 }
 
 impl RenderContext {
-    pub fn new() -> Self {
+    pub fn new() -> Result<Self, Error> {
         fn builtin(vert: &'static str, frag: &'static str) -> Program {
             create_program(vert, frag).expect("apricot built-in shader failed to compile")
         }
@@ -214,7 +215,7 @@ impl RenderContext {
             mesh_manager: RefCell::new(meshes),
             texture_manager: RefCell::new(textures),
             program_manager: RefCell::new(programs),
-            font_manager: RefCell::new(FontManager::new()),
+            font_manager: RefCell::new(FontManager::new()?),
 
             deletion_queue: RefCell::new(DeletionQueue::new()),
             draw_queue: RefCell::new(Vec::new()),
@@ -239,10 +240,14 @@ impl RenderContext {
             builtins,
         };
 
-        renderer.builtins.font =
-            renderer.add_font_from_bytes(DEFAULT_FONT, "default", 16, sdl2::ttf::FontStyle::NORMAL);
+        renderer.builtins.font = renderer.add_font_from_bytes(
+            DEFAULT_FONT,
+            "default",
+            16,
+            sdl2::ttf::FontStyle::NORMAL,
+        )?;
         renderer.set_font(renderer.builtins.font);
-        renderer
+        Ok(renderer)
     }
 
     pub fn set_camera(&self, camera: Camera) {
@@ -298,8 +303,12 @@ impl RenderContext {
         self.mesh_manager.borrow_mut().add(mesh, name)
     }
 
-    pub fn add_mesh_from_obj(&self, obj_file_data: &[u8], name: Option<&'static str>) -> MeshId {
-        self.add_mesh(Mesh::from_obj(obj_file_data), name)
+    pub fn add_mesh_from_obj(
+        &self,
+        obj_file_data: &[u8],
+        name: Option<&'static str>,
+    ) -> Result<MeshId, Error> {
+        Ok(self.add_mesh(Mesh::from_obj(obj_file_data)?, name))
     }
 
     pub fn add_mesh_from_verts(
@@ -319,10 +328,11 @@ impl RenderContext {
         &self,
         texture_filename: &'static str,
         name: Option<&'static str>,
-    ) -> TextureId {
-        self.texture_manager
+    ) -> Result<TextureId, Error> {
+        Ok(self
+            .texture_manager
             .borrow_mut()
-            .add(Texture::from_png(texture_filename), name)
+            .add(Texture::from_png(texture_filename)?, name))
     }
 
     pub fn add_program(&self, program: Program, name: Option<&'static str>) -> ProgramId {
@@ -339,7 +349,7 @@ impl RenderContext {
         name: &'static str,
         size: u16,
         style: sdl2::ttf::FontStyle,
-    ) -> FontId {
+    ) -> Result<FontId, Error> {
         self.font_manager
             .borrow_mut()
             .add_font(path, name, size, style, self)
@@ -351,7 +361,7 @@ impl RenderContext {
         name: &'static str,
         size: u16,
         style: sdl2::ttf::FontStyle,
-    ) -> FontId {
+    ) -> Result<FontId, Error> {
         self.font_manager
             .borrow_mut()
             .add_font_from_bytes(bytes, name, size, style, self)
@@ -636,12 +646,6 @@ impl RenderContext {
     }
 }
 
-impl Default for RenderContext {
-    fn default() -> Self {
-        Self::new()
-    }
-}
-
 impl Drop for RenderContext {
     fn drop(&mut self) {
         let mut deletion_queue = self.deletion_queue.borrow_mut();
@@ -920,8 +924,8 @@ impl Mesh {
         }
     }
 
-    pub fn from_obj(obj_file_data: &[u8]) -> Self {
-        let obj: Obj<TexturedVertex> = load_obj(obj_file_data).unwrap();
+    pub fn from_obj(obj_file_data: &[u8]) -> Result<Self, Error> {
+        let obj: Obj<TexturedVertex> = load_obj(obj_file_data)?;
         let vb: Vec<TexturedVertex> = obj.vertices;
 
         let indices = vec_u32_from_vec_u16(&obj.indices);
@@ -931,7 +935,7 @@ impl Mesh {
 
         let data = vec![&vertices, &normals, &uv];
 
-        Self::new(indices, data)
+        Ok(Self::new(indices, data))
     }
 
     pub fn from_data(data: &MeshData) -> Self {

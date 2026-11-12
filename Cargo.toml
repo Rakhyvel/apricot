@@ -5,11 +5,15 @@ edition = "2021"
 
 [dependencies]
 # All-stars, you all love them, here they are
-sdl2 = { version = "0.34.5", features = ["bundled", "ttf", "mixer"], default-features = false }
+sdl2 = { version = "0.34.5", features = [
+    "bundled",
+    "ttf",
+    "mixer",
+], default-features = false }
 gl = "*"
 nalgebra-glm = "*"
 hecs = "0.10.5"
-karta = {git = "https://github.com/Rakhyvel/Karta.git"}
+karta = { git = "https://github.com/Rakhyvel/Karta.git" }
 
 # For reading in textures
 image = "0.25.1"
@@ -22,3 +26,5 @@ obj-rs = "*"
 
 # For time, lol
 chrono = "0.4"
+
+thiserror = "2"

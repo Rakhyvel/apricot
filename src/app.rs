@@ -15,6 +15,7 @@ use sdl2::keyboard::Scancode;
 use sdl2::video::SwapInterval;
 use sdl2::Sdl;
 
+use crate::error::Error;
 use crate::rectangle::Rectangle;
 
 use super::render_core::RenderContext;
@@ -74,19 +75,26 @@ pub struct App {
 }
 
 pub struct AppConfig {
+    pub title: &'static str,
+    pub window_size: nalgebra_glm::I32Vec2,
     pub mouse_warp: bool,
 }
 
-/// Starts a new app, with the `init` scene as the first scene in the stack.
-pub fn run(
-    window_size: nalgebra_glm::I32Vec2,
-    window_title: &'static str,
-    cfg: AppConfig,
-    init: &dyn Fn(&App) -> RefCell<Box<dyn Scene>>,
-) -> Result<(), String> {
-    let sdl_context = sdl2::init()?;
-    let video_subsystem = sdl_context.video()?;
-    let _audio_subsystem = sdl_context.audio()?;
+impl Default for AppConfig {
+    fn default() -> Self {
+        Self {
+            title: "Apricot app",
+            window_size: nalgebra_glm::I32Vec2::new(800, 600),
+            mouse_warp: false,
+        }
+    }
+}
+
+/// Starts a new app, with the scene produced by `init`s the first scene in the stack.
+pub fn run<S: Scene + 'static>(cfg: AppConfig, init: impl FnOnce(&App) -> S) -> Result<(), Error> {
+    let sdl_context = sdl2::init().map_err(Error::Sdl)?;
+    let video_subsystem = sdl_context.video().map_err(Error::Sdl)?;
+    let _audio_subsystem = sdl_context.audio().map_err(Error::Sdl)?;
 
     let gl_attr = video_subsystem.gl_attr();
     gl_attr.set_context_profile(sdl2::video::GLProfile::Core);
@@ -97,20 +105,24 @@ pub fn run(
     gl_attr.set_depth_size(24);
 
     let window = video_subsystem
-        .window(window_title, window_size.x as u32, window_size.y as u32)
+        .window(
+            cfg.title,
+            cfg.window_size.x as u32,
+            cfg.window_size.y as u32,
+        )
         .resizable()
         .opengl()
         .build()
-        .unwrap();
+        .map_err(|e| Error::Sdl(format!("{e}")))?;
 
-    let _gl_context = window.gl_create_context().unwrap();
+    let _gl_context = window.gl_create_context().map_err(Error::Sdl)?;
 
     gl::load_with(|s| video_subsystem.gl_get_proc_address(s) as *const std::os::raw::c_void);
 
     window
         .subsystem()
         .gl_set_swap_interval(SwapInterval::VSync)
-        .unwrap();
+        .map_err(Error::Sdl)?;
 
     unsafe {
         gl::Enable(gl::DEPTH_TEST);
@@ -123,8 +135,8 @@ pub fn run(
     }
 
     let mut app = App {
-        window_size,
-        renderer: RenderContext::new(),
+        window_size: cfg.window_size,
+        renderer: RenderContext::new()?,
         // sdl_context,
         running: Cell::new(true),
         dt: Duration::from_secs_f64(1.0 / 60.0),
@@ -151,8 +163,7 @@ pub fn run(
         clip_stack: RefCell::new(vec![]),
     };
 
-    let initial_scene = init(&app);
-    let scene_stack: Vec<RefCell<Box<dyn Scene>>> = vec![initial_scene];
+    let mut scene_stack: Vec<Box<dyn Scene>> = vec![Box::new(init(&app))];
 
     let time = Instant::now();
     let mut start = time.elapsed();
@@ -172,18 +183,18 @@ pub fn run(
         let scene_stale = false;
         while lag >= app.dt {
             app.reset_input();
-            app.poll_input(&sdl_context);
+            app.poll_input(&sdl_context)?;
             if cfg.mouse_warp {
                 sdl_context.mouse().warp_mouse_in_window(
                     &window,
-                    window_size.x / 2,
-                    window_size.y / 2,
+                    app.window_size.x / 2,
+                    app.window_size.y / 2,
                 );
                 sdl_context.mouse().set_relative_mouse_mode(true);
             }
 
-            if let Some(scene_ref) = scene_stack.last() {
-                scene_ref.borrow_mut().update(&app);
+            if let Some(scene) = scene_stack.last_mut() {
+                scene.update(&app);
                 app.ticks += 1;
             }
 
@@ -197,8 +208,8 @@ pub fn run(
 
         if !scene_stale {
             app.renderer.int_screen_resolution = app.window_size;
-            if let Some(scene_ref) = scene_stack.last() {
-                scene_ref.borrow_mut().render(&app);
+            if let Some(scene) = scene_stack.last_mut() {
+                scene.render(&app);
                 frames += 1;
             }
             app.renderer.flush_2d_queue();
@@ -248,8 +259,8 @@ impl App {
         self.wheel_consumed.set(false);
     }
 
-    fn poll_input(&mut self, sdl_context: &Sdl) {
-        let mut event_queue = sdl_context.event_pump().unwrap();
+    fn poll_input(&mut self, sdl_context: &Sdl) -> Result<(), Error> {
+        let mut event_queue = sdl_context.event_pump().map_err(Error::Sdl)?;
         for event in event_queue.poll_iter() {
             match event {
                 Event::Quit { .. } => {
@@ -333,6 +344,8 @@ impl App {
         self.mouse_left_dragging = self.mouse_left_down && self.left_drag_dist > CLICK_SLOP_PX;
         self.mouse_left_clicked = left_released && self.left_drag_dist <= CLICK_SLOP_PX;
         self.mouse_right_clicked = right_released && self.right_drag_dist <= CLICK_SLOP_PX;
+
+        Ok(())
     }
 
     pub fn push_clip(&self, r: Rectangle) {

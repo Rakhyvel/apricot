@@ -1,7 +1,7 @@
 use hecs::{Entity, World};
 use nalgebra_glm::{vec3, vec4, Mat4, Vec3};
 
-use crate::{camera::ProjectionKind, render_core::MeshId};
+use crate::{camera::ProjectionKind, error::Error, render_core::MeshId};
 
 use super::{
     bvh::BVH,
@@ -33,14 +33,14 @@ pub(crate) struct ActiveLight {
 }
 
 impl DirectionalLightSource {
-    pub fn new(light_dir: Vec3, shadow_map_size: i32) -> Self {
+    pub fn new(light_dir: Vec3, shadow_map_size: i32) -> Result<Self, Error> {
         let depth_map = Texture::new();
         depth_map.load_depth_buffer(shadow_map_size, shadow_map_size);
         let frame_buffer = Fbo::new();
         frame_buffer.bind();
-        depth_map.post_bind();
+        depth_map.post_bind()?;
         frame_buffer.unbind();
-        Self {
+        Ok(Self {
             light_dir: light_dir.normalize(),
             shadow_distance: 50.0,
             caster_distance: 100.0,
@@ -50,7 +50,7 @@ impl DirectionalLightSource {
             light_view: Mat4::identity(),
             light_proj: Mat4::identity(),
             texel_size: 0.0,
-        }
+        })
     }
 
     /// Fit the light's orthographic view box around everything `camera` can see

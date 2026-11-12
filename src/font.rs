@@ -4,6 +4,8 @@ use nalgebra_glm::{vec2, Vec2};
 use sdl2::{pixels::Color, rect::Rect, surface::Surface, ttf::Sdl2TtfContext};
 use std::{collections::HashMap, path::Path};
 
+use crate::error::Error;
+
 use super::{
     opengl::Texture,
     rectangle::Rectangle,
@@ -45,7 +47,7 @@ pub struct FontManager {
 
 impl Font {
     /// Create a new font
-    pub fn new(font: &sdl2::ttf::Font, renderer: &RenderContext) -> Self {
+    pub fn new(font: &sdl2::ttf::Font, renderer: &RenderContext) -> Result<Self, Error> {
         let height = font.height() as usize;
         let _ascender = font.ascent() as usize;
         let _descender = font.descent() as usize;
@@ -58,8 +60,8 @@ impl Font {
             _descender,
             line_skip,
         };
-        retval.pack_gylphs(font, renderer);
-        retval
+        retval.pack_gylphs(font, renderer)?;
+        Ok(retval)
     }
 
     /// Measure how large the text would be if drawn
@@ -112,7 +114,7 @@ impl Font {
             let color_mod = renderer.color.borrow();
             renderer.copy_texture(
                 dest_rect,
-                self.cache_texture.unwrap(),
+                self.cache_texture.expect("should be set in new()"),
                 glyph.rect,
                 &color_mod,
             );
@@ -120,7 +122,11 @@ impl Font {
         }
     }
 
-    fn pack_gylphs(&mut self, font: &sdl2::ttf::Font, renderer: &RenderContext) {
+    fn pack_gylphs(
+        &mut self,
+        font: &sdl2::ttf::Font,
+        renderer: &RenderContext,
+    ) -> Result<(), Error> {
         let mut x_offset: usize = 0;
         let mut y_offset: usize = 0;
         let mut mega_surface = Surface::new(
@@ -128,7 +134,7 @@ impl Font {
             self.height as u32 * 16,
             sdl2::pixels::PixelFormatEnum::RGBA32,
         )
-        .unwrap();
+        .map_err(Error::Sdl)?;
         let _ = mega_surface.set_blend_mode(sdl2::render::BlendMode::None);
         let color = Color {
             r: 255,
@@ -139,7 +145,10 @@ impl Font {
         for i in ASCII_FIRST_PRINTABLE_CHAR..ASCII_LAST_PRINTABLE_CHAR {
             let c = char::from(i);
             let s = c.to_string();
-            let mut surf = font.render(&s).blended(color).unwrap();
+            let mut surf = font
+                .render(&s)
+                .blended(color)
+                .map_err(|e| Error::Sdl(format!("{e}")))?;
             if x_offset + surf.width() as usize > self.height * 16 {
                 x_offset = 0;
                 y_offset += self.height;
@@ -155,13 +164,17 @@ impl Font {
             let _ = surf.blit(Some(src_rect), &mut mega_surface, Some(dest_rect));
             x_offset += surf.width() as usize;
 
-            let gylph_metrics = font.find_glyph_metrics(c).unwrap();
+            let Some(gylph_metrics) = font.find_glyph_metrics(c) else {
+                continue;
+            };
             self.set_glyph(i, Glyph::new(dest_rect, gylph_metrics.advance))
                 .expect("`i` should be within the valid glyph range");
         }
 
         let font_texture = Texture::from_surface(mega_surface);
         self.cache_texture = Some(renderer.add_texture(font_texture, None));
+
+        Ok(())
     }
 
     fn set_glyph(&mut self, char: u8, glyph: Glyph) -> Result<(), ()> {
@@ -193,13 +206,13 @@ fn glyph_idx_from_byte(char: u8) -> Option<usize> {
 
 impl FontManager {
     /// Create a new font manager
-    pub fn new() -> Self {
-        let ttf_context = sdl2::ttf::init().unwrap();
-        Self {
+    pub fn new() -> Result<Self, Error> {
+        let ttf_context = sdl2::ttf::init().map_err(|msg| Error::Sdl(format!("{msg}")))?;
+        Ok(Self {
             ttf_context,
             fonts: vec![],
             keys: HashMap::new(),
-        }
+        })
     }
 
     /// Add a new font from a .ttf/.otf to the manager and retrieve it's ID
@@ -210,13 +223,19 @@ impl FontManager {
         size: u16,
         style: sdl2::ttf::FontStyle,
         renderer: &RenderContext,
-    ) -> FontId {
+    ) -> Result<FontId, Error> {
         let font = {
-            let mut ttf_font = self.ttf_context.load_font(Path::new(path), size).unwrap();
+            let mut ttf_font =
+                self.ttf_context
+                    .load_font(Path::new(path), size)
+                    .map_err(|msg| Error::Font {
+                        font: format!("{name}"),
+                        msg,
+                    })?;
             ttf_font.set_style(style);
-            Font::new(&ttf_font, renderer)
+            Font::new(&ttf_font, renderer)?
         };
-        self.push(font, name)
+        Ok(self.push(font, name))
     }
 
     /// Add a font from .ttf/.otf bytes in memory
@@ -227,14 +246,23 @@ impl FontManager {
         size: u16,
         style: sdl2::ttf::FontStyle,
         renderer: &RenderContext,
-    ) -> FontId {
+    ) -> Result<FontId, Error> {
         let font = {
-            let rwops = sdl2::rwops::RWops::from_bytes(bytes).unwrap();
-            let mut ttf_font = self.ttf_context.load_font_from_rwops(rwops, size).unwrap();
+            let rwops = sdl2::rwops::RWops::from_bytes(bytes).map_err(|msg| Error::Font {
+                font: format!("{name}"),
+                msg,
+            })?;
+            let mut ttf_font =
+                self.ttf_context
+                    .load_font_from_rwops(rwops, size)
+                    .map_err(|msg| Error::Font {
+                        font: format!("{name}"),
+                        msg,
+                    })?;
             ttf_font.set_style(style);
-            Font::new(&ttf_font, renderer)
+            Font::new(&ttf_font, renderer)?
         };
-        self.push(font, name)
+        Ok(self.push(font, name))
     }
 
     fn push(&mut self, font: Font, name: &'static str) -> FontId {
@@ -257,12 +285,6 @@ impl FontManager {
     /// Get a font from it's name
     pub fn get_font(&self, name: &'static str) -> Option<&Font> {
         self.get_font_from_id(self.get_id_from_name(name).unwrap())
-    }
-}
-
-impl Default for FontManager {
-    fn default() -> Self {
-        Self::new()
     }
 }
 

@@ -12,6 +12,8 @@ use gl::types::{GLchar, GLenum, GLint, GLuint};
 use image::{EncodableLayout, ImageError};
 use nalgebra_glm::{Mat4, Vec2, Vec3, Vec4};
 
+use crate::error::Error;
+
 /// An OpenGL Shader
 pub struct Shader {
     id: GLuint,
@@ -19,7 +21,7 @@ pub struct Shader {
 
 impl Shader {
     /// Compile an OpenGL shader from GLSL souce
-    pub fn from_source(source: &CStr, kind: GLenum) -> Result<Self, String> {
+    pub fn from_source(source: &CStr, kind: GLenum) -> Result<Self, Error> {
         let id = unsafe { gl::CreateShader(kind) };
         print_any_errors();
 
@@ -51,7 +53,10 @@ impl Shader {
             }
             print_any_errors();
 
-            return Err(error.to_string_lossy().into_owned());
+            return Err(Error::ShaderCompile {
+                stage: "idk",
+                log: error.to_string_lossy().into_owned(),
+            });
         }
 
         Ok(Shader { id })
@@ -79,7 +84,7 @@ pub struct Program {
 }
 
 impl Program {
-    fn from_shaders(shaders: &[Shader]) -> Result<Self, String> {
+    fn from_shaders(shaders: &[Shader]) -> Result<Self, Error> {
         let id = unsafe { gl::CreateProgram() };
         print_any_errors();
 
@@ -116,7 +121,7 @@ impl Program {
             }
             print_any_errors();
 
-            return Err(error.to_string_lossy().into_owned());
+            return Err(Error::ShaderLink(error.to_string_lossy().into_owned()));
         }
 
         for shader in shaders {
@@ -157,22 +162,24 @@ fn create_whitespace_cstring_with_len(len: usize) -> CString {
 }
 
 /// Create a program with a vert and frag shader
-pub fn create_program(
-    vert_data: &'static str,
-    frag_data: &'static str,
-) -> Result<Program, &'static str> {
+pub fn create_program(vert_data: &'static str, frag_data: &'static str) -> Result<Program, Error> {
     let vert_shader = Shader::from_source(
-        &CString::new(vert_data).unwrap(), // TODO: Load this at runtime
+        &CString::new(vert_data).map_err(|e| Error::ShaderCompile {
+            stage: "vert",
+            log: format!("{e}"),
+        })?,
         gl::VERTEX_SHADER,
-    )
-    .unwrap();
-    let frag_shader = Shader::from_source(
-        &CString::new(frag_data).unwrap(), // TODO: Load this at runtime
-        gl::FRAGMENT_SHADER,
-    )
-    .unwrap();
+    )?;
 
-    let shader_program = Program::from_shaders(&[vert_shader, frag_shader]).unwrap();
+    let frag_shader = Shader::from_source(
+        &CString::new(frag_data).map_err(|e| Error::ShaderCompile {
+            stage: "frag",
+            log: format!("{e}"),
+        })?,
+        gl::FRAGMENT_SHADER,
+    )?;
+
+    let shader_program = Program::from_shaders(&[vert_shader, frag_shader])?;
 
     Ok(shader_program)
 }
@@ -445,11 +452,14 @@ impl Texture {
     }
 
     /// Create an OpenGL texture from a PNG
-    pub fn from_png(texture_filename: &'static str) -> Self {
+    pub fn from_png(texture_filename: &'static str) -> Result<Self, Error> {
         let texture = Texture::new();
         let path = Path::new(texture_filename);
-        texture.load(path).unwrap();
-        texture
+        texture.load(path).map_err(|source| Error::Image {
+            path: path.into(),
+            source,
+        })?;
+        Ok(texture)
     }
 
     /// Create an OpenGL texture from an SDL surface
@@ -611,7 +621,7 @@ impl Texture {
     }
 
     /// Method to call after binding
-    pub fn post_bind(&self) {
+    pub fn post_bind(&self) -> Result<(), Error> {
         unsafe {
             gl::FramebufferTexture2D(
                 gl::FRAMEBUFFER,
@@ -626,11 +636,13 @@ impl Texture {
             gl::ReadBuffer(gl::NONE);
             print_any_errors();
 
-            if gl::CheckFramebufferStatus(gl::FRAMEBUFFER) != gl::FRAMEBUFFER_COMPLETE {
-                panic!("Framebuffer is not complete!");
+            let status = gl::CheckFramebufferStatus(gl::FRAMEBUFFER);
+            if status != gl::FRAMEBUFFER_COMPLETE {
+                return Err(Error::Framebuffer(status));
             }
             print_any_errors();
         };
+        Ok(())
     }
 
     /// Activate this texture
@@ -730,6 +742,7 @@ impl Drop for Fbo {
 }
 
 fn print_any_errors() {
+    #[cfg(debug_assertions)]
     if let Some(error_message) = get_last_opengl_error() {
         panic!("OpenGL Error:\n{}", error_message);
     }

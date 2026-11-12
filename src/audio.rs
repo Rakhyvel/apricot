@@ -4,6 +4,8 @@ use std::sync::{Arc, Mutex};
 
 use sdl2::mixer::{self, Chunk};
 
+use crate::error::Error;
+
 enum SoundCommand {
     Play(String, i32),
     Quit,
@@ -16,23 +18,23 @@ pub struct AudioManager {
 const NUM_CHUNKS: usize = 4;
 
 impl AudioManager {
-    pub fn new() -> Self {
+    pub fn new() -> Result<Self, Error> {
         // Create a new channel for sending & receiving SoundCommand's
         let (sender, receiver) = std::sync::mpsc::channel();
 
+        // Initialize SDL2_mixer library with support for OGG files
+        sdl2::mixer::init(sdl2::mixer::InitFlag::OGG).map_err(Error::Sdl)?;
+        sdl2::mixer::open_audio(
+            44_100,
+            sdl2::mixer::AUDIO_S16LSB,
+            sdl2::mixer::DEFAULT_CHANNELS,
+            1_024,
+        )
+        .map_err(Error::Sdl)?;
+        sdl2::mixer::allocate_channels(NUM_CHUNKS as i32);
+
         // Spawn a new thread to handle audio playback
         std::thread::spawn(|| {
-            // Initialize SDL2_mixer library with support for OGG files
-            sdl2::mixer::init(sdl2::mixer::InitFlag::OGG).unwrap();
-            sdl2::mixer::open_audio(
-                44_100,
-                sdl2::mixer::AUDIO_S16LSB,
-                sdl2::mixer::DEFAULT_CHANNELS,
-                1_024,
-            )
-            .unwrap();
-            sdl2::mixer::allocate_channels(NUM_CHUNKS as i32);
-
             // Create a thread-safe shared vector of NUM_CHUNKS Chunks. `None` means they are not playing, `Some` means they are
             let chunks: Arc<Mutex<Vec<Option<Chunk>>>> =
                 Arc::new(Mutex::new((0..NUM_CHUNKS).map(|_| None).collect()));
@@ -72,7 +74,7 @@ impl AudioManager {
             sdl2::mixer::close_audio();
         });
 
-        Self { sender }
+        Ok(Self { sender })
     }
 
     fn clear_unused_channels(chunks: &Arc<Mutex<Vec<Option<Chunk>>>>) {
@@ -91,12 +93,6 @@ impl AudioManager {
         self.sender
             .send(SoundCommand::Play(file_path, volume))
             .unwrap();
-    }
-}
-
-impl Default for AudioManager {
-    fn default() -> Self {
-        Self::new()
     }
 }
 

@@ -1,4 +1,4 @@
-//! A grid of spinning cubes kept in a `ModelSet`. Hover over one to outline it.
+//! A grid of spinning cubes kept in a `ModelSet`. Hover over one to outline and label it.
 //! Run with `cargo run --example models`.
 
 use std::f32::consts::FRAC_PI_4;
@@ -8,6 +8,7 @@ use apricot::{
     camera::{Camera, ProjectionKind},
     error::Error,
     model_set::{Model, ModelSet},
+    rectangle::Rectangle,
     shadow_map::DirectionalLightSource,
 };
 use nalgebra_glm::{vec2, vec3, vec4, Mat4};
@@ -36,6 +37,7 @@ struct Models {
     angle: f32,
     light: DirectionalLightSource,
     models: ModelSet<Thing>,
+    hovered: Option<Thing>,
 }
 
 impl Models {
@@ -78,18 +80,13 @@ impl Models {
             angle: 0.0,
             light: DirectionalLightSource::new(vec3(0.5, 1.0, 0.3), 2048).unwrap(),
             models,
+            hovered: None,
         }
     }
 
     /// The closest cube under the mouse, if any
     fn hovered_cube(&self, app: &App) -> Option<Thing> {
-        let camera = *app.renderer.camera.borrow();
-        let ray = camera.get_ray(
-            app.mouse_pos.x,
-            app.mouse_pos.y,
-            app.window_size.x as f32,
-            app.window_size.y as f32,
-        );
+        let ray = app.renderer.screen_ray(app.mouse_pos);
         self.models
             .raycast(&app.renderer, &ray)
             .map(|(key, _)| key)
@@ -100,14 +97,14 @@ impl Models {
 impl Scene for Models {
     fn update(&mut self, app: &App) {
         self.angle += app.dt.as_secs_f32();
-        let hovered = self.hovered_cube(app);
+        self.hovered = self.hovered_cube(app);
 
         for (x, z) in grid() {
             let key = Thing::Cube(x, z);
             self.models
                 .set_transform(&app.renderer, key, cube_transform(x, z, self.angle));
             if let Some(cube) = self.models.get_mut(key) {
-                cube.outlined = hovered == Some(key);
+                cube.outlined = self.hovered == Some(key);
             }
         }
     }
@@ -121,6 +118,27 @@ impl Scene for Models {
         self.models.draw(renderer);
         self.models
             .draw_outlines(renderer, vec4(1.0, 1.0, 1.0, 1.0));
+
+        // Label the hovered cube by projecting a point just above it onto the screen
+        if let Some(Thing::Cube(x, z)) = self.hovered {
+            let above = vec3(x as f32 * SPACING, 1.0, z as f32 * SPACING);
+            if let Some(p) = renderer.world_to_screen(above) {
+                let label = format!("Cube ({x}, {z})");
+                let size = renderer.measure_text(&label);
+                let text_pos = p - vec2(size.x / 2.0, size.y);
+
+                // Dark box behind the text so it reads over anything
+                let pad = vec2(6.0, 3.0);
+                renderer.fill_rect(
+                    Rectangle {
+                        pos: text_pos - pad,
+                        size: size + pad * 2.0,
+                    },
+                    vec4(0.0, 0.0, 0.0, 0.6),
+                );
+                renderer.draw_text(text_pos, &label, vec4(1.0, 1.0, 1.0, 1.0));
+            }
+        }
 
         renderer.draw_text(
             vec2(10.0, 10.0),

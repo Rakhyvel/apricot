@@ -7,7 +7,7 @@ use std::{
     fmt::Debug,
 };
 
-use nalgebra_glm::{Mat4, Vec2, Vec3, Vec4};
+use nalgebra_glm::{vec2, vec4, Mat4, Vec2, Vec3, Vec4};
 use obj::{load_obj, Obj, TexturedVertex};
 
 use crate::{
@@ -24,6 +24,7 @@ use super::{
     camera::{Camera, ProjectionKind},
     font::{Font, FontId, FontManager},
     opengl::{Buffer, Program, Texture, Uniform, Vao},
+    ray::Ray,
     rectangle::Rectangle,
 };
 
@@ -263,6 +264,29 @@ impl RenderContext {
     /// The current camera's view frustum, fitted to the window
     pub fn camera_frustum(&self) -> Frustum {
         self.camera.borrow().frustum(self.aspect_ratio())
+    }
+
+    /// Where a world-space point lands on screen, in pixels. `None` if it's behind the camera
+    pub fn world_to_screen(&self, p: Vec3) -> Option<Vec2> {
+        let (view, proj) = self.camera_view_proj();
+        let clip = proj * view * vec4(p.x, p.y, p.z, 1.0);
+        if clip.w <= 0.0 {
+            return None;
+        }
+        let ndc = clip.xyz() / clip.w;
+        let res = self.int_screen_resolution;
+        Some(vec2(
+            (ndc.x + 1.0) / 2.0 * res.x as f32,
+            (1.0 - ndc.y) / 2.0 * res.y as f32,
+        ))
+    }
+
+    /// A ray from the camera through a pixel on screen, like the mouse position
+    pub fn screen_ray(&self, pos: Vec2) -> Ray {
+        let res = self.int_screen_resolution;
+        self.camera
+            .borrow()
+            .get_ray(pos.x, pos.y, res.x as f32, res.y as f32)
     }
 
     pub fn set_program(&self, name: Option<&'static str>) {

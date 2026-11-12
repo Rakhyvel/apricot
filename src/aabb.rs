@@ -260,7 +260,8 @@ mod tests {
             nalgebra_glm::vec3(-0.5, -0.5, -0.5),
             nalgebra_glm::vec3(0.5, 0.5, 0.5),
         );
-        let rotated = nalgebra_glm::rotate_y(&nalgebra_glm::identity(), std::f32::consts::FRAC_PI_4);
+        let rotated =
+            nalgebra_glm::rotate_y(&nalgebra_glm::identity(), std::f32::consts::FRAC_PI_4);
         let fitted = unit.transformed(&rotated);
 
         // Turned 45 degrees, the corners poke out to half the diagonal

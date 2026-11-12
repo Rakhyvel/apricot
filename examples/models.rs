@@ -45,6 +45,7 @@ struct Models {
 impl Models {
     fn new(app: &App) -> Self {
         let renderer = &app.renderer;
+
         renderer.set_camera(Camera::new(
             vec3(0.0, 7.0, 9.0),
             vec3(0.0, -1.0, 0.0),

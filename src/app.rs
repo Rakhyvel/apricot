@@ -45,7 +45,7 @@ pub struct App {
     pub keys: [bool; 256],
     /// The position of the mouse, relative to the top-left corner of the screen
     pub mouse_pos: nalgebra_glm::Vec2,
-    /// The relative motion of the mouse
+    /// How far the mouse moved this tick, in pixels
     pub mouse_vel: nalgebra_glm::Vec2,
     /// Whether the left mouse button is down
     pub mouse_left_down: bool,
@@ -68,8 +68,15 @@ pub struct App {
     wheel_consumed: Cell<bool>,
     /// Whether the right mouse button was clicked (ie it was down the previous tick, but is now up)
     pub mouse_right_clicked: bool,
-    /// The motion of the mouse wheel
+    /// How many notches the mouse wheel turned this tick. Positive is away from you
     pub mouse_wheel: f32,
+}
+
+/// A mouse button
+#[derive(Debug, Copy, Clone, PartialEq, Eq)]
+pub enum MouseButton {
+    Left,
+    Right,
 }
 
 pub struct AppConfig {
@@ -241,6 +248,14 @@ impl App {
         self.click_consumed.get()
     }
 
+    /// Whether `button` is held down
+    pub fn mouse_down(&self, button: MouseButton) -> bool {
+        match button {
+            MouseButton::Left => self.mouse_left_down,
+            MouseButton::Right => self.mouse_right_down,
+        }
+    }
+
     pub fn consume_wheel(&self) {
         self.wheel_consumed.set(true);
     }
@@ -270,7 +285,8 @@ impl App {
                     x, y, xrel, yrel, ..
                 } => {
                     self.mouse_pos = nalgebra_glm::vec2(x as f32, y as f32);
-                    self.mouse_vel = nalgebra_glm::vec2(xrel as f32, yrel as f32);
+                    self.mouse_vel += nalgebra_glm::vec2(xrel as f32, yrel as f32);
+                    // add up, a tick can get several
                 }
 
                 Event::MouseButtonDown { mouse_btn, .. } => match mouse_btn {
@@ -286,7 +302,7 @@ impl App {
                 },
 
                 Event::MouseWheel { y, .. } => {
-                    self.mouse_wheel = y as f32;
+                    self.mouse_wheel += y as f32;
                 }
 
                 Event::Window {

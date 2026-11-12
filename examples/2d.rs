@@ -202,6 +202,28 @@ impl Scene for Shapes {
                     r.fill_circle(c, size * (0.4 + 0.6 * pulse), violet)
                 })),
             ),
+            (
+                "push_clip",
+                Some(Box::new(|c| {
+                    // Big spinning shapes cut down to the clips. The inner clip can't escape the outer one
+                    r.push_clip(Rectangle::new(
+                        c.x - size,
+                        c.y - size * 0.6,
+                        size * 2.0,
+                        size * 1.2,
+                    ));
+                    r.draw_poly(c, 4, size * 1.0, spin, teal);
+                    r.push_clip(Rectangle::new(
+                        c.x - size * 0.4,
+                        c.y - size,
+                        size * 0.8,
+                        size * 2.0,
+                    ));
+                    r.draw_poly(c, 3, size * 1.5, -spin, pink);
+                    r.pop_clip();
+                    r.pop_clip();
+                })),
+            ),
         ];
 
         r.clear(vec4(0.12, 0.12, 0.15, 1.0));

@@ -111,7 +111,7 @@ impl RenderContext {
                 texture_id,
                 texture_dest,
                 color_mod: *color_mod,
-                scissor: self.scissor.get(),
+                scissor: self.current_clip(),
             },
         ));
     }
@@ -176,7 +176,7 @@ impl RenderContext {
             DrawCommand::FillRect {
                 rect: dest,
                 color,
-                scissor: self.scissor.get(),
+                scissor: self.current_clip(),
             },
         ));
     }
@@ -208,7 +208,7 @@ impl RenderContext {
                 mesh_id,
                 rotation,
                 color,
-                scissor: self.scissor.get(),
+                scissor: self.current_clip(),
             },
         ));
     }
@@ -374,6 +374,11 @@ impl RenderContext {
             }
         }
 
+        debug_assert!(
+            self.clip_stack.borrow().is_empty(),
+            "push_clip without a matching pop_clip"
+        );
+
         // Put things back the way you found them
         unsafe {
             gl::Disable(gl::SCISSOR_TEST);
@@ -383,7 +388,24 @@ impl RenderContext {
         self.current_draw_layer.set(0);
     }
 
-    pub fn apply_scissor(&self, scissor: Option<Rectangle>) {
+    /// Push a rectangle to the clip stack
+    pub fn push_clip(&self, r: Rectangle) {
+        let mut stack = self.clip_stack.borrow_mut();
+        let r = stack.last().map_or(r, |outer| outer.intersect(&r));
+        stack.push(r);
+    }
+
+    /// Pop most recently pushed rectangle from the clip stack
+    pub fn pop_clip(&self) {
+        self.clip_stack.borrow_mut().pop();
+    }
+
+    /// The rectangle at the top of the clip stack
+    pub fn current_clip(&self) -> Option<Rectangle> {
+        self.clip_stack.borrow().last().copied()
+    }
+
+    fn apply_scissor(&self, scissor: Option<Rectangle>) {
         let res = self.int_screen_resolution;
         match scissor {
             Some(r) => unsafe {

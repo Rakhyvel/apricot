@@ -57,7 +57,8 @@ pub struct RenderContext {
     pub camera: RefCell<Camera>,
     pub program: RefCell<Option<ProgramId>>,
     pub font: Cell<FontId>,
-    pub scissor: Cell<Option<Rectangle>>,
+    /// Nested clip rects. The top one clips both drawing and `App::mouse_over`
+    pub(crate) clip_stack: RefCell<Vec<Rectangle>>,
 
     // Managers
     mesh_manager: RefCell<ResourceManager<Mesh, MeshId>>,
@@ -210,7 +211,7 @@ impl RenderContext {
             camera: RefCell::new(Camera::default()),
             program: RefCell::new(None),
             font: Cell::new(FontId::new(0)), // replaced by the default font below
-            scissor: Cell::new(None),
+            clip_stack: RefCell::new(Vec::new()),
 
             mesh_manager: RefCell::new(meshes),
             texture_manager: RefCell::new(textures),
@@ -281,10 +282,6 @@ impl RenderContext {
 
     pub fn set_font(&self, font: FontId) {
         self.font.set(font);
-    }
-
-    pub fn set_scissor(&self, scissor: Option<Rectangle>) {
-        self.scissor.set(scissor)
     }
 
     pub fn get_current_font_id(&self) -> FontId {

@@ -25,7 +25,7 @@ const ASCII_NUM_PRINTABLE_CHARS: usize =
 
 /// A cached font
 pub struct Font {
-    pub cache_texture: Option<TextureId>,
+    pub cache_texture: TextureId,
     glyphs: [Glyph; ASCII_NUM_PRINTABLE_CHARS], //< All 95 printable ASCII glyphs
     height: usize,
     _ascender: usize,
@@ -52,16 +52,15 @@ impl Font {
         let _ascender = font.ascent() as usize;
         let _descender = font.descent() as usize;
         let line_skip = font.recommended_line_spacing() as usize;
-        let mut retval = Self {
-            cache_texture: None,
-            glyphs: [Glyph::default(); ASCII_NUM_PRINTABLE_CHARS],
+        let (cache_texture, glyphs) = pack_glyphs(font, height, renderer)?;
+        Ok(Self {
+            cache_texture,
+            glyphs,
             height,
             _ascender,
             _descender,
             line_skip,
-        };
-        retval.pack_gylphs(font, renderer)?;
-        Ok(retval)
+        })
     }
 
     /// Measure how large the text would be if drawn
@@ -114,76 +113,12 @@ impl Font {
             let color_mod = renderer.color.borrow();
             renderer.copy_texture(
                 dest_rect,
-                self.cache_texture.expect("should be set in new()"),
+                self.cache_texture,
                 glyph.rect,
                 &color_mod,
             );
             cursor.x += glyph.advance as f32;
         }
-    }
-
-    fn pack_gylphs(
-        &mut self,
-        font: &sdl2::ttf::Font,
-        renderer: &RenderContext,
-    ) -> Result<(), Error> {
-        let mut x_offset: usize = 0;
-        let mut y_offset: usize = 0;
-        let mut mega_surface = Surface::new(
-            self.height as u32 * 16,
-            self.height as u32 * 16,
-            sdl2::pixels::PixelFormatEnum::RGBA32,
-        )
-        .map_err(Error::Sdl)?;
-        let _ = mega_surface.set_blend_mode(sdl2::render::BlendMode::None);
-        let color = Color {
-            r: 255,
-            g: 255,
-            b: 255,
-            a: 255,
-        };
-        for i in ASCII_FIRST_PRINTABLE_CHAR..ASCII_LAST_PRINTABLE_CHAR {
-            let c = char::from(i);
-            let s = c.to_string();
-            let mut surf = font
-                .render(&s)
-                .blended(color)
-                .map_err(|e| Error::Sdl(format!("{e}")))?;
-            if x_offset + surf.width() as usize > self.height * 16 {
-                x_offset = 0;
-                y_offset += self.height;
-            }
-            let src_rect = Rect::new(0, 0, surf.width(), surf.height());
-            let dest_rect = Rect::new(
-                x_offset as i32,
-                y_offset as i32,
-                surf.width(),
-                surf.height(),
-            );
-            let _ = surf.set_blend_mode(sdl2::render::BlendMode::None);
-            let _ = surf.blit(Some(src_rect), &mut mega_surface, Some(dest_rect));
-            x_offset += surf.width() as usize;
-
-            let Some(gylph_metrics) = font.find_glyph_metrics(c) else {
-                continue;
-            };
-            self.set_glyph(i, Glyph::new(dest_rect, gylph_metrics.advance))
-                .expect("`i` should be within the valid glyph range");
-        }
-
-        let font_texture = Texture::from_surface(mega_surface);
-        self.cache_texture = Some(renderer.add_texture(font_texture, None));
-
-        Ok(())
-    }
-
-    fn set_glyph(&mut self, char: u8, glyph: Glyph) -> Result<(), ()> {
-        let Some(glyph_idx) = glyph_idx_from_byte(char) else {
-            return Err(());
-        };
-
-        self.glyphs[glyph_idx] = glyph;
-        Ok(())
     }
 
     fn get_glyph(&self, char: u8) -> Option<Glyph> {
@@ -194,6 +129,62 @@ impl Font {
             Some(self.glyphs[glyph_idx])
         }
     }
+}
+
+/// Render every printable ASCII glyph into one atlas texture
+fn pack_glyphs(
+    font: &sdl2::ttf::Font,
+    height: usize,
+    renderer: &RenderContext,
+) -> Result<(TextureId, [Glyph; ASCII_NUM_PRINTABLE_CHARS]), Error> {
+    let mut glyphs = [Glyph::default(); ASCII_NUM_PRINTABLE_CHARS];
+    let mut x_offset: usize = 0;
+    let mut y_offset: usize = 0;
+    let mut mega_surface = Surface::new(
+        height as u32 * 16,
+        height as u32 * 16,
+        sdl2::pixels::PixelFormatEnum::RGBA32,
+    )
+    .map_err(Error::Sdl)?;
+    let _ = mega_surface.set_blend_mode(sdl2::render::BlendMode::None);
+    let color = Color {
+        r: 255,
+        g: 255,
+        b: 255,
+        a: 255,
+    };
+    for (glyph, i) in glyphs
+        .iter_mut()
+        .zip(ASCII_FIRST_PRINTABLE_CHAR..ASCII_LAST_PRINTABLE_CHAR)
+    {
+        let c = char::from(i);
+        let mut surf = font
+            .render(&c.to_string())
+            .blended(color)
+            .map_err(|e| Error::Sdl(format!("{e}")))?;
+        if x_offset + surf.width() as usize > height * 16 {
+            x_offset = 0;
+            y_offset += height;
+        }
+        let src_rect = Rect::new(0, 0, surf.width(), surf.height());
+        let dest_rect = Rect::new(
+            x_offset as i32,
+            y_offset as i32,
+            surf.width(),
+            surf.height(),
+        );
+        let _ = surf.set_blend_mode(sdl2::render::BlendMode::None);
+        let _ = surf.blit(Some(src_rect), &mut mega_surface, Some(dest_rect));
+        x_offset += surf.width() as usize;
+
+        // A font missing this character keeps a zero-sized glyph
+        if let Some(metrics) = font.find_glyph_metrics(c) {
+            *glyph = Glyph::new(dest_rect, metrics.advance);
+        }
+    }
+
+    let font_texture = Texture::from_surface(mega_surface);
+    Ok((renderer.add_texture(font_texture, None), glyphs))
 }
 
 fn glyph_idx_from_byte(char: u8) -> Option<usize> {
@@ -284,7 +275,7 @@ impl FontManager {
 
     /// Get a font from it's name
     pub fn get_font(&self, name: &'static str) -> Option<&Font> {
-        self.get_font_from_id(self.get_id_from_name(name).unwrap())
+        self.get_font_from_id(self.get_id_from_name(name)?)
     }
 }
 

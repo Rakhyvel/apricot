@@ -42,9 +42,11 @@ impl RenderContext {
     }
 
     pub fn render_nine_slice(&self, nine_slice: NineSlice, dest: Rectangle) {
-        if dest.size.x < 2.0 * nine_slice.border || dest.size.y < 2.0 * nine_slice.border {
-            panic!("Too small! {}", nine_slice.border)
-        }
+        // If `dest` is smaller than two borders, shrink the drawn corners to fit
+        let border = nine_slice
+            .border
+            .min(dest.size.x / 2.0)
+            .min(dest.size.y / 2.0);
 
         let (nine_slice_width, nine_slice_height) = self
             .get_texture_from_id(nine_slice.texture)
@@ -117,62 +119,62 @@ impl RenderContext {
 
         let dest_coords = [
             // top-left corner
-            Rectangle::new(dest.pos.x, dest.pos.y, nine_slice.border, nine_slice.border),
+            Rectangle::new(dest.pos.x, dest.pos.y, border, border),
             // top edge
             Rectangle::new(
-                dest.pos.x + nine_slice.border,
+                dest.pos.x + border,
                 dest.pos.y,
-                dest.size.x - 2.0 * nine_slice.border,
-                nine_slice.border,
+                dest.size.x - 2.0 * border,
+                border,
             ),
             // top-right corner
             Rectangle::new(
-                dest.pos.x + dest.size.x - nine_slice.border,
+                dest.pos.x + dest.size.x - border,
                 dest.pos.y,
-                nine_slice.border,
-                nine_slice.border,
+                border,
+                border,
             ),
             // left edge
             Rectangle::new(
                 dest.pos.x,
-                dest.pos.y + nine_slice.border,
-                nine_slice.border,
-                dest.size.y - 2.0 * nine_slice.border,
+                dest.pos.y + border,
+                border,
+                dest.size.y - 2.0 * border,
             ),
             // center
             Rectangle::new(
-                dest.pos.x + nine_slice.border,
-                dest.pos.y + nine_slice.border,
-                dest.size.x - 2.0 * nine_slice.border,
-                dest.size.y - 2.0 * nine_slice.border,
+                dest.pos.x + border,
+                dest.pos.y + border,
+                dest.size.x - 2.0 * border,
+                dest.size.y - 2.0 * border,
             ),
             // right edge
             Rectangle::new(
-                dest.pos.x + dest.size.x - nine_slice.border,
-                dest.pos.y + nine_slice.border,
-                nine_slice.border,
-                dest.size.y - 2.0 * nine_slice.border,
+                dest.pos.x + dest.size.x - border,
+                dest.pos.y + border,
+                border,
+                dest.size.y - 2.0 * border,
             ),
             // bottom-left corner
             Rectangle::new(
                 dest.pos.x,
-                dest.pos.y + dest.size.y - nine_slice.border,
-                nine_slice.border,
-                nine_slice.border,
+                dest.pos.y + dest.size.y - border,
+                border,
+                border,
             ),
             // bottom edge
             Rectangle::new(
-                dest.pos.x + nine_slice.border,
-                dest.pos.y + dest.size.y - nine_slice.border,
-                dest.size.x - 2.0 * nine_slice.border,
-                nine_slice.border,
+                dest.pos.x + border,
+                dest.pos.y + dest.size.y - border,
+                dest.size.x - 2.0 * border,
+                border,
             ),
             // bottom-right corner
             Rectangle::new(
-                dest.pos.x + dest.size.x - nine_slice.border,
-                dest.pos.y + dest.size.y - nine_slice.border,
-                nine_slice.border,
-                nine_slice.border,
+                dest.pos.x + dest.size.x - border,
+                dest.pos.y + dest.size.y - border,
+                border,
+                border,
             ),
         ];
 
@@ -190,8 +192,7 @@ impl RenderContext {
     }
 
     pub fn draw_text(&self, pos: Vec2, text: &str) {
-        let font = self.get_font_from_id(self.font.borrow().unwrap()).unwrap();
-        font.draw(pos, text, self);
+        self.get_current_font().draw(pos, text, self);
     }
 
     /// Set the current draw layer. Draw calls on higher layers render on top of lower layers,

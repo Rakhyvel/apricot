@@ -464,18 +464,16 @@ impl Texture {
 
     /// Create an OpenGL texture from an SDL surface
     pub fn from_surface(surface: sdl2::surface::Surface) -> Self {
+        // Whatever format SDL gave us, upload it as RGBA
+        let surface = surface
+            .convert_format(sdl2::pixels::PixelFormatEnum::RGBA32)
+            .expect("out of memory converting surface to RGBA");
         let texture = Texture::new();
         unsafe {
             texture.bind();
 
             let width = surface.width() as i32;
             let height = surface.height() as i32;
-            let format = match surface.pixel_format_enum() {
-                sdl2::pixels::PixelFormatEnum::RGB24 => gl::RGB,
-                sdl2::pixels::PixelFormatEnum::RGBA32 => gl::RGBA,
-                sdl2::pixels::PixelFormatEnum::ARGB8888 => gl::BGRA,
-                x => panic!("Lol! {:?}", x),
-            };
 
             gl::TexImage2D(
                 gl::TEXTURE_2D,
@@ -484,9 +482,12 @@ impl Texture {
                 width,
                 height,
                 0,
-                format,
+                gl::RGBA,
                 gl::UNSIGNED_BYTE,
-                surface.without_lock().unwrap().as_ptr() as *const std::ffi::c_void,
+                surface
+                    .without_lock()
+                    .expect("a converted surface never needs locking")
+                    .as_ptr() as *const std::ffi::c_void,
             );
             print_any_errors();
 

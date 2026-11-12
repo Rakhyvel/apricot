@@ -1,7 +1,5 @@
 //! WARNING: Audio not fully tested yet, I don't think it works
 
-use std::sync::{Arc, Mutex};
-
 use sdl2::mixer::{self, Chunk};
 
 use crate::error::Error;
@@ -35,35 +33,34 @@ impl AudioManager {
 
         // Spawn a new thread to handle audio playback
         std::thread::spawn(|| {
-            // Create a thread-safe shared vector of NUM_CHUNKS Chunks. `None` means they are not playing, `Some` means they are
-            let chunks: Arc<Mutex<Vec<Option<Chunk>>>> =
-                Arc::new(Mutex::new((0..NUM_CHUNKS).map(|_| None).collect()));
+            // One slot per mixer channel, `None` means the channel is free
+            // Only this thread touches it so no lock
+            let mut chunks: [Option<Chunk>; NUM_CHUNKS] = Default::default();
 
             // Pend on commands from the receiver
             for command in receiver {
-                AudioManager::clear_unused_channels(&chunks);
+                clear_unused_channels(&mut chunks);
                 match command {
                     SoundCommand::Play(file_path, volume) => {
-                        let Ok(sound_file) = mixer::Chunk::from_file(&file_path) else {
-                            // If the file path isn't good, just ignore it I guess?
-                            println!("Couldn't open file path: {}", file_path);
+                        let sound = match mixer::Chunk::from_file(&file_path) {
+                            Ok(sound) => sound,
+                            Err(e) => {
+                                eprintln!("couldn't load sound {file_path}: {e}");
+                                continue;
+                            }
+                        };
+                        let Some(i) = chunks.iter().position(Option::is_none) else {
+                            eprintln!("no free channel to play {file_path}");
                             continue;
                         };
-                        // Lock the `channels` mutex to get exclusive access to the channels vector
-                        let mut chunks = chunks.lock().unwrap();
-                        // Find the first available (non-None) channel
-                        if let Some((i, _)) = chunks
-                            .iter_mut()
-                            .enumerate()
-                            .find(|(_, slot)| slot.is_none())
-                        {
-                            chunks[i] = Some(sound_file);
-                            let channel = mixer::Channel(i as i32);
-                            channel.set_volume(volume);
-                            channel.play(chunks[i].as_ref().unwrap(), 0).unwrap();
-                        } else {
-                            println!("No available channel to play sound: {}", file_path);
+                        let channel = mixer::Channel(i as i32);
+                        channel.set_volume(volume);
+                        if let Err(e) = channel.play(&sound, 0) {
+                            eprintln!("couldn't play {file_path}: {e}");
+                            continue;
                         }
+                        // Keep the chunk alive until the channel finishes playing it
+                        chunks[i] = Some(sound);
                     }
 
                     SoundCommand::Quit => break,
@@ -77,29 +74,26 @@ impl AudioManager {
         Ok(Self { sender })
     }
 
-    fn clear_unused_channels(chunks: &Arc<Mutex<Vec<Option<Chunk>>>>) {
-        let mut chunks = chunks.lock().unwrap();
-        for i in 0..NUM_CHUNKS {
-            if !mixer::Channel(i as i32).is_playing() {
-                chunks[i] = None
-            }
-        }
-    }
-
     /// Plays a sound.
     /// - file_path: relative to the crate directory
     /// - volume: [0, 128], anything above 128 is clipped to 128.
     pub fn play_sound(&self, file_path: String, volume: i32) {
-        self.sender
-            .send(SoundCommand::Play(file_path, volume))
-            .unwrap();
+        // Only fails if the audio thread is gone, and a missing sound shouldn't crash the game
+        let _ = self.sender.send(SoundCommand::Play(file_path, volume));
+    }
+}
+
+fn clear_unused_channels(chunks: &mut [Option<Chunk>; NUM_CHUNKS]) {
+    for (i, slot) in chunks.iter_mut().enumerate() {
+        if !mixer::Channel(i as i32).is_playing() {
+            *slot = None;
+        }
     }
 }
 
 impl Drop for AudioManager {
     fn drop(&mut self) {
-        println!("Audio manager dropped, btw!");
-        self.sender.send(SoundCommand::Quit).unwrap();
+        let _ = self.sender.send(SoundCommand::Quit);
     }
 }
 

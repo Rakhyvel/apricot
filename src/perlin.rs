@@ -258,9 +258,6 @@ impl PerlinMap {
         // Coordinates inside the tile. [0,1]
         let offset = p - origin;
 
-        let ray_origin = nalgebra_glm::vec3(p.x, p.y, 10000.0);
-        let ray_direction = nalgebra_glm::vec3(0.0, 0.0, -1.0);
-
         let offsets = if offset.y <= 1.0 - offset.x {
             // In bottom triangle
             vec![
@@ -281,15 +278,10 @@ impl PerlinMap {
             .map(|o| nalgebra_glm::vec3(origin.x + o.x, origin.y + o.y, self.height(origin + o)))
             .collect();
 
-        let (retval, _t) = intersect(
-            offsets[0],
-            offsets[1],
-            offsets[2],
-            ray_origin,
-            ray_direction,
-        )
-        .unwrap();
-        retval.z
+        // Evaluate the triangle's plane at `p`. Unlike a ray cast, this can't miss on an edge.
+        let a = offsets[0];
+        let n = nalgebra_glm::cross(&(offsets[1] - a), &(offsets[2] - a));
+        a.z - (n.x * (p.x - a.x) + n.y * (p.y - a.y)) / n.z
     }
 
     fn oob(&self, p: nalgebra_glm::Vec2) -> bool {
@@ -425,44 +417,6 @@ fn smooth_inter(x: f32, y: f32, s: f32) -> f32 {
 #[inline]
 fn lin_inter(x: f32, y: f32, s: f32) -> f32 {
     x + s * (y - x)
-}
-
-fn intersect(
-    v0: nalgebra_glm::Vec3,
-    v1: nalgebra_glm::Vec3,
-    v2: nalgebra_glm::Vec3,
-    ray_origin: nalgebra_glm::Vec3,
-    ray_direction: nalgebra_glm::Vec3,
-) -> Option<(nalgebra_glm::Vec3, f32)> {
-    const EPSILON: f32 = 0.0000001;
-    let edge1 = v1 - v0;
-    let edge2 = v2 - v0;
-    let h = nalgebra_glm::cross(&ray_direction, &edge2);
-    let a = nalgebra_glm::dot(&edge1, &h);
-
-    if a.abs() < EPSILON {
-        return None; // Ray is parallel to the triangle
-    }
-
-    let f = 1.0 / a;
-    let s = ray_origin - v0;
-    let u = f * nalgebra_glm::dot(&s, &h);
-
-    if !(0.0..=1.0).contains(&u) {
-        return None;
-    }
-
-    let q = nalgebra_glm::cross(&s, &edge1);
-    let v = f * nalgebra_glm::dot(&ray_direction, &q);
-
-    if v < 0.0 || u + v > 1.0 {
-        return None;
-    }
-
-    let t = f * nalgebra_glm::dot(&edge2, &q);
-
-    let intersection_point = ray_origin + t * ray_direction;
-    Some((intersection_point, t))
 }
 
 fn tri_normal(

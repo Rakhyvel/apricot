@@ -5,7 +5,7 @@ use hecs::{Entity, World};
 use super::{
     bvh::BVH,
     perlin::{HeightMap, PerlinMap},
-    render_core::{ModelComponent, RenderContext},
+    render_core::{ModelComponent, RenderContext, TextureId},
 };
 
 #[derive(Default)]
@@ -55,8 +55,14 @@ impl Chunk {
         }
     }
 
-    /// Generate a new chunk
-    pub fn generate(&mut self, renderer: &RenderContext, world: &mut World, bvh: &mut BVH<Entity>) {
+    /// Generate a new chunk, textured with `texture`
+    pub fn generate(
+        &mut self,
+        renderer: &RenderContext,
+        texture: TextureId,
+        world: &mut World,
+        bvh: &mut BVH<Entity>,
+    ) {
         if !self.generated {
             self.map.generate(
                 self.level_of_detail,
@@ -73,14 +79,12 @@ impl Chunk {
 
             // self.map.erode(64, rand::Rng::gen(&mut rng));
 
-            let grass_texture = renderer.get_texture_id_from_name("grass").unwrap();
-
             let pos_with_z = nalgebra_glm::vec3(self.pos.x, self.pos.y, 0.0);
             let (i, v, n, u) = self.create_mesh();
             let grass_mesh = renderer.add_mesh_from_verts(i, vec![&v, &n, &u], None);
             let chunk_entity = world.spawn((ModelComponent::new(
                 grass_mesh,
-                grass_texture,
+                texture,
                 pos_with_z,
                 nalgebra_glm::vec3(1.0, 1.0, 1.0),
             ),));
@@ -242,6 +246,7 @@ impl ChunkedPerlinMap {
     pub fn check_chunks(
         &mut self,
         renderer: &RenderContext,
+        texture: TextureId,
         p: nalgebra_glm::Vec2,
         world: &mut World,
         bvh: &mut BVH<Entity>,
@@ -251,7 +256,7 @@ impl ChunkedPerlinMap {
                 let chunk_offset = nalgebra_glm::vec2(x as f32, y as f32);
                 let chunk_pos = chunk_offset * (self.chunk_width as f32) + p;
                 let chunk = self.chunk_at_mut(chunk_pos);
-                chunk.generate(renderer, world, bvh);
+                chunk.generate(renderer, texture, world, bvh);
             }
         }
     }

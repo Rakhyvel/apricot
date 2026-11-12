@@ -56,7 +56,7 @@ pub struct RenderContext {
     pub camera: RefCell<Camera>,
     pub program: RefCell<Option<ProgramId>>,
     pub color: RefCell<nalgebra_glm::Vec4>,
-    pub font: RefCell<Option<FontId>>,
+    pub font: Cell<FontId>,
     pub scissor: Cell<Option<Rectangle>>,
 
     // Managers
@@ -209,7 +209,7 @@ impl RenderContext {
             camera: RefCell::new(Camera::default()),
             program: RefCell::new(None),
             color: RefCell::new(nalgebra_glm::vec4(0.0, 0.0, 0.0, 1.0)),
-            font: RefCell::new(None),
+            font: Cell::new(FontId::new(0)), // replaced by the default font below
             scissor: Cell::new(None),
 
             mesh_manager: RefCell::new(meshes),
@@ -284,21 +284,20 @@ impl RenderContext {
     }
 
     pub fn set_font(&self, font: FontId) {
-        *self.font.borrow_mut() = Some(font);
+        self.font.set(font);
     }
 
     pub fn set_scissor(&self, scissor: Option<Rectangle>) {
         self.scissor.set(scissor)
     }
 
-    pub fn get_current_font_id(&self) -> Option<FontId> {
-        *self.font.borrow()
+    pub fn get_current_font_id(&self) -> FontId {
+        self.font.get()
     }
 
-    pub fn get_current_font(&self) -> Option<std::cell::Ref<'_, Font>> {
-        let id = self.get_current_font_id()?;
-        let manager = self.font_manager.borrow();
-        std::cell::Ref::filter_map(manager, |m| m.get_font_from_id(id)).ok()
+    pub fn get_current_font(&self) -> std::cell::Ref<'_, Font> {
+        self.get_font_from_id(self.font.get())
+            .expect("invalid FontId")
     }
 
     pub fn add_mesh(&self, mesh: Mesh, name: Option<&'static str>) -> MeshId {
@@ -394,33 +393,15 @@ impl RenderContext {
     }
 
     pub fn get_mesh_from_id(&self, id: MeshId) -> Option<std::cell::Ref<'_, Mesh>> {
-        let manager = self.mesh_manager.borrow();
-        if let Some(_mesh) = manager.get_from_id(id) {
-            // Map the Ref<MeshManager> to Ref<Mesh>
-            Some(std::cell::Ref::map(manager, |m| m.get_from_id(id).unwrap()))
-        } else {
-            None
-        }
+        std::cell::Ref::filter_map(self.mesh_manager.borrow(), |m| m.get_from_id(id)).ok()
     }
 
     pub fn get_texture_from_id(&self, id: TextureId) -> Option<std::cell::Ref<'_, Texture>> {
-        let manager = self.texture_manager.borrow();
-        if let Some(_texture) = manager.get_from_id(id) {
-            // Map the Ref<TextureManager> to Ref<Texture>
-            Some(std::cell::Ref::map(manager, |m| m.get_from_id(id).unwrap()))
-        } else {
-            None
-        }
+        std::cell::Ref::filter_map(self.texture_manager.borrow(), |m| m.get_from_id(id)).ok()
     }
 
     pub fn get_program_from_id(&self, id: ProgramId) -> Option<std::cell::Ref<'_, Program>> {
-        let manager = self.program_manager.borrow();
-        if let Some(_program) = manager.get_from_id(id) {
-            // Map the Ref<ProgramManager> to Ref<Program>
-            Some(std::cell::Ref::map(manager, |m| m.get_from_id(id).unwrap()))
-        } else {
-            None
-        }
+        std::cell::Ref::filter_map(self.program_manager.borrow(), |m| m.get_from_id(id)).ok()
     }
 
     pub fn get_font_from_id(&self, id: FontId) -> Option<std::cell::Ref<'_, Font>> {
@@ -485,13 +466,12 @@ impl RenderContext {
     }
 
     pub fn get_current_program_id(&self) -> u32 {
-        if self.program.borrow().is_some() {
-            let program = self
-                .get_program_from_id(self.program.borrow().unwrap())
-                .unwrap();
-            program.id()
-        } else {
-            0
+        match *self.program.borrow() {
+            Some(id) => self
+                .get_program_from_id(id)
+                .expect("invalid ProgramId")
+                .id(),
+            None => 0,
         }
     }
 

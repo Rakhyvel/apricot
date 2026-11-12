@@ -11,7 +11,11 @@ use super::frustum::Frustum;
 /// Which kind of projection the camera uses.
 pub enum ProjectionKind {
     Perspective {
+        /// Vertical field of view, in radians
         fov_rad: f32,
+        /// The closest distance that gets drawn
+        near: f32,
+        /// The furthest distance that gets drawn
         far: f32,
     },
     Orthographic {
@@ -29,6 +33,7 @@ impl Default for ProjectionKind {
     fn default() -> Self {
         Self::Perspective {
             fov_rad: std::f32::consts::FRAC_PI_4,
+            near: 0.1,
             far: 1000.0,
         }
     }
@@ -73,8 +78,8 @@ impl Camera {
     /// Orthographic cameras ignore the aspect
     pub fn proj_matrix(&self, aspect: f32) -> nalgebra_glm::Mat4 {
         match self.projection_kind {
-            ProjectionKind::Perspective { fov_rad, far } => {
-                nalgebra_glm::perspective(aspect, fov_rad, 0.1, far)
+            ProjectionKind::Perspective { fov_rad, near, far } => {
+                nalgebra_glm::perspective(aspect, fov_rad, near, far)
             }
             ProjectionKind::Orthographic {
                 left,
@@ -233,6 +238,7 @@ mod tests {
             nalgebra_glm::vec3(0.0, 1.0, 0.0),
             ProjectionKind::Perspective {
                 fov_rad: std::f32::consts::FRAC_PI_2,
+                near: 0.1,
                 far: 100.0,
             },
         );

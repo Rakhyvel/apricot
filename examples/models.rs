@@ -52,6 +52,7 @@ impl Models {
             vec3(0.0, 1.0, 0.0),
             ProjectionKind::Perspective {
                 fov_rad: FRAC_PI_4,
+                near: 0.1,
                 far: 20.0,
             },
         ));

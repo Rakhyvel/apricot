@@ -39,6 +39,7 @@ impl SpinningCube {
         let mut fly = FlyController::new(vec3(0.0, 2.5, 5.0), vec3(0.0, -1.0, 0.0));
         fly.projection = ProjectionKind::Perspective {
             fov_rad: FRAC_PI_4,
+            near: 0.1,
             far: 30.0,
         };
         renderer.set_camera(fly.camera());

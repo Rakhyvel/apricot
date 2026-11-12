@@ -75,9 +75,10 @@ impl Scene for SpinningCube {
         renderer.draw_mesh(renderer.builtins.cube, cube, vec4(1.0, 0.6, 0.25, 1.0));
         renderer.draw_mesh(renderer.builtins.plane, floor, vec4(1.0, 1.0, 1.0, 1.0));
 
-        let previous = *renderer.color.borrow();
-        renderer.set_color(vec4(0.3, 0.3, 0.3, 1.0));
-        renderer.draw_text(vec2(10.0, 10.0), &format!("{} FPS", app.fps));
-        renderer.set_color(previous);
+        renderer.draw_text(
+            vec2(10.0, 10.0),
+            &format!("{} FPS", app.fps),
+            vec4(0.3, 0.3, 0.3, 1.0),
+        );
     }
 }

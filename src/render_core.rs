@@ -55,7 +55,6 @@ pub struct RenderContext {
     // Updated by the user
     pub camera: RefCell<Camera>,
     pub program: RefCell<Option<ProgramId>>,
-    pub color: RefCell<nalgebra_glm::Vec4>,
     pub font: Cell<FontId>,
     pub scissor: Cell<Option<Rectangle>>,
 
@@ -208,7 +207,6 @@ impl RenderContext {
         let mut renderer = Self {
             camera: RefCell::new(Camera::default()),
             program: RefCell::new(None),
-            color: RefCell::new(nalgebra_glm::vec4(0.0, 0.0, 0.0, 1.0)),
             font: Cell::new(FontId::new(0)), // replaced by the default font below
             scissor: Cell::new(None),
 
@@ -276,11 +274,6 @@ impl RenderContext {
         *self.program.borrow_mut() = Some(program_id);
         let program = manager.get_from_id(program_id).expect("invalid ProgramId");
         program.set();
-    }
-
-    pub fn set_color(&self, color: nalgebra_glm::Vec4) {
-        let mut color_ref = self.color.borrow_mut();
-        *color_ref = color;
     }
 
     pub fn set_font(&self, font: FontId) {

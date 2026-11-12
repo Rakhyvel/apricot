@@ -1,6 +1,6 @@
 //! This module deals with managing fonts
 
-use nalgebra_glm::{vec2, Vec2};
+use nalgebra_glm::{vec2, Vec2, Vec4};
 use sdl2::{pixels::Color, rect::Rect, surface::Surface, ttf::Sdl2TtfContext};
 use std::{collections::HashMap, path::Path};
 
@@ -89,7 +89,7 @@ impl Font {
     }
 
     /// Draw text in a font to the screen
-    pub fn draw(&self, pos: Vec2, text: &str, renderer: &RenderContext) {
+    pub fn draw(&self, pos: Vec2, text: &str, renderer: &RenderContext, color: Vec4) {
         let mut cursor = pos;
         for c in text.chars() {
             let c_byte: u8 = c as u8;
@@ -110,13 +110,7 @@ impl Font {
                 pos: cursor,
                 size: glyph.rect.size,
             };
-            let color_mod = renderer.color.borrow();
-            renderer.copy_texture(
-                dest_rect,
-                self.cache_texture,
-                glyph.rect,
-                &color_mod,
-            );
+            renderer.copy_texture(dest_rect, self.cache_texture, glyph.rect, &color);
             cursor.x += glyph.advance as f32;
         }
     }

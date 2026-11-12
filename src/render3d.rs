@@ -12,7 +12,7 @@ use super::{
 };
 
 use hecs::{Entity, World};
-use nalgebra_glm::{vec4, Vec3};
+use nalgebra_glm::{vec4, Vec3, Vec4};
 
 impl RenderContext {
     pub fn render_3d_models_system(
@@ -103,7 +103,7 @@ impl RenderContext {
         // println!("{:?}", rendered);
     }
 
-    pub fn render_3d_outlines_system(&self, world: &mut World, bvh: &BVH<Entity>) {
+    pub fn render_3d_outlines_system(&self, world: &mut World, bvh: &BVH<Entity>, color: Vec4) {
         unsafe {
             gl::StencilFunc(gl::NOTEQUAL, 1, 0xFF);
             gl::StencilMask(0x00);
@@ -113,8 +113,7 @@ impl RenderContext {
         self.set_program_from_id(self.builtins.program_3d_solid);
         let camera_frustum = &self.camera.borrow().frustum();
 
-        self.get_program_uniform("u_color")
-            .set_vec4(&self.color.borrow());
+        self.get_program_uniform("u_color").set_vec4(&color);
 
         let (view_matrix, proj_matrix) = self.camera.borrow().view_proj_matrices();
         for model_id in bvh.iter_frustum(camera_frustum, false) {

@@ -191,8 +191,8 @@ impl RenderContext {
         }
     }
 
-    pub fn draw_text(&self, pos: Vec2, text: &str) {
-        self.get_current_font().draw(pos, text, self);
+    pub fn draw_text(&self, pos: Vec2, text: &str, color: Vec4) {
+        self.get_current_font().draw(pos, text, self, color);
     }
 
     /// Set the current draw layer. Draw calls on higher layers render on top of lower layers,
@@ -270,18 +270,25 @@ impl RenderContext {
         );
     }
 
-    pub fn fill_rect(&self, dest: Rectangle) {
+    pub fn fill_rect(&self, dest: Rectangle, color: Vec4) {
         self.draw_queue.borrow_mut().push((
             self.current_draw_layer.get(),
             DrawCommand::FillRect {
                 rect: dest,
-                color: *self.color.borrow(),
+                color,
                 scissor: self.scissor.get(),
             },
         ));
     }
 
-    pub fn fill_polygon(&self, mesh_id: MeshId, center: Vec2, radius: f32, rotation: f32) {
+    pub fn fill_polygon(
+        &self,
+        mesh_id: MeshId,
+        center: Vec2,
+        radius: f32,
+        rotation: f32,
+        color: Vec4,
+    ) {
         self.draw_queue.borrow_mut().push((
             self.current_draw_layer.get(),
             DrawCommand::FillPolygon {
@@ -289,7 +296,7 @@ impl RenderContext {
                 radius,
                 mesh_id,
                 rotation,
-                color: *self.color.borrow(),
+                color,
                 scissor: self.scissor.get(),
             },
         ));
@@ -432,29 +439,41 @@ impl RenderContext {
         }
     }
 
-    pub fn draw_rect(&self, rect: Rectangle, thickness: f32) {
+    pub fn draw_rect(&self, rect: Rectangle, thickness: f32, color: Vec4) {
         // Top
-        self.fill_rect(Rectangle {
-            pos: rect.pos,
-            size: vec2(rect.size.x, thickness),
-        });
+        self.fill_rect(
+            Rectangle {
+                pos: rect.pos,
+                size: vec2(rect.size.x, thickness),
+            },
+            color,
+        );
 
         // Bottom
-        self.fill_rect(Rectangle {
-            pos: vec2(rect.pos.x, rect.pos.y + rect.size.y - thickness),
-            size: vec2(rect.size.x, thickness),
-        });
+        self.fill_rect(
+            Rectangle {
+                pos: vec2(rect.pos.x, rect.pos.y + rect.size.y - thickness),
+                size: vec2(rect.size.x, thickness),
+            },
+            color,
+        );
 
         // Left (inner height only, corners handled by top/bottom)
-        self.fill_rect(Rectangle {
-            pos: vec2(rect.pos.x, rect.pos.y + thickness),
-            size: vec2(thickness, rect.size.y - thickness * 2.0),
-        });
+        self.fill_rect(
+            Rectangle {
+                pos: vec2(rect.pos.x, rect.pos.y + thickness),
+                size: vec2(thickness, rect.size.y - thickness * 2.0),
+            },
+            color,
+        );
 
         // Right
-        self.fill_rect(Rectangle {
-            pos: vec2(rect.pos.x + rect.size.x - thickness, rect.pos.y + thickness),
-            size: vec2(thickness, rect.size.y - thickness * 2.0),
-        });
+        self.fill_rect(
+            Rectangle {
+                pos: vec2(rect.pos.x + rect.size.x - thickness, rect.pos.y + thickness),
+                size: vec2(thickness, rect.size.y - thickness * 2.0),
+            },
+            color,
+        );
     }
 }

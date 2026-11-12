@@ -200,9 +200,9 @@ impl RenderContext {
                 textures.add(white, Some("white"))
             },
             font: FontId::placeholder(0),
-            quad: meshes.add(Mesh::from_data(&MeshData::quad()), Some("quad")),
-            cube: meshes.add(Mesh::from_data(&MeshData::cube()), Some("cube")),
-            plane: meshes.add(Mesh::from_data(&MeshData::plane()), Some("plane")),
+            quad: meshes.add(Mesh::from_data(MeshData::quad()), Some("quad")),
+            cube: meshes.add(Mesh::from_data(MeshData::cube()), Some("cube")),
+            plane: meshes.add(Mesh::from_data(MeshData::plane()), Some("plane")),
         };
 
         let mut renderer = Self {
@@ -353,13 +353,9 @@ impl RenderContext {
         Ok(self.add_mesh(Mesh::from_obj(obj_file_data)?, name))
     }
 
-    pub fn add_mesh_from_verts(
-        &self,
-        indices: Vec<u32>,
-        datas: Vec<&Vec<f32>>,
-        name: Option<&'static str>,
-    ) -> MeshId {
-        self.add_mesh(Mesh::new(indices, datas), name)
+    /// Upload some `MeshData`, like from `MeshData::icosphere` or `MeshData::from_obj`
+    pub fn add_mesh_data(&self, data: MeshData, name: Option<&'static str>) -> MeshId {
+        self.add_mesh(Mesh::from_data(data), name)
     }
 
     pub fn add_texture(&self, texture: Texture, name: Option<&'static str>) -> TextureId {
@@ -717,23 +713,21 @@ impl LinePath {
 }
 
 impl Mesh {
-    pub fn new(indices: Vec<u32>, datas: Vec<&Vec<f32>>) -> Self {
-        assert!(
-            !datas.is_empty(),
-            "The `datas` parameter vec can't be empty"
-        );
-
+    /// Upload `data` to the GPU. Keeps the positions and indices on the CPU for bounding boxes and
+    /// raycasts, but the normals and UVs only live on the GPU
+    pub fn from_data(data: MeshData) -> Self {
         let vao = Vao::gen();
         let ibo = Buffer::<u32>::gen(gl::ELEMENT_ARRAY_BUFFER);
-        ibo.set_data(&indices);
+        ibo.set_data(&data.indices);
 
-        let vbos: Vec<Buffer<f32>> = datas
+        // Attribute slots match the shaders: 0 = position, 1 = normal, 2 = uv
+        let vbos: Vec<Buffer<f32>> = [&data.positions, &data.normals, &data.uvs]
             .iter()
             .enumerate()
-            .map(|(i, data)| {
+            .map(|(i, attribute)| {
                 let vbo = Buffer::<f32>::gen(gl::ARRAY_BUFFER);
-                vbo.set_data(data); // binds ARRAY_BUFFER to `vbo`
-                vao.attrib(i as u32, &vbo, 3, 3, 0); // slot `i` reads from vbo
+                vbo.set_data(attribute);
+                vao.attrib(i as u32, &vbo, 3, 3, 0);
                 vbo
             })
             .collect();
@@ -746,9 +740,8 @@ impl Mesh {
             gl::BindBuffer(gl::ARRAY_BUFFER, 0);
         }
 
-        let positions = datas[0].clone();
         let aabb = AABB::from_points(
-            positions
+            data.positions
                 .chunks(3)
                 .map(|p| nalgebra_glm::vec3(p[0], p[1], p[2])),
         );
@@ -757,22 +750,15 @@ impl Mesh {
             vao,
             vbos,
             ibo,
-            positions,
-            indices,
+            positions: data.positions,
+            indices: data.indices,
             aabb,
         }
     }
 
     /// Upload a mesh straight from the bytes of a .obj file
     pub fn from_obj(obj_file_data: &[u8]) -> Result<Self, Error> {
-        Ok(Self::from_data(&MeshData::from_obj(obj_file_data)?))
-    }
-
-    pub fn from_data(data: &MeshData) -> Self {
-        Self::new(
-            data.indices.clone(),
-            vec![&data.positions, &data.normals, &data.uvs],
-        )
+        Ok(Self::from_data(MeshData::from_obj(obj_file_data)?))
     }
 
     /// Every triangle, in the mesh's own space

@@ -2,7 +2,7 @@ use nalgebra_glm::{vec2, vec3, Mat4, Vec2, Vec4};
 
 use crate::{
     mesh_data::MeshData,
-    render_core::{Mesh, MeshId},
+    render_core::MeshId,
 };
 
 use super::{
@@ -477,7 +477,7 @@ impl RenderContext {
         } else {
             MeshData::ngon_ring(sides, inner_key as f32 / 1024.0)
         };
-        let id = self.add_mesh(Mesh::from_data(&data), None);
+        let id = self.add_mesh_data(data, None);
         self.poly_meshes.borrow_mut().insert((sides, inner_key), id);
         id
     }

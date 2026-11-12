@@ -10,7 +10,7 @@ use apricot::{
     mesh_data::MeshData,
     rectangle::Rectangle,
     render2d::NineSlice,
-    render_core::{Mesh, MeshId, TextureId},
+    render_core::{MeshId, TextureId},
 };
 use nalgebra_glm::{vec2, vec4, Vec2};
 
@@ -48,7 +48,7 @@ impl Shapes {
                 FRAME_SIZE,
                 &frame(FRAME_SIZE, FRAME_BORDER),
             ),
-            star: renderer.add_mesh(Mesh::from_data(&star(5, 0.45)), None),
+            star: renderer.add_mesh_data(star(5, 0.45), None),
         }
     }
 }

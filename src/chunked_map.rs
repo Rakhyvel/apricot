@@ -1,6 +1,7 @@
 //! This module implements chunked loading of infinite terrain
 
 use super::{
+    mesh_data::MeshData,
     model_set::{Model, ModelSet},
     perlin::{HeightMap, PerlinMap},
     render_core::{RenderContext, TextureId},
@@ -75,8 +76,7 @@ impl Chunk {
         // self.map.erode(64, rand::Rng::gen(&mut rng));
 
         let pos_with_z = nalgebra_glm::vec3(self.pos.x, self.pos.y, 0.0);
-        let (i, v, n, u) = self.create_mesh();
-        let grass_mesh = renderer.add_mesh_from_verts(i, vec![&v, &n, &u], None);
+        let grass_mesh = renderer.add_mesh_data(self.create_mesh(), None);
         self.generated = true;
         Some(Model::new(
             grass_mesh,
@@ -105,7 +105,7 @@ impl Chunk {
         self.map.flow(p)
     }
 
-    fn create_mesh(&self) -> (Vec<u32>, Vec<f32>, Vec<f32>, Vec<f32>) {
+    fn create_mesh(&self) -> MeshData {
         let mut indices = Vec::<u32>::new();
         let mut vertices = Vec::<f32>::new();
         let mut normals = Vec::<f32>::new();
@@ -142,7 +142,12 @@ impl Chunk {
             }
         }
 
-        (indices, vertices, normals, uv)
+        MeshData {
+            positions: vertices,
+            normals,
+            uvs: uv,
+            indices,
+        }
     }
 
     fn add_triangle(

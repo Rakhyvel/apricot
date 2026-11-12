@@ -11,7 +11,7 @@ use apricot::{
     mesh_data::MeshData,
     model_set::{Model, ModelSet},
     rectangle::Rectangle,
-    render_core::{LinePath, LineStyle, Mesh, MeshId, TextureId},
+    render_core::{LinePath, LineStyle, MeshId, TextureId},
     shadow_map::DirectionalLightSource,
 };
 use nalgebra_glm::{vec2, vec3, vec4, Mat4};
@@ -72,9 +72,9 @@ impl Models {
         floor.casts_shadow = false; // nothing's under it to shadow
         models.insert(renderer, Thing::Floor, floor);
 
-        let uv_sphere = renderer.add_mesh(Mesh::from_data(&MeshData::uv_sphere(24, 12)), None);
+        let uv_sphere = renderer.add_mesh_data(MeshData::uv_sphere(24, 12), None);
         let icospheres: Vec<MeshId> = (0..ICOSPHERE_LEVELS)
-            .map(|n| renderer.add_mesh(Mesh::from_data(&MeshData::icosphere(n)), None))
+            .map(|n| renderer.add_mesh_data(MeshData::icosphere(n), None))
             .collect();
         let white = renderer.builtins.white_texture;
 

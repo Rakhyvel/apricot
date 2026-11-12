@@ -58,11 +58,9 @@ impl Models {
             &nalgebra_glm::translation(&vec3(0.0, -1.0, 0.0)),
             &vec3(12.0, 1.0, 12.0),
         );
-        models.insert(
-            renderer,
-            Thing::Floor,
-            Model::new(renderer.builtins.plane, checker, floor),
-        );
+        let mut floor = Model::new(renderer.builtins.plane, checker, floor);
+        floor.casts_shadow = false; // nothing's under it to shadow
+        models.insert(renderer, Thing::Floor, floor);
 
         for (x, z) in grid() {
             let mut cube = Model::new(

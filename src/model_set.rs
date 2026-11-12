@@ -23,10 +23,12 @@ pub struct Model {
     pub tint: Vec4,
     /// Whether `ModelSet::draw_outlines` draws an outline around it
     pub outlined: bool,
+    /// Whether `ModelSet::draw_shadows` draws it, so it casts a shadow
+    pub casts_shadow: bool,
 }
 
 impl Model {
-    /// A model at `transform` with a white tint and no outline
+    /// A model at `transform` with a white tint and no outline, that casts a shadow
     pub fn new(mesh: MeshId, texture: TextureId, transform: Mat4) -> Self {
         Self {
             mesh,
@@ -34,6 +36,7 @@ impl Model {
             transform,
             tint: Vec4::repeat(1.0),
             outlined: false,
+            casts_shadow: true,
         }
     }
 }
@@ -88,8 +91,8 @@ impl<K: Copy + Eq + Hash> ModelSet<K> {
         self.entries.get(&key).map(|e| &e.model)
     }
 
-    /// The model under `key`, for changing its texture, tint, or outline. Use `set_transform`
-    /// to move it
+    /// The model under `key`, for changing its texture, tint, outline, or shadow. Use
+    /// `set_transform` to move it
     pub fn get_mut(&mut self, key: K) -> Option<&mut Model> {
         self.entries.get_mut(&key).map(|e| &mut e.model)
     }
@@ -183,11 +186,13 @@ impl<K: Copy + Eq + Hash> ModelSet<K> {
         }
     }
 
-    /// Draw every model the light can see into a shadow pass, so they cast shadows
+    /// Draw every model the light can see that casts a shadow into a shadow pass
     pub fn draw_shadows(&self, pass: &ShadowPass) {
         for key in self.bvh.iter_frustum(&pass.frustum(), false) {
             let model = &self.entries[&key].model;
-            pass.draw(model.mesh, model.transform);
+            if model.casts_shadow {
+                pass.draw(model.mesh, model.transform);
+            }
         }
     }
 

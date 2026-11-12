@@ -11,11 +11,11 @@ use std::cell::Cell;
 use std::time::{Duration, Instant};
 
 use sdl2::event::{Event, EventType, WindowEvent};
-pub use sdl2::keyboard::Scancode;
 use sdl2::video::SwapInterval;
 use sdl2::Sdl;
 
 use crate::error::Error;
+use crate::input::{Input, Scancode};
 use crate::rectangle::Rectangle;
 
 use super::render_core::RenderContext;
@@ -41,45 +41,8 @@ pub struct App {
     /// Frames rendered in the last second
     pub fps: u32,
 
-    // User input state
-    /// Static map of key states, where the boolean at index `k` determines if the scancode `k` is currently pressed
-    pub keys: [bool; 256],
-    keys_pressed: [bool; 256],
-    keys_released: [bool; 256],
-    /// The position of the mouse, relative to the top-left corner of the screen
-    pub mouse_pos: nalgebra_glm::Vec2,
-    /// How far the mouse moved this tick, in pixels
-    pub mouse_vel: nalgebra_glm::Vec2,
-    /// Whether the left mouse button is down
-    pub mouse_left_down: bool,
-    /// Whether the right mouse button is down
-    pub mouse_right_down: bool,
-    prev_mouse_left_down: bool,
-    prev_mouse_right_down: bool,
-    /// Whether the left mouse button was clicked (ie it was down the previous tick, but is now up)
-    pub mouse_left_clicked: bool,
-    /// Where the left button went down
-    left_press_pos: nalgebra_glm::Vec2,
-    right_press_pos: nalgebra_glm::Vec2,
-    left_drag_dist: f32,
-    right_drag_dist: f32,
-    /// Whether the left button is down and has moved beyond the click threshold
-    pub mouse_left_dragging: bool,
-    /// Whether the current left click event has been consumed
-    click_consumed: Cell<bool>,
-    /// Whether the current mouse wheel event has been consumed
-    wheel_consumed: Cell<bool>,
-    /// Whether the right mouse button was clicked (ie it was down the previous tick, but is now up)
-    pub mouse_right_clicked: bool,
-    /// How many notches the mouse wheel turned this tick. Positive is away from you
-    pub mouse_wheel: f32,
-}
-
-/// A mouse button
-#[derive(Debug, Copy, Clone, PartialEq, Eq)]
-pub enum MouseButton {
-    Left,
-    Right,
+    /// Keyboard and mouse state for this tick
+    pub input: Input,
 }
 
 pub struct AppConfig {
@@ -156,28 +119,10 @@ pub fn run<S: Scene + 'static>(cfg: AppConfig, init: impl FnOnce(&App) -> S) -> 
         running: Cell::new(true),
         cursor_captured: Cell::new(cfg.cursor_captured),
         dt: Duration::from_secs_f64(1.0 / 60.0),
-        keys: [false; 256],
-        keys_pressed: [false; 256],
-        keys_released: [false; 256],
-        mouse_pos: nalgebra_glm::vec2(0.0, 0.0),
-        mouse_vel: nalgebra_glm::vec2(0.0, 0.0),
-        mouse_left_down: false,
-        mouse_right_down: false,
-        prev_mouse_left_down: false,
-        prev_mouse_right_down: false,
-        mouse_left_clicked: false,
-        mouse_right_clicked: false,
-        mouse_wheel: 0.0,
+        input: Input::default(),
         seconds: 0.0,
         ticks: 0,
         fps: 0,
-        click_consumed: Cell::new(false),
-        wheel_consumed: Cell::new(false),
-        left_press_pos: nalgebra_glm::vec2(0.0, 0.0),
-        right_press_pos: nalgebra_glm::vec2(0.0, 0.0),
-        left_drag_dist: 0.0,
-        right_drag_dist: 0.0,
-        mouse_left_dragging: false,
     };
     app.renderer.int_screen_resolution = app.window_size; // so the aspect is right in `init`
 
@@ -209,7 +154,7 @@ pub fn run<S: Scene + 'static>(cfg: AppConfig, init: impl FnOnce(&App) -> S) -> 
                     // Let go in the middle, not wherever it was while hidden
                     let center = app.window_size / 2;
                     mouse.warp_mouse_in_window(&window, center.x, center.y);
-                    app.mouse_pos = nalgebra_glm::vec2(center.x as f32, center.y as f32);
+                    app.input.mouse_pos = nalgebra_glm::vec2(center.x as f32, center.y as f32);
                 }
                 // Toss the jump the switch makes, so the camera doesn't lurch
                 sdl_context
@@ -219,9 +164,8 @@ pub fn run<S: Scene + 'static>(cfg: AppConfig, init: impl FnOnce(&App) -> S) -> 
                 cursor_applied = captured;
             }
 
-            app.reset_input();
-            app.poll_input(&sdl_context)?;
-            if cfg.escape_quits && app.key_pressed(Scancode::Escape) {
+            app.poll_events(&sdl_context)?;
+            if cfg.escape_quits && app.input.key_pressed(Scancode::Escape) {
                 app.quit();
             }
             if let Some(scene) = scene_stack.last_mut() {
@@ -263,25 +207,6 @@ pub fn run<S: Scene + 'static>(cfg: AppConfig, init: impl FnOnce(&App) -> S) -> 
 }
 
 impl App {
-    /// Mark the current left click as consumed
-    pub fn consume_click(&self) {
-        self.click_consumed.set(true);
-    }
-
-    /// Whether there's an unconsumed left click this tick, consuming it if there is.
-    pub fn take_click(&self) -> bool {
-        let clicked = self.mouse_left_clicked && !self.is_click_consumed();
-        if clicked {
-            self.consume_click();
-        }
-        clicked
-    }
-
-    /// Returns true if the current left click for this tick has been consumed
-    pub fn is_click_consumed(&self) -> bool {
-        self.click_consumed.get()
-    }
-
     /// Capture the cursor (hide it and lock it to the window, for mouse-look) or let it go, like
     /// when opening an inventory. Takes effect next tick
     pub fn set_cursor_captured(&self, captured: bool) {
@@ -298,80 +223,22 @@ impl App {
         self.running.set(false);
     }
 
-    /// Whether `key` is held down
-    pub fn key_down(&self, key: Scancode) -> bool {
-        self.keys[key as usize]
+    /// Is the mouse over `r`? Anything clipped away by `push_clip` doesn't count
+    pub fn mouse_over(&self, r: &Rectangle) -> bool {
+        let pos = self.input.mouse_pos;
+        r.contains_point(&pos)
+            && self
+                .renderer
+                .current_clip()
+                .is_none_or(|c| c.contains_point(&pos))
     }
 
-    /// Whether `key` went down this tick. Holding it down only counts once
-    pub fn key_pressed(&self, key: Scancode) -> bool {
-        self.keys_pressed[key as usize]
-    }
-
-    /// Whether `key` came back up this tick
-    pub fn key_released(&self, key: Scancode) -> bool {
-        self.keys_released[key as usize]
-    }
-
-    /// Whether `button` is held down
-    pub fn mouse_down(&self, button: MouseButton) -> bool {
-        match button {
-            MouseButton::Left => self.mouse_left_down,
-            MouseButton::Right => self.mouse_right_down,
-        }
-    }
-
-    pub fn consume_wheel(&self) {
-        self.wheel_consumed.set(true);
-    }
-
-    pub fn is_wheel_consumed(&self) -> bool {
-        self.wheel_consumed.get()
-    }
-
-    fn reset_input(&mut self) {
-        self.keys_pressed = [false; 256];
-        self.keys_released = [false; 256];
-        self.mouse_vel = nalgebra_glm::vec2(0.0, 0.0);
-        self.mouse_wheel = 0.0;
-        self.prev_mouse_left_down = self.mouse_left_down;
-        self.prev_mouse_right_down = self.mouse_right_down;
-        self.click_consumed.set(false);
-        self.wheel_consumed.set(false);
-    }
-
-    fn poll_input(&mut self, sdl_context: &Sdl) -> Result<(), Error> {
+    fn poll_events(&mut self, sdl_context: &Sdl) -> Result<(), Error> {
+        self.input.begin_tick();
         let mut event_queue = sdl_context.event_pump().map_err(Error::Sdl)?;
         for event in event_queue.poll_iter() {
             match event {
-                Event::Quit { .. } => {
-                    self.running.set(false);
-                }
-
-                Event::MouseMotion {
-                    x, y, xrel, yrel, ..
-                } => {
-                    self.mouse_pos = nalgebra_glm::vec2(x as f32, y as f32);
-                    self.mouse_vel += nalgebra_glm::vec2(xrel as f32, yrel as f32);
-                    // add up, a tick can get several
-                }
-
-                Event::MouseButtonDown { mouse_btn, .. } => match mouse_btn {
-                    sdl2::mouse::MouseButton::Left => self.mouse_left_down = true,
-                    sdl2::mouse::MouseButton::Right => self.mouse_right_down = true,
-                    _ => {}
-                },
-
-                Event::MouseButtonUp { mouse_btn, .. } => match mouse_btn {
-                    sdl2::mouse::MouseButton::Left => self.mouse_left_down = false,
-                    sdl2::mouse::MouseButton::Right => self.mouse_right_down = false,
-                    _ => {}
-                },
-
-                Event::MouseWheel { y, .. } => {
-                    self.mouse_wheel += y as f32;
-                }
-
+                Event::Quit { .. } => self.quit(),
                 Event::Window {
                     win_event: WindowEvent::Resized(new_width, new_height),
                     ..
@@ -380,64 +247,11 @@ impl App {
                     self.renderer.int_screen_resolution = self.window_size;
                     unsafe { gl::Viewport(0, 0, new_width, new_height) };
                 }
-
-                Event::KeyDown {
-                    scancode: Some(sc),
-                    repeat,
-                    ..
-                } => {
-                    self.keys[sc as usize] = true;
-                    if !repeat {
-                        self.keys_pressed[sc as usize] = true; // held keys repeat, but only count once
-                    }
-                }
-
-                Event::KeyUp {
-                    scancode: Some(sc), ..
-                } => {
-                    self.keys[sc as usize] = false;
-                    self.keys_released[sc as usize] = true;
-                }
-
-                _ => {}
+                _ => self.input.handle_event(&event),
             }
         }
-
-        const CLICK_SLOP_PX: f32 = 4.0;
-        let left_pressed = !self.prev_mouse_left_down && self.mouse_left_down;
-        let right_pressed = !self.prev_mouse_right_down && self.mouse_right_down;
-        let left_released = self.prev_mouse_left_down && !self.mouse_left_down;
-        let right_released = self.prev_mouse_right_down && !self.mouse_right_down;
-
-        if left_pressed {
-            self.left_press_pos = self.mouse_pos;
-            self.left_drag_dist = 0.0
-        } else if self.mouse_left_down {
-            let d = nalgebra_glm::distance(&self.mouse_pos, &self.left_press_pos);
-            self.left_drag_dist = self.left_drag_dist.max(d);
-        }
-        if right_pressed {
-            self.right_press_pos = self.mouse_pos;
-            self.right_drag_dist = 0.0
-        } else if self.mouse_right_down {
-            let d = nalgebra_glm::distance(&self.mouse_pos, &self.right_press_pos);
-            self.right_drag_dist = self.right_drag_dist.max(d);
-        }
-
-        self.mouse_left_dragging = self.mouse_left_down && self.left_drag_dist > CLICK_SLOP_PX;
-        self.mouse_left_clicked = left_released && self.left_drag_dist <= CLICK_SLOP_PX;
-        self.mouse_right_clicked = right_released && self.right_drag_dist <= CLICK_SLOP_PX;
-
+        self.input.end_tick();
         Ok(())
-    }
-
-    /// Is the mouse over `r`? Anything clipped away by `push_clip` doesn't count
-    pub fn mouse_over(&self, r: &Rectangle) -> bool {
-        r.contains_point(&self.mouse_pos)
-            && self
-                .renderer
-                .current_clip()
-                .is_none_or(|c| c.contains_point(&self.mouse_pos))
     }
 }
 

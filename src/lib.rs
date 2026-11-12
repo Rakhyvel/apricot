@@ -8,6 +8,7 @@ pub mod error;
 pub mod fly_controller;
 pub mod font;
 pub mod frustum;
+pub mod input;
 pub mod mesh_data;
 pub mod model_set;
 pub mod opengl;

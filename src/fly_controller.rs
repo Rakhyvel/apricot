@@ -1,8 +1,9 @@
 //! A free-flying camera controller for looking around while you build
 
 use crate::{
-    app::{App, MouseButton, Scancode},
+    app::App,
     camera::{Camera, ProjectionKind},
+    input::{MouseButton, Scancode},
 };
 use nalgebra_glm::Vec3;
 
@@ -47,13 +48,13 @@ impl FlyController {
 
     /// Turn and fly from this tick's mouse and keyboard input
     pub fn update(&mut self, app: &App) {
-        if self.look_button.is_none_or(|b| app.mouse_down(b)) {
-            self.yaw += app.mouse_vel.x * self.sensitivity;
-            self.pitch -= app.mouse_vel.y * self.sensitivity;
+        if self.look_button.is_none_or(|b| app.input.mouse_down(b)) {
+            self.yaw += app.input.mouse_vel.x * self.sensitivity;
+            self.pitch -= app.input.mouse_vel.y * self.sensitivity;
             self.pitch = self.pitch.clamp(-Self::MAX_PITCH, Self::MAX_PITCH);
         }
 
-        let key = |k: Scancode| app.key_down(k) as i32 as f32;
+        let key = |k: Scancode| app.input.key_down(k) as i32 as f32;
         let up = nalgebra_glm::vec3(0.0, 1.0, 0.0);
         let forward = self.forward();
         let right = forward.cross(&up).normalize();

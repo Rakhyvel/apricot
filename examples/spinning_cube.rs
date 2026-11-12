@@ -12,10 +12,11 @@
 use std::f32::consts::FRAC_PI_4;
 
 use apricot::{
-    app::{run, App, AppConfig, Scancode, Scene},
+    app::{run, App, AppConfig, Scene},
     camera::ProjectionKind,
     error::Error,
     fly_controller::FlyController,
+    input::Scancode,
     render_core::TextureId,
     shadow_map::DirectionalLightSource,
 };
@@ -64,7 +65,7 @@ impl SpinningCube {
 
 impl Scene for SpinningCube {
     fn update(&mut self, app: &App) {
-        if app.key_pressed(Scancode::Tab) {
+        if app.input.key_pressed(Scancode::Tab) {
             app.set_cursor_captured(!app.cursor_captured());
         }
         if app.cursor_captured() {
@@ -72,7 +73,7 @@ impl Scene for SpinningCube {
         }
         app.renderer.set_camera(self.fly.camera());
 
-        if app.key_pressed(Scancode::P) {
+        if app.input.key_pressed(Scancode::P) {
             self.paused = !self.paused;
         }
         if !self.paused {

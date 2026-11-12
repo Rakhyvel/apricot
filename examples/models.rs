@@ -98,7 +98,7 @@ impl Models {
 
     /// The closest cube under the mouse, if any
     fn hovered_cube(&self, app: &App) -> Option<Thing> {
-        let ray = app.renderer.screen_ray(app.mouse_pos);
+        let ray = app.renderer.screen_ray(app.input.mouse_pos);
         self.models
             .raycast(&app.renderer, &ray)
             .map(|(key, _)| key)

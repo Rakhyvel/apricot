@@ -3,7 +3,6 @@
 use std::{
     cell::{Cell, RefCell},
     collections::HashMap,
-    f32::consts::PI,
     fmt::Debug,
 };
 
@@ -116,18 +115,38 @@ pub struct TextureId(usize);
 #[derive(Copy, Clone, Debug)]
 pub struct ProgramId(usize);
 
-pub struct LinePathComponent {
-    pub vao: Vao,
-    pub vertices_buffer: Buffer<f32>,
-    num_vertices: i32,
-
+/// How a `LinePath` looks
+#[derive(Clone, Copy, Debug)]
+pub struct LineStyle {
+    /// Thickness in pixels. Most drivers only support 1
     pub width: f32,
-    pub color: nalgebra_glm::Vec4,
-    pub position: nalgebra_glm::Vec3,
-
-    pub seam: f32,
+    pub color: Vec4,
+    /// Whether the line fades out behind the seam, like a trail
     pub fade: bool,
+    /// Where along the path the fade starts, from 0 (the first point) to 1 (the last)
+    pub seam: f32,
+    /// Whether 3D geometry in front of the line hides it
     pub depth_test: bool,
+}
+
+impl Default for LineStyle {
+    fn default() -> Self {
+        Self {
+            width: 1.0,
+            color: nalgebra_glm::vec4(0.7, 0.9, 0.9, 0.9),
+            fade: true,
+            seam: 0.0,
+            depth_test: true,
+        }
+    }
+}
+
+/// A 3D line through a list of points, like an orbit or a path
+pub struct LinePath {
+    vao: Vao,
+    vertices_buffer: Buffer<f32>,
+    num_vertices: i32,
+    pub style: LineStyle,
 }
 
 /// Stores the geometry of a mesh. Meshes are registered in the mesh manager, and can be potentially shared across
@@ -601,45 +620,37 @@ impl RenderContext {
         self.draw(&mesh, model, view, proj);
     }
 
-    pub fn draw_line_path_at(
-        &self,
-        line_path: &LinePathComponent,
-        position: Vec3,
-        view_matrix: nalgebra_glm::Mat4,
-        proj_matrix: nalgebra_glm::Mat4,
-    ) {
+    /// Draw a line path from the current camera, moved by `transform`
+    pub fn draw_line_path(&self, path: &LinePath, transform: Mat4) {
+        let style = &path.style;
         self.set_program_from_id(self.builtins.program_line);
         unsafe {
-            if line_path.depth_test {
+            if style.depth_test {
                 gl::Enable(gl::DEPTH_TEST);
                 gl::DepthFunc(gl::LEQUAL);
             } else {
                 gl::Disable(gl::DEPTH_TEST);
             }
             gl::DepthMask(gl::FALSE);
-            gl::LineWidth(line_path.width);
+            gl::LineWidth(style.width);
         }
 
-        // Set uniforms
-        let model_matrix = nalgebra_glm::translate(&nalgebra_glm::one(), &position);
+        let (view, proj) = self.camera_view_proj();
         self.get_program_uniform("u_model_matrix")
-            .set_mat4(&model_matrix);
-        self.get_program_uniform("u_view_matrix")
-            .set_mat4(&view_matrix);
-        self.get_program_uniform("u_proj_matrix")
-            .set_mat4(&proj_matrix);
-        self.get_program_uniform("u_color")
-            .set_vec4(&line_path.color);
-        self.get_program_uniform("u_seam").set_f32(line_path.seam);
+            .set_mat4(&transform);
+        self.get_program_uniform("u_view_matrix").set_mat4(&view);
+        self.get_program_uniform("u_proj_matrix").set_mat4(&proj);
+        self.get_program_uniform("u_color").set_vec4(&style.color);
+        self.get_program_uniform("u_seam").set_f32(style.seam);
         self.get_program_uniform("u_fade")
-            .set_i32(line_path.fade as i32);
+            .set_i32(style.fade as i32);
         self.get_program_uniform("u_num_vertices")
-            .set_i32(line_path.num_vertices);
+            .set_i32(path.num_vertices);
 
         unsafe {
-            line_path.vao.bind();
-            gl::DrawArrays(gl::LINE_STRIP, 0, line_path.num_vertices);
-            line_path.vao.unbind();
+            path.vao.bind();
+            gl::DrawArrays(gl::LINE_STRIP, 0, path.num_vertices);
+            path.vao.unbind();
 
             gl::DepthMask(gl::TRUE);
             gl::DepthFunc(gl::LESS);
@@ -756,63 +767,35 @@ impl OpaqueId for ProgramId {
     }
 }
 
-impl LinePathComponent {
-    pub fn new(vertices: Vec<f32>) -> Self {
+impl LinePath {
+    /// A line through `points`, in order
+    pub fn new(points: &[Vec3], style: LineStyle) -> Self {
         let vao = Vao::gen();
         let vertices_buffer: Buffer<f32> = Buffer::gen(gl::ARRAY_BUFFER);
-        vertices_buffer.set_data(&vertices);
-
         vao.attrib(0, &vertices_buffer, 3, 3, 0);
-
         vao.unbind();
-        vertices_buffer.unbind();
 
-        // Generate vertices for the elliptical orbit
-        let num_vertices = vertices.len() as i32 / 3; // 3 components per vertex (x,y,z)
-
-        Self {
+        let mut path = Self {
             vao,
             vertices_buffer,
-            num_vertices,
-            width: 1.0,
-            color: nalgebra_glm::vec4(0.7, 0.9, 0.9, 0.9),
-            position: nalgebra_glm::vec3(0.0, 0.0, 0.0),
-            seam: 0.0,
-            fade: true,
-            depth_test: true,
-        }
+            num_vertices: 0,
+            style,
+        };
+        path.set_points(points);
+        path
+    }
+
+    /// Replace the points the line goes through. Cheaper than making a new `LinePath`
+    pub fn set_points(&mut self, points: &[Vec3]) {
+        let flat: Vec<f32> = points.iter().flat_map(|p| [p.x, p.y, p.z]).collect();
+        self.vertices_buffer.set_data(&flat);
+        self.vertices_buffer.unbind();
+        self.num_vertices = points.len() as i32;
     }
 
     pub fn queue_deletion(&mut self, renderer: &RenderContext) {
         renderer.queue_vao_deletion(&mut self.vao);
         renderer.queue_buffer_deletion(&mut self.vertices_buffer);
-    }
-
-    pub fn from_orbit(semi_major_axis: f32, eccentricity: f32, segments: i32) -> Self {
-        let vertices = Self::generate_orbit_vertices(semi_major_axis, eccentricity, segments);
-        Self::new(vertices)
-    }
-
-    fn generate_orbit_vertices(semi_major_axis: f32, eccentricity: f32, segments: i32) -> Vec<f32> {
-        let mut vertices = Vec::with_capacity((segments as usize) * 3);
-        let semi_minor_axis = semi_major_axis * (1.0 - eccentricity * eccentricity).sqrt();
-
-        // Ensure we generate the complete loop
-        for i in 0..=segments {
-            // Note: changed to 0..=segments to ensure closure
-            let angle = (i as f32 * 2.0 * PI) / segments as f32;
-
-            // Parametric equations for ellipse
-            let x = semi_major_axis * angle.cos();
-            let y = semi_minor_axis * angle.sin();
-            let z = 0.0;
-
-            vertices.push(x);
-            vertices.push(y);
-            vertices.push(z);
-        }
-
-        vertices
     }
 }
 

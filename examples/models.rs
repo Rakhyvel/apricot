@@ -1,7 +1,7 @@
 //! A grid of spinning cubes kept in a `ModelSet`. Hover over one to outline and label it.
 //! Run with `cargo run --example models`.
 
-use std::f32::consts::FRAC_PI_4;
+use std::f32::consts::{FRAC_PI_4, TAU};
 
 use apricot::{
     app::{run, App, AppConfig, Scene},
@@ -9,6 +9,7 @@ use apricot::{
     error::Error,
     model_set::{Model, ModelSet},
     rectangle::Rectangle,
+    render_core::{LinePath, LineStyle},
     shadow_map::DirectionalLightSource,
 };
 use nalgebra_glm::{vec2, vec3, vec4, Mat4};
@@ -38,6 +39,7 @@ struct Models {
     light: DirectionalLightSource,
     models: ModelSet<Thing>,
     hovered: Option<Thing>,
+    ring: LinePath,
 }
 
 impl Models {
@@ -81,6 +83,14 @@ impl Models {
             light: DirectionalLightSource::new(vec3(0.5, 1.0, 0.3), 2048).unwrap(),
             models,
             hovered: None,
+            ring: LinePath::new(
+                &circle(4.8, 128),
+                LineStyle {
+                    color: vec4(1.0, 1.0, 1.0, 0.9),
+                    width: 5.0,
+                    ..Default::default()
+                },
+            ),
         }
     }
 
@@ -118,6 +128,13 @@ impl Scene for Models {
         self.models.draw(renderer);
         self.models
             .draw_outlines(renderer, vec4(1.0, 1.0, 1.0, 1.0));
+
+        // A trail circling the grid, just above the floor
+        self.ring.style.seam = (self.angle * 0.2).fract();
+        renderer.draw_line_path(
+            &self.ring,
+            nalgebra_glm::translation(&vec3(0.0, -0.98, 0.0)),
+        );
 
         // Label the hovered cube by projecting a point just above it onto the screen
         if let Some(Thing::Cube(x, z)) = self.hovered {
@@ -162,6 +179,16 @@ fn cube_transform(x: i32, z: i32, angle: f32) -> Mat4 {
         angle * speed,
         &vec3(0.3, 1.0, 0.2).normalize(),
     )
+}
+
+/// Points around a flat circle on the XZ plane, ending back where it started
+fn circle(radius: f32, segments: u32) -> Vec<nalgebra_glm::Vec3> {
+    (0..=segments)
+        .map(|i| {
+            let angle = i as f32 / segments as f32 * TAU;
+            vec3(radius * angle.cos(), 0.0, radius * angle.sin())
+        })
+        .collect()
 }
 
 /// An `n` by `n` light and dark checkerboard, as RGBA bytes

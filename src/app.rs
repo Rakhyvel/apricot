@@ -11,7 +11,7 @@ use std::cell::Cell;
 use std::time::{Duration, Instant};
 
 use sdl2::event::{Event, WindowEvent};
-use sdl2::keyboard::Scancode;
+pub use sdl2::keyboard::Scancode;
 use sdl2::video::SwapInterval;
 use sdl2::Sdl;
 
@@ -43,6 +43,8 @@ pub struct App {
     // User input state
     /// Static map of key states, where the boolean at index `k` determines if the scancode `k` is currently pressed
     pub keys: [bool; 256],
+    keys_pressed: [bool; 256],
+    keys_released: [bool; 256],
     /// The position of the mouse, relative to the top-left corner of the screen
     pub mouse_pos: nalgebra_glm::Vec2,
     /// How far the mouse moved this tick, in pixels
@@ -147,6 +149,8 @@ pub fn run<S: Scene + 'static>(cfg: AppConfig, init: impl FnOnce(&App) -> S) -> 
         running: Cell::new(true),
         dt: Duration::from_secs_f64(1.0 / 60.0),
         keys: [false; 256],
+        keys_pressed: [false; 256],
+        keys_released: [false; 256],
         mouse_pos: nalgebra_glm::vec2(0.0, 0.0),
         mouse_vel: nalgebra_glm::vec2(0.0, 0.0),
         mouse_left_down: false,
@@ -248,6 +252,21 @@ impl App {
         self.click_consumed.get()
     }
 
+    /// Whether `key` is held down
+    pub fn key_down(&self, key: Scancode) -> bool {
+        self.keys[key as usize]
+    }
+
+    /// Whether `key` went down this tick. Holding it down only counts once
+    pub fn key_pressed(&self, key: Scancode) -> bool {
+        self.keys_pressed[key as usize]
+    }
+
+    /// Whether `key` came back up this tick
+    pub fn key_released(&self, key: Scancode) -> bool {
+        self.keys_released[key as usize]
+    }
+
     /// Whether `button` is held down
     pub fn mouse_down(&self, button: MouseButton) -> bool {
         match button {
@@ -265,6 +284,8 @@ impl App {
     }
 
     fn reset_input(&mut self) {
+        self.keys_pressed = [false; 256];
+        self.keys_released = [false; 256];
         self.mouse_vel = nalgebra_glm::vec2(0.0, 0.0);
         self.mouse_wheel = 0.0;
         self.prev_mouse_left_down = self.mouse_left_down;
@@ -315,9 +336,14 @@ impl App {
                 }
 
                 Event::KeyDown {
-                    scancode: Some(sc), ..
+                    scancode: Some(sc),
+                    repeat,
+                    ..
                 } => {
                     self.keys[sc as usize] = true;
+                    if !repeat {
+                        self.keys_pressed[sc as usize] = true; // held keys repeat, but only count once
+                    }
                     if self.keys[Scancode::Escape as usize] {
                         self.running.set(false)
                     }
@@ -325,7 +351,10 @@ impl App {
 
                 Event::KeyUp {
                     scancode: Some(sc), ..
-                } => self.keys[sc as usize] = false,
+                } => {
+                    self.keys[sc as usize] = false;
+                    self.keys_released[sc as usize] = true;
+                }
 
                 _ => {}
             }

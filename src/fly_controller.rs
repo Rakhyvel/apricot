@@ -1,12 +1,10 @@
 //! A free-flying camera controller for looking around while you build
 
-use nalgebra_glm::Vec3;
-use sdl2::keyboard::Scancode;
-
 use crate::{
-    app::{App, MouseButton},
+    app::{App, MouseButton, Scancode},
     camera::{Camera, ProjectionKind},
 };
+use nalgebra_glm::Vec3;
 
 /// A free-flying controller. Move the mouse to turn, WASD to fly,
 /// Space and Shift to rise and sink, Ctrl to go faster. Works best with `AppConfig::mouse_warp` on.
@@ -55,7 +53,7 @@ impl FlyController {
             self.pitch = self.pitch.clamp(-Self::MAX_PITCH, Self::MAX_PITCH);
         }
 
-        let key = |k: Scancode| app.keys[k as usize] as i32 as f32;
+        let key = |k: Scancode| app.key_down(k) as i32 as f32;
         let up = nalgebra_glm::vec3(0.0, 1.0, 0.0);
         let forward = self.forward();
         let right = forward.cross(&up).normalize();

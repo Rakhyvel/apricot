@@ -1,11 +1,17 @@
-//! A basic hello-world program showing off a spinning 3D cube. Move the mouse to look around, fly
-//! with WASD, Space to rise, Shift to sink, Ctrl to go faster, and press Escape to quit.
+//! A basic hello-world program showing off a spinning 3D cube.
+//! WASD  - fly around
+//! Space - go up
+//! Shift - go down
+//! Ctrl  - go faster
+//! P     - pause spinning
+//! Esc   - quit
+//! Move the mouse to look around
 //! Run with `cargo run --example spinning_cube`.
 
 use std::f32::consts::FRAC_PI_4;
 
 use apricot::{
-    app::{run, App, AppConfig, Scene},
+    app::{run, App, AppConfig, Scancode, Scene},
     camera::ProjectionKind,
     error::Error,
     fly_controller::FlyController,
@@ -28,6 +34,7 @@ fn main() -> Result<(), Error> {
 struct SpinningCube {
     fly: FlyController,
     angle: f32,
+    paused: bool,
     light: DirectionalLightSource,
     checker: TextureId,
 }
@@ -47,6 +54,7 @@ impl SpinningCube {
         Self {
             fly,
             angle: 0.0,
+            paused: false,
             light: DirectionalLightSource::new(vec3(0.5, 1.0, 0.3), 2048).unwrap(),
             checker: renderer.create_texture_rgba(10, 10, &checkerboard(10)),
         }
@@ -58,7 +66,12 @@ impl Scene for SpinningCube {
         self.fly.update(app);
         app.renderer.set_camera(self.fly.camera());
 
-        self.angle += app.dt.as_secs_f32();
+        if app.key_pressed(Scancode::P) {
+            self.paused = !self.paused;
+        }
+        if !self.paused {
+            self.angle += app.dt.as_secs_f32();
+        }
     }
 
     fn render(&mut self, app: &App) {

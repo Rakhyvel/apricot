@@ -1,4 +1,4 @@
-//! Perlin noise terrain you can fly around.
+//! Endless perlin noise terrain you can fly around, built a chunk at a time as you get near it.
 //! WASD  - fly around
 //! Space - go up
 //! Shift - go down
@@ -13,22 +13,28 @@ use std::f32::consts::FRAC_PI_4;
 use apricot::{
     app::{run, App, AppConfig, Scene},
     camera::ProjectionKind,
+    chunked_map::{ChunkCoord, ChunkGrid},
     error::Error,
     fly_controller::FlyController,
     input::Scancode,
-    mesh_data::MeshData,
-    perlin::PerlinMap,
-    render_core::{MeshId, TextureId},
+    model_set::{Model, ModelSet},
+    perlin,
+    render_core::RenderContext,
     shadow_map::DirectionalLightSource,
 };
 use nalgebra_glm::{vec2, vec3, vec4};
 
-/// How many cells across the terrain is. The map has one more point than that per side
-const CELLS: u32 = 128;
+/// How many cells across each chunk is
+const CHUNK_CELLS: u32 = 32;
+/// How many chunks out from the camera get built
+const VIEW_RADIUS: i32 = 6;
+/// How many chunks get built per tick, so flying fast doesn't hitch
+const CHUNKS_PER_TICK: usize = 2;
 /// How tall the tallest peak is
 const HEIGHT: f32 = 24.0;
-/// Everything below this (0 to 1) gets flattened into a lake
+/// Everything below this (0 to 1) gets flattened into lakes
 const WATER_LEVEL: f32 = 0.3;
+const SEED: i32 = 42;
 
 fn main() -> Result<(), Error> {
     run(
@@ -44,29 +50,20 @@ fn main() -> Result<(), Error> {
 struct Terrain {
     fly: FlyController,
     light: DirectionalLightSource,
-    mesh: MeshId,
-    texture: TextureId,
+    grid: ChunkGrid,
+    chunks: ModelSet<ChunkCoord>,
 }
 
 impl Terrain {
     fn new(app: &App) -> Self {
-        let renderer = &app.renderer;
-
-        // Noise, stretched to fill 0 to 1, with the low parts flattened into a lake
-        let mut map = PerlinMap::new(CELLS as usize + 1);
-        map.generate(0.03, 6, 42, 1.0, vec2(0.0, 0.0));
-        map.normalize();
-        map.create_shelf(WATER_LEVEL, WATER_LEVEL);
-        let height = |x: f32, z: f32| map.height(vec2(x, z));
-
-        let mut fly = FlyController::new(vec3(0.0, 40.0, 90.0), vec3(0.0, 0.0, 0.0));
+        let mut fly = FlyController::new(vec3(0.0, 40.0, 0.0), vec3(0.0, 20.0, -60.0));
         fly.speed = 15.0;
         fly.projection = ProjectionKind::Perspective {
             fov_rad: FRAC_PI_4,
             near: 0.5,
             far: 400.0,
         };
-        renderer.set_camera(fly.camera());
+        app.renderer.set_camera(fly.camera());
 
         let mut light = DirectionalLightSource::new(vec3(0.6, 0.8, 0.3), 2048).unwrap();
         light.shadow_distance = 120.0;
@@ -74,12 +71,20 @@ impl Terrain {
         Self {
             fly,
             light,
-            mesh: renderer.add_mesh_data(
-                MeshData::heightmap(CELLS, CELLS, |x, z| height(x, z) * HEIGHT),
-                None,
-            ),
-            texture: renderer.create_texture_rgba(CELLS, CELLS, &terrain_colors(&height)),
+            grid: ChunkGrid::new(CHUNK_CELLS),
+            chunks: ModelSet::new(),
         }
+    }
+
+    /// Build a chunk's mesh and texture, and add it to the set
+    fn build_chunk(&mut self, renderer: &RenderContext, chunk: ChunkCoord) {
+        let origin = self.grid.origin(chunk);
+        let mesh =
+            renderer.add_mesh_data(self.grid.mesh(chunk, |x, z| height(x, z) * HEIGHT), None);
+        let colors = terrain_colors(origin.x, origin.z);
+        let texture = renderer.create_texture_rgba(CHUNK_CELLS, CHUNK_CELLS, &colors);
+        let model = Model::new(mesh, texture, nalgebra_glm::translation(&origin));
+        self.chunks.insert(renderer, chunk, model);
     }
 }
 
@@ -92,32 +97,52 @@ impl Scene for Terrain {
             self.fly.update(app);
         }
         app.renderer.set_camera(self.fly.camera());
+
+        // Build the closest missing chunks first
+        let missing: Vec<ChunkCoord> = self
+            .grid
+            .chunks_near(self.fly.position, VIEW_RADIUS)
+            .into_iter()
+            .filter(|chunk| self.chunks.get(*chunk).is_none())
+            .take(CHUNKS_PER_TICK)
+            .collect();
+        for chunk in missing {
+            self.build_chunk(&app.renderer, chunk);
+        }
     }
 
     fn render(&mut self, app: &App) {
         let renderer = &app.renderer;
-        // The heightmap starts at the origin, so slide it over to center it
-        let half = CELLS as f32 / 2.0;
-        let transform = nalgebra_glm::translation(&vec3(-half, 0.0, -half));
 
-        renderer.shadow_pass(&mut self.light, |pass| pass.draw(self.mesh, transform));
+        renderer.shadow_pass(&mut self.light, |pass| self.chunks.draw_shadows(pass));
 
         renderer.clear(vec4(0.6, 0.8, 0.95, 1.0));
-        renderer.draw_mesh_textured(self.mesh, self.texture, transform, vec4(1.0, 1.0, 1.0, 1.0));
+        self.chunks.draw(renderer);
 
         renderer.draw_text(
             vec2(10.0, 10.0),
-            &format!("{} FPS", app.fps),
+            &format!("{} FPS, {} chunks", app.fps, self.chunks.len()),
             vec4(0.1, 0.1, 0.1, 1.0),
         );
     }
 }
 
-/// One color per cell by how high it is. The heightmap stretches its texture over the whole grid, so each texel lands on exactly one cell
-fn terrain_colors(height: &impl Fn(f32, f32) -> f32) -> Vec<u8> {
-    (0..CELLS * CELLS)
+/// How high the ground is at a world position, from `WATER_LEVEL` at the lakes to a bit past 1 on
+/// the tallest peaks. Noise at world coordinates means neighboring chunks always line up
+fn height(x: f32, z: f32) -> f32 {
+    let n = perlin::noise(x, z, 0.02, 6, SEED);
+    // Most noise lands near the middle, so stretch it out, then flatten the low parts into lakes.
+    // No cap on top, or the peaks get sliced flat
+    ((n - 0.35) / 0.3).max(WATER_LEVEL)
+}
+
+/// One color per cell of the chunk starting at (`x0`, `z0`), by how high it is. The heightmap
+/// stretches its texture over the whole chunk, so each texel lands on exactly one cell
+fn terrain_colors(x0: f32, z0: f32) -> Vec<u8> {
+    (0..CHUNK_CELLS * CHUNK_CELLS)
         .flat_map(|i| {
-            let (x, z) = ((i % CELLS) as f32, (i / CELLS) as f32);
+            let x = x0 + (i % CHUNK_CELLS) as f32;
+            let z = z0 + (i / CHUNK_CELLS) as f32;
             let corners = [
                 height(x, z),
                 height(x + 1.0, z),

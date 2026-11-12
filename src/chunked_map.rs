@@ -1,325 +1,103 @@
-//! This module implements chunked loading of infinite terrain
+//! Splitting endless terrain into square chunks you build as you get near them
 
-use super::{
-    mesh_data::MeshData,
-    model_set::{Model, ModelSet},
-    perlin::{HeightMap, PerlinMap},
-    render_core::{RenderContext, TextureId},
-};
+use nalgebra_glm::Vec3;
 
-#[derive(Default)]
-/// A single chunk, with it's height map, position, and other info
-pub struct Chunk {
-    map: PerlinMap,
-    hydration: PerlinMap,
-    chunk_width: usize,
-    pos: nalgebra_glm::Vec2,
-    generated: bool,
+use crate::mesh_data::MeshData;
 
-    level_of_detail: f32,
-    seed: i32,
-    amplitude: f32,
+/// Which chunk, counted in chunks from the origin along X and Z
+pub type ChunkCoord = (i32, i32);
+
+/// Splits the XZ plane into square chunks of `chunk_cells` by `chunk_cells` cells, each cell 1
+/// unit across. Chunks are stored somewhere else (e.g. a `ModelSet<ChunkCoord>`)
+#[derive(Debug, Clone, Copy)]
+pub struct ChunkGrid {
+    pub chunk_cells: u32,
 }
 
-#[derive(Default)]
-/// A chunked perlin noise map, which allows for infinite chunks to be loaded
-pub struct ChunkedPerlinMap {
-    chunks: Vec<Chunk>,
-    models: ModelSet<usize>,
-    map_width: usize,
-    chunk_width: usize,
-
-    level_of_detail: f32,
-    seed: i32,
-    amplitude: f32,
-}
-
-impl Chunk {
-    /// Create a new chunk
-    pub fn new(
-        chunk_width: usize,
-        pos: nalgebra_glm::Vec2,
-        level_of_detail: f32,
-        seed: i32,
-        amplitude: f32,
-    ) -> Self {
-        Self {
-            map: PerlinMap::new(chunk_width + 1),
-            hydration: PerlinMap::new(chunk_width + 1),
-            chunk_width,
-            pos,
-            generated: false,
-            level_of_detail,
-            seed,
-            amplitude,
-        }
+impl ChunkGrid {
+    /// A grid of chunks `chunk_cells` cells across
+    pub fn new(chunk_cells: u32) -> Self {
+        Self { chunk_cells }
     }
 
-    /// Generate the chunk's terrain the first time it's called, giving back its model
-    pub fn generate(&mut self, renderer: &RenderContext, texture: TextureId) -> Option<Model> {
-        if self.generated {
-            return None;
-        }
-        self.map.generate(
-            self.level_of_detail,
-            10,
-            self.seed,
-            self.amplitude,
-            self.pos,
-        );
-        self.hydration
-            .generate(self.level_of_detail, 2, self.seed, self.amplitude, self.pos);
-
-        self.map.create_bulge();
-        self.map.create_shelf(0.6, 0.4);
-
-        // self.map.erode(64, rand::Rng::gen(&mut rng));
-
-        let pos_with_z = nalgebra_glm::vec3(self.pos.x, self.pos.y, 0.0);
-        let grass_mesh = renderer.add_mesh_data(self.create_mesh(), None);
-        self.generated = true;
-        Some(Model::new(
-            grass_mesh,
-            texture,
-            nalgebra_glm::translation(&pos_with_z),
-        ))
+    /// How wide a chunk is, in world units
+    pub fn chunk_size(&self) -> f32 {
+        self.chunk_cells as f32
     }
 
-    fn pos(&self) -> nalgebra_glm::Vec2 {
-        self.pos
+    /// The chunk `pos` is over
+    pub fn chunk_at(&self, pos: Vec3) -> ChunkCoord {
+        let size = self.chunk_size();
+        ((pos.x / size).floor() as i32, (pos.z / size).floor() as i32)
     }
 
-    fn height_nearest(&self, p: nalgebra_glm::Vec2) -> f32 {
-        self.map.height(p)
+    /// Where a chunk's corner with the smallest X and Z sits, at height 0. Put the chunk's model
+    /// here
+    pub fn origin(&self, chunk: ChunkCoord) -> Vec3 {
+        let size = self.chunk_size();
+        nalgebra_glm::vec3(chunk.0 as f32 * size, 0.0, chunk.1 as f32 * size)
     }
 
-    fn height_interpolated(&self, p: nalgebra_glm::Vec2) -> f32 {
-        self.map.get_z_interpolated(p)
-    }
-
-    fn normal(&self, p: nalgebra_glm::Vec2) -> nalgebra_glm::Vec3 {
-        self.map.get_normal(p)
-    }
-
-    fn flow(&self, p: nalgebra_glm::Vec2) -> f32 {
-        self.map.flow(p)
-    }
-
-    fn create_mesh(&self) -> MeshData {
-        let mut indices = Vec::<u32>::new();
-        let mut vertices = Vec::<f32>::new();
-        let mut normals = Vec::<f32>::new();
-        let mut uv = Vec::<f32>::new();
-
-        let mut i = 0;
-        for y in 0..self.chunk_width {
-            for x in 0..self.chunk_width {
-                // Left triangle |\
-                let offsets = vec![(0.0, 0.0), (1.0, 0.0), (0.0, 1.0)];
-                self.add_triangle(
-                    &mut indices,
-                    &mut vertices,
-                    &mut normals,
-                    &mut uv,
-                    x as f32,
-                    y as f32,
-                    &offsets,
-                    &mut i,
-                );
-
-                // Right triangle \|
-                let offsets = vec![(1.0, 0.0), (1.0, 1.0), (0.0, 1.0)];
-                self.add_triangle(
-                    &mut indices,
-                    &mut vertices,
-                    &mut normals,
-                    &mut uv,
-                    x as f32,
-                    y as f32,
-                    &offsets,
-                    &mut i,
-                );
-            }
-        }
-
-        MeshData {
-            positions: vertices,
-            normals,
-            uvs: uv,
-            indices,
-        }
-    }
-
-    fn add_triangle(
-        &self,
-        indices: &mut Vec<u32>,
-        vertices: &mut Vec<f32>,
-        normals: &mut Vec<f32>,
-        uv: &mut Vec<f32>,
-        x: f32,
-        y: f32,
-        offsets: &Vec<(f32, f32)>,
-        i: &mut u32,
-    ) {
-        let mut sum_z = 0.0;
-        let tri_verts: Vec<nalgebra_glm::Vec3> = offsets
-            .iter()
-            .map(|(xo, yo)| {
-                let z = self.height_nearest(nalgebra_glm::vec2(x + xo, y + yo));
-                let mapval = nalgebra_glm::vec3(x + xo, y + yo, z);
-                sum_z += self.height_nearest(nalgebra_glm::vec2(x + xo, y + yo));
-                add_vertex(vertices, x + xo, y + yo, z);
-                indices.push(*i);
-                *i += 1;
-                mapval
-            })
+    /// Every chunk within `radius` chunks of `pos`, closest first.
+    pub fn chunks_near(&self, pos: Vec3, radius: i32) -> Vec<ChunkCoord> {
+        let (cx, cz) = self.chunk_at(pos);
+        let mut chunks: Vec<(i32, ChunkCoord)> = (-radius..=radius)
+            .flat_map(|dx| (-radius..=radius).map(move |dz| (dx, dz)))
+            .map(|(dx, dz)| (dx * dx + dz * dz, (cx + dx, cz + dz)))
+            .filter(|(dist_sq, _)| *dist_sq <= radius * radius)
             .collect();
+        chunks.sort_by_key(|(dist_sq, _)| *dist_sq);
+        chunks.into_iter().map(|(_, chunk)| chunk).collect()
+    }
 
-        let edge1 = tri_verts[1] - tri_verts[0];
-        let edge2 = tri_verts[2] - tri_verts[0];
-        let normal = nalgebra_glm::cross(&edge1, &edge2).normalize();
-        for _ in 0..3 {
-            normals.push(normal.x);
-            normals.push(normal.y);
-            normals.push(normal.z);
-        }
-        // 0 = steep
-        // 1 = flat
-        let dot_prod = nalgebra_glm::dot(&normal, &nalgebra_glm::vec3(0.0, 0.0, 1.0));
+    /// The terrain mesh for a chunk, with `height(x, z)` sampled at world positions so neighbors
+    /// line up. Its positions start at 0, so place it at `origin(chunk)`
+    pub fn mesh(&self, chunk: ChunkCoord, height: impl Fn(f32, f32) -> f32) -> MeshData {
+        let origin = self.origin(chunk);
+        MeshData::heightmap(self.chunk_cells, self.chunk_cells, |x, z| {
+            height(origin.x + x, origin.z + z)
+        })
+    }
+}
 
-        let avg_z = sum_z / 3.0;
-        let u_offset: f32 = if avg_z < 0.5 || (avg_z < 0.9 * dot_prod && 0.9 < dot_prod) {
-            3.0 / 9.0
-        } else if dot_prod < 0.9 {
-            5.0 / 9.0
-        } else {
-            0.0
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use nalgebra_glm::vec3;
+
+    #[test]
+    fn chunk_at_rounds_down_past_zero() {
+        let grid = ChunkGrid::new(16);
+        assert_eq!(grid.chunk_at(vec3(0.0, 5.0, 15.9)), (0, 0));
+        assert_eq!(grid.chunk_at(vec3(-0.1, 0.0, 16.0)), (-1, 1));
+        assert_eq!(grid.origin((-1, 1)), vec3(-16.0, 0.0, 16.0));
+    }
+
+    #[test]
+    fn chunks_near_starts_with_the_one_underfoot() {
+        let grid = ChunkGrid::new(16);
+        let near = grid.chunks_near(vec3(40.0, 0.0, -8.0), 2);
+        assert_eq!(near[0], (2, -1));
+        assert_eq!(near.len(), 13); // a circle of radius 2 on the grid
+    }
+
+    #[test]
+    fn neighboring_chunks_share_their_edge() {
+        let grid = ChunkGrid::new(4);
+        let height = |x: f32, z: f32| (x * 0.3).sin() + (z * 0.2).cos();
+        let (left, right) = (grid.mesh((0, 0), height), grid.mesh((1, 0), height));
+        // (z, height) of every vertex along an edge, rounded so they compare cleanly
+        let edge = |mesh: &MeshData, local_x: f32| -> Vec<(i32, i32)> {
+            let mut points: Vec<(i32, i32)> = mesh
+                .positions
+                .chunks(3)
+                .filter(|p| p[0] == local_x)
+                .map(|p| (p[2] as i32, (p[1] * 1000.0).round() as i32))
+                .collect();
+            points.sort();
+            points.dedup();
+            points
         };
-        let v_offset = 0.0;
-        for _ in 0..3 {
-            add_uv(uv, u_offset, v_offset);
-        }
-    }
-}
-
-fn add_vertex(vertices: &mut Vec<f32>, x: f32, y: f32, z: f32) {
-    vertices.push(x);
-    vertices.push(y);
-    vertices.push(z);
-}
-
-fn add_uv(uv: &mut Vec<f32>, x: f32, y: f32) {
-    uv.push(x);
-    uv.push(y);
-    uv.push(0.0);
-}
-
-impl ChunkedPerlinMap {
-    /// Create a new chunked map
-    pub fn new(
-        map_width: usize,
-        chunk_width: usize,
-        level_of_detail: f32,
-        seed: i32,
-        amplitude: f32,
-    ) -> Self {
-        let chunks =
-            Self::generate_chunks(map_width, chunk_width, level_of_detail, seed, amplitude);
-        Self {
-            chunks,
-            models: ModelSet::new(),
-            map_width,
-            chunk_width,
-            level_of_detail,
-            seed,
-            amplitude,
-        }
-    }
-
-    /// Generate any chunks around `p` that haven't been yet, textured with `texture`
-    pub fn check_chunks(
-        &mut self,
-        renderer: &RenderContext,
-        texture: TextureId,
-        p: nalgebra_glm::Vec2,
-    ) {
-        for y in -3..4 {
-            for x in -3..4 {
-                let chunk_offset = nalgebra_glm::vec2(x as f32, y as f32);
-                let index = self.chunk_index(chunk_offset * (self.chunk_width as f32) + p);
-                if let Some(model) = self.chunks[index].generate(renderer, texture) {
-                    self.models.insert(renderer, index, model);
-                }
-            }
-        }
-    }
-
-    /// The generated chunks' models, keyed by chunk index. Draw these to see the terrain
-    pub fn models(&self) -> &ModelSet<usize> {
-        &self.models
-    }
-
-    /// Get the height of the map at a position _without_ storing the chunk
-    pub fn chunkless_height(&mut self, pos: nalgebra_glm::Vec2) -> f32 {
-        let chunk_p =
-            nalgebra_glm::floor(&(pos / self.chunk_width as f32)) * self.chunk_width as f32;
-        let mut map = PerlinMap::new(self.chunk_width);
-        map.generate(self.level_of_detail, 10, self.seed, self.amplitude, chunk_p);
-        map.get_z_interpolated(pos - chunk_p)
-    }
-
-    fn generate_chunks(
-        map_width: usize,
-        chunk_width: usize,
-        level_of_detail: f32,
-        seed: i32,
-        amplitude: f32,
-    ) -> Vec<Chunk> {
-        let mut chunks: Vec<Chunk> = vec![];
-        let side_chunks = map_width / chunk_width;
-        for y in 0..side_chunks {
-            for x in 0..side_chunks {
-                chunks.push(Chunk::new(
-                    chunk_width,
-                    nalgebra_glm::vec2((x * chunk_width) as f32, (y * chunk_width) as f32),
-                    level_of_detail,
-                    seed,
-                    amplitude,
-                ));
-            }
-        }
-        chunks
-    }
-
-    fn chunk_at(&self, p: nalgebra_glm::Vec2) -> &Chunk {
-        &self.chunks[self.chunk_index(p)]
-    }
-
-    fn chunk_index(&self, p: nalgebra_glm::Vec2) -> usize {
-        let side_chunks = self.map_width / self.chunk_width;
-        let chunk_p = p / self.chunk_width as f32;
-        chunk_p.y as usize * side_chunks + chunk_p.x as usize
-    }
-}
-
-impl HeightMap for ChunkedPerlinMap {
-    fn height_nearest(&self, p: nalgebra_glm::Vec2) -> f32 {
-        let chunk = self.chunk_at(p);
-        chunk.height_nearest(p - chunk.pos())
-    }
-
-    fn height_interpolated(&self, p: nalgebra_glm::Vec2) -> f32 {
-        let chunk = self.chunk_at(p);
-        chunk.height_interpolated(p - chunk.pos())
-    }
-
-    fn normal(&self, p: nalgebra_glm::Vec2) -> nalgebra_glm::Vec3 {
-        let chunk = self.chunk_at(p);
-        chunk.normal(p - chunk.pos())
-    }
-
-    fn flow(&self, p: nalgebra_glm::Vec2) -> f32 {
-        let chunk = self.chunk_at(p);
-        chunk.flow(p - chunk.pos())
+        assert_eq!(edge(&left, 4.0), edge(&right, 0.0));
     }
 }

@@ -56,8 +56,8 @@ impl FlyController {
 
         let key = |k: Scancode| app.input.key_down(k) as i32 as f32;
         let up = nalgebra_glm::vec3(0.0, 1.0, 0.0);
-        let forward = self.forward();
-        let right = forward.cross(&up).normalize();
+        let forward = nalgebra_glm::vec3(self.yaw.sin(), 0.0, -self.yaw.cos());
+        let right = forward.cross(&up);
         let mut velocity = forward * (key(Scancode::W) - key(Scancode::S))
             + right * (key(Scancode::D) - key(Scancode::A))
             + up * (key(Scancode::Space) - key(Scancode::LShift));

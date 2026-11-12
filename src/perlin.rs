@@ -238,7 +238,11 @@ impl PerlinMap {
         self.cells[p.x as usize + p.y as usize * self.map_width].height += val
     }
 
+    /// How much water has run over the cell at `p`. 0 off the edge of the map
     pub fn flow(&self, p: nalgebra_glm::Vec2) -> f32 {
+        if self.oob(p) {
+            return 0.0;
+        }
         self.cells[p.x as usize + p.y as usize * self.map_width].flow
     }
 
@@ -436,6 +440,18 @@ fn tri_normal(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn off_the_map_reads_as_zero() {
+        let mut map = PerlinMap::new(4);
+        map.generate(0.1, 2, 1, 1.0, nalgebra_glm::vec2(0.0, 0.0));
+        // x past the edge used to wrap into the next row, or panic past the end
+        for p in [(4.0, 0.0), (0.0, 4.0), (-0.5, 1.0), (10.0, 10.0)] {
+            let p = nalgebra_glm::vec2(p.0, p.1);
+            assert_eq!(map.flow(p), 0.0);
+            assert_eq!(map.height(p), 0.0);
+        }
+    }
 
     #[test]
     fn noise_stays_in_range_and_repeats() {

@@ -65,54 +65,39 @@ impl Font {
 
     /// Measure how large the text would be if drawn
     pub fn measure(&self, text: &str) -> Vec2 {
-        let mut width: f32 = 0.0;
-        let mut max_line_width: f32 = 0.0;
-        let mut height: f32 = self.height as f32;
-
-        for c in text.chars() {
-            if c == '\n' {
-                height += self.line_skip as f32;
-                max_line_width = max_line_width.max(width);
-                width = 0.0;
-                continue;
-            }
-            if !c.is_ascii_graphic() && !c.is_whitespace() {
-                continue;
-            }
-            let Some(glyph) = self.get_glyph(c as u8) else {
-                continue;
-            };
-            width += glyph.advance as f32;
-        }
-
-        vec2(max_line_width.max(width), height)
+        self.layout(text, |_, _| {})
     }
 
     /// Draw text in a font to the screen
     pub fn draw(&self, pos: Vec2, text: &str, renderer: &RenderContext, color: Vec4) {
-        let mut cursor = pos;
-        for c in text.chars() {
-            let c_byte: u8 = c as u8;
-            if c == '\n' {
-                // Handle new lines
-                cursor.y += self.line_skip as f32;
-                cursor.x = pos.x;
-                continue;
-            }
-            if !c.is_ascii_graphic() && !c.is_whitespace() {
-                // Don't print out non-graphic characters
-                continue;
-            }
-            let Some(glyph) = self.get_glyph(c_byte) else {
-                continue;
-            };
-            let dest_rect = Rectangle {
-                pos: cursor,
+        self.layout(text, |offset, glyph| {
+            let dest = Rectangle {
+                pos: pos + offset,
                 size: glyph.rect.size,
             };
-            renderer.copy_texture(dest_rect, self.cache_texture, glyph.rect, &color);
+            renderer.copy_texture(dest, self.cache_texture, glyph.rect, &color);
+        });
+    }
+
+    /// Lays out `text` starting at the origin, calling `place` with each glyph and where it goes.
+    /// Returns the size of the whole block of text
+    fn layout(&self, text: &str, mut place: impl FnMut(Vec2, &Glyph)) -> Vec2 {
+        let mut cursor = Vec2::zeros();
+        let mut width: f32 = 0.0;
+        for c in text.chars() {
+            if c == '\n' {
+                cursor = vec2(0.0, cursor.y + self.line_skip as f32);
+                continue;
+            }
+            // Skip anything we don't have a glyph for
+            let Some(glyph) = u8::try_from(c).ok().and_then(|b| self.get_glyph(b)) else {
+                continue;
+            };
+            place(cursor, &glyph);
             cursor.x += glyph.advance as f32;
+            width = width.max(cursor.x);
         }
+        vec2(width, cursor.y + self.height as f32)
     }
 
     fn get_glyph(&self, char: u8) -> Option<Glyph> {

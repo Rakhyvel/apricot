@@ -164,7 +164,7 @@ impl Scene for Shapes {
                 "draw_text",
                 Some(Box::new(|c| {
                     let text = "Hello,\napricot!";
-                    let half = r.get_current_font().measure(text) / 2.0;
+                    let half = r.measure_text(text) / 2.0;
                     let color = vec4(1.0, 0.6 + 0.4 * pulse, 0.25 + 0.75 * pulse, 1.0);
                     r.draw_text(c - half, text, color)
                 })),
@@ -245,7 +245,7 @@ impl Scene for Shapes {
                 }
                 None => (format!("{label} (todo)"), todo_color),
             };
-            let label_size = r.get_current_font().measure(&label);
+            let label_size = r.measure_text(&label);
             r.draw_text(
                 top_left + vec2((cell.x - label_size.x) / 2.0, cell.y - label_size.y - 6.0),
                 &label,

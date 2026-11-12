@@ -87,6 +87,11 @@ impl RenderContext {
         }
     }
 
+    /// Size of `text` in pixels if it were drawn with `draw_text`
+    pub fn measure_text(&self, text: &str) -> Vec2 {
+        self.get_current_font().measure(text)
+    }
+
     pub fn draw_text(&self, pos: Vec2, text: &str, color: Vec4) {
         self.get_current_font().draw(pos, text, self, color);
     }

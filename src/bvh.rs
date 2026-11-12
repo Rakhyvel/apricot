@@ -487,7 +487,11 @@ impl<'a, Object: Copy + Clone> Iterator for BVHRayIterator<'a, Object> {
     fn next(&mut self) -> Option<Self::Item> {
         while let Some(current_id) = self.pop() {
             let current_node = self.bvh.node_at(current_id);
-            if !current_node.volume.raycast(self.ray) {
+            if current_node
+                .volume
+                .raycast(self.ray, 0.0..f32::INFINITY)
+                .is_none()
+            {
                 continue;
             }
 

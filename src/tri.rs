@@ -1,4 +1,6 @@
-use crate::ray::Ray;
+use std::ops::Range;
+
+use crate::ray::{Ray, RayHit};
 
 #[derive(Clone, Copy)]
 pub struct Tri {
@@ -41,7 +43,8 @@ impl Tri {
         Tri::new(apply(self.v0), apply(self.v1), apply(self.v2))
     }
 
-    pub fn raycast(&self, ray: &Ray) -> Option<f32> {
+    /// Where `ray` hits the triangle, if that's inside `t_range`. Hits either side
+    pub fn raycast(&self, ray: &Ray, t_range: Range<f32>) -> Option<RayHit> {
         let e1 = self.v1 - self.v0;
         let e2 = self.v2 - self.v0;
 
@@ -62,11 +65,9 @@ impl Tri {
         }
 
         let t = inv_det * e2.dot(&q);
-        if t > 0.0 {
-            Some(t)
-        } else {
-            None
-        }
+        t_range
+            .contains(&t)
+            .then(|| RayHit::new(ray, t, self.normal))
     }
 }
 
@@ -84,5 +85,41 @@ impl From<Tri> for [f32; 9] {
             val.v0.x, val.v0.y, val.v0.z, val.v1.x, val.v1.y, val.v1.z, val.v2.x, val.v2.y,
             val.v2.z,
         ]
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use nalgebra_glm::vec3;
+
+    /// Lying flat at y = 0, wound so its normal points up
+    fn flat() -> Tri {
+        Tri::new(
+            vec3(0.0, 0.0, 0.0),
+            vec3(0.0, 0.0, 2.0),
+            vec3(2.0, 0.0, 0.0),
+        )
+    }
+
+    #[test]
+    fn hits_inside_from_both_sides() {
+        let down = Ray::new(vec3(0.5, 1.0, 0.5), vec3(0.0, -1.0, 0.0));
+        let hit = flat().raycast(&down, 0.0..f32::INFINITY).unwrap();
+        assert!((hit.t - 1.0).abs() < 1e-5);
+        assert!(hit.front_face);
+
+        let up = Ray::new(vec3(0.5, -1.0, 0.5), vec3(0.0, 1.0, 0.0));
+        let hit = flat().raycast(&up, 0.0..f32::INFINITY).unwrap();
+        assert!(!hit.front_face);
+        assert!((hit.normal - vec3(0.0, -1.0, 0.0)).norm() < 1e-5);
+    }
+
+    #[test]
+    fn misses_outside_the_edges_and_the_range() {
+        let outside = Ray::new(vec3(1.5, 1.0, 1.5), vec3(0.0, -1.0, 0.0));
+        assert!(flat().raycast(&outside, 0.0..f32::INFINITY).is_none());
+        let short = Ray::new(vec3(0.5, 1.0, 0.5), vec3(0.0, -1.0, 0.0));
+        assert!(flat().raycast(&short, 0.0..0.5).is_none());
     }
 }

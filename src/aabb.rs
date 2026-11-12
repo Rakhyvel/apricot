@@ -2,7 +2,14 @@
 
 use core::f32;
 
-use super::{frustum::Frustum, plane::Plane, ray::Ray, sphere::Sphere};
+use std::ops::Range;
+
+use super::{
+    frustum::Frustum,
+    plane::Plane,
+    ray::{Ray, RayHit},
+    sphere::Sphere,
+};
 
 #[derive(Debug, Copy, Clone)]
 #[allow(unused)]
@@ -100,19 +107,40 @@ impl AABB {
         radius_squared > 0.0
     }
 
-    /// Determines if a ray intersects an AABB
-    pub fn raycast(&self, ray: &Ray) -> bool {
-        let tx1 = (self.min.x - ray.origin().x) * ray.inv_dir().x;
-        let tx2 = (self.max.x - ray.origin().x) * ray.inv_dir().x;
-        let ty1 = (self.min.y - ray.origin().y) * ray.inv_dir().y;
-        let ty2 = (self.max.y - ray.origin().y) * ray.inv_dir().y;
-        let tz1 = (self.min.z - ray.origin().z) * ray.inv_dir().z;
-        let tz2 = (self.max.z - ray.origin().z) * ray.inv_dir().z;
+    /// The first place `ray` hits the box's surface with `t` inside `t_range`. From inside the
+    /// box, that's where it comes out
+    pub fn raycast(&self, ray: &Ray, t_range: Range<f32>) -> Option<RayHit> {
+        let (o, inv) = (ray.origin(), ray.inv_dir());
+        let mut t_enter = f32::NEG_INFINITY;
+        let mut t_exit = f32::INFINITY;
+        let (mut enter_axis, mut exit_axis) = (0, 0);
+        for axis in 0..3 {
+            let t1 = (self.min[axis] - o[axis]) * inv[axis];
+            let t2 = (self.max[axis] - o[axis]) * inv[axis];
+            let (near, far) = (t1.min(t2), t1.max(t2));
+            if near > t_enter {
+                t_enter = near;
+                enter_axis = axis;
+            }
+            if far < t_exit {
+                t_exit = far;
+                exit_axis = axis;
+            }
+        }
+        if t_exit < t_enter {
+            return None;
+        }
 
-        let tmin = tx1.min(tx2).max(ty1.min(ty2)).max(tz1.min(tz2));
-        let tmax = tx1.max(tx2).min(ty1.max(ty2)).min(tz1.max(tz2));
-
-        tmax >= tmin && tmax >= 0.0
+        // The face's normal points out along its axis, away from the box's middle
+        let face_normal = |axis: usize, t: f32| {
+            let mut n = nalgebra_glm::Vec3::zeros();
+            n[axis] = (ray.at(t)[axis] - self.center()[axis]).signum();
+            n
+        };
+        [(t_enter, enter_axis), (t_exit, exit_axis)]
+            .into_iter()
+            .find(|(t, _)| t_range.contains(t))
+            .map(|(t, axis)| RayHit::new(ray, t, face_normal(axis, t)))
     }
 
     /// Calculates the bounding sphere for an AABB
@@ -253,6 +281,51 @@ impl Default for AABB {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    fn unit_box() -> AABB {
+        AABB::from_min_max(
+            nalgebra_glm::vec3(-1.0, -1.0, -1.0),
+            nalgebra_glm::vec3(1.0, 1.0, 1.0),
+        )
+    }
+
+    #[test]
+    fn raycast_hits_the_face_it_enters() {
+        let ray = Ray::new(
+            nalgebra_glm::vec3(5.0, 0.2, 0.3),
+            nalgebra_glm::vec3(-1.0, 0.0, 0.0),
+        );
+        let hit = unit_box().raycast(&ray, 0.0..f32::INFINITY).unwrap();
+        assert!((hit.t - 4.0).abs() < 1e-5);
+        assert!(hit.front_face);
+        assert!((hit.normal - nalgebra_glm::vec3(1.0, 0.0, 0.0)).norm() < 1e-5);
+    }
+
+    #[test]
+    fn raycast_from_inside_hits_where_it_comes_out() {
+        let ray = Ray::new(
+            nalgebra_glm::vec3(0.0, 0.0, 0.0),
+            nalgebra_glm::vec3(0.0, 1.0, 0.0),
+        );
+        let hit = unit_box().raycast(&ray, 0.0..f32::INFINITY).unwrap();
+        assert!((hit.t - 1.0).abs() < 1e-5);
+        assert!(!hit.front_face);
+        assert!((hit.normal - nalgebra_glm::vec3(0.0, -1.0, 0.0)).norm() < 1e-5);
+    }
+
+    #[test]
+    fn raycast_misses_beside_and_behind() {
+        let beside = Ray::new(
+            nalgebra_glm::vec3(5.0, 3.0, 0.0),
+            nalgebra_glm::vec3(-1.0, 0.0, 0.0),
+        );
+        assert!(unit_box().raycast(&beside, 0.0..f32::INFINITY).is_none());
+        let away = Ray::new(
+            nalgebra_glm::vec3(5.0, 0.0, 0.0),
+            nalgebra_glm::vec3(1.0, 0.0, 0.0),
+        );
+        assert!(unit_box().raycast(&away, 0.0..f32::INFINITY).is_none());
+    }
 
     #[test]
     fn transformed_fits_a_rotated_box() {

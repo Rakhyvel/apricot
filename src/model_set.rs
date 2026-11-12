@@ -153,7 +153,8 @@ impl<K: Copy + Eq + Hash> ModelSet<K> {
                     .expect("invalid MeshId");
                 let t = mesh
                     .triangles()
-                    .filter_map(|tri| tri.raycast(&local_ray))
+                    .filter_map(|tri| tri.raycast(&local_ray, 0.0..f32::INFINITY))
+                    .map(|hit| hit.t)
                     .min_by(f32::total_cmp)?;
 
                 // Back to world space, so differently scaled models compare fairly

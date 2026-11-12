@@ -120,7 +120,8 @@ mod tests {
             );
             let t = tris
                 .iter()
-                .filter_map(|tri| tri.raycast(&ray))
+                .filter_map(|tri| tri.raycast(&ray, 0.0..f32::INFINITY))
+                .map(|hit| hit.t)
                 .fold(f32::MAX, f32::min);
             let on_mesh = 100.0 - t;
             let ours = surface_height(bumpy, x, z);

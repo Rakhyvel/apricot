@@ -35,3 +35,29 @@ impl Ray {
         self.origin + self.dir * distance
     }
 }
+
+/// Where a ray hit something
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct RayHit {
+    /// How far along the ray the hit is
+    pub t: f32,
+    /// Where the hit is
+    pub point: nalgebra_glm::Vec3,
+    /// The surface's normal at the hit, flipped if needed so it faces back toward the ray
+    pub normal: nalgebra_glm::Vec3,
+    /// Whether the ray hit the outside of the surface rather than the inside
+    pub front_face: bool,
+}
+
+impl RayHit {
+    /// A hit `t` along `ray` on a surface whose normal points out along `outward`
+    pub fn new(ray: &Ray, t: f32, outward: nalgebra_glm::Vec3) -> Self {
+        let front_face = ray.dir().dot(&outward) < 0.0;
+        Self {
+            t,
+            point: ray.at(t),
+            normal: if front_face { outward } else { -outward },
+            front_face,
+        }
+    }
+}

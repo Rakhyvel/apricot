@@ -82,9 +82,14 @@ pub enum MouseButton {
 }
 
 pub struct AppConfig {
+    /// The window's title
     pub title: &'static str,
+    /// The window's starting size, in pixels
     pub window_size: nalgebra_glm::I32Vec2,
+    /// Keep the mouse captured in the window, for mouse-look cameras
     pub mouse_warp: bool,
+    /// Whether pressing Escape quits the app
+    pub escape_quits: bool,
 }
 
 impl Default for AppConfig {
@@ -93,6 +98,7 @@ impl Default for AppConfig {
             title: "Apricot app",
             window_size: nalgebra_glm::I32Vec2::new(800, 600),
             mouse_warp: false,
+            escape_quits: true,
         }
     }
 }
@@ -194,6 +200,9 @@ pub fn run<S: Scene + 'static>(cfg: AppConfig, init: impl FnOnce(&App) -> S) -> 
         while lag >= app.dt {
             app.reset_input();
             app.poll_input(&sdl_context)?;
+            if cfg.escape_quits && app.key_pressed(Scancode::Escape) {
+                app.quit();
+            }
             if cfg.mouse_warp {
                 sdl_context.mouse().warp_mouse_in_window(
                     &window,
@@ -250,6 +259,11 @@ impl App {
     /// Returns true if the current left click for this tick has been consumed
     pub fn is_click_consumed(&self) -> bool {
         self.click_consumed.get()
+    }
+
+    /// Close the app after this frame
+    pub fn quit(&self) {
+        self.running.set(false);
     }
 
     /// Whether `key` is held down
@@ -343,9 +357,6 @@ impl App {
                     self.keys[sc as usize] = true;
                     if !repeat {
                         self.keys_pressed[sc as usize] = true; // held keys repeat, but only count once
-                    }
-                    if self.keys[Scancode::Escape as usize] {
-                        self.running.set(false)
                     }
                 }
 

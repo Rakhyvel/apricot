@@ -6,89 +6,132 @@ use std::cmp::Ordering;
 use nalgebra_glm::{Vec2, Vec3};
 use rand::{Rng, SeedableRng};
 
-use crate::height_grid::HeightGrid;
+use crate::{height_grid::HeightGrid, terrain};
 
-/// A raindrop running downhill. Works in Z-up space, with the grid's (x, z) as (x, y)
-struct Particle {
-    age: usize,
-    pos: Vec3,
-    vel: Vec3,
-    volume: f32,
-    rain: f32,
+/// How raindrops wear down the terrain while eroding
+#[derive(Debug, Clone, Copy)]
+pub struct ErosionSettings {
+    /// How far a drop moves each step
+    pub time_step: f32,
+    /// How much a drop slows down each step, from 0 to 1
+    pub friction: f32,
+    /// How quickly a drop picks up or drops dirt, from 0 to 1
+    pub deposition: f32,
+    /// How much of a drop dries up each step, from 0 to 1
+    pub evaporation: f32,
+    /// How tall the terrain is when working out slopes. Bigger makes drops run faster
+    pub height_scale: f32,
+    /// The most steps one drop can take
+    pub max_steps: usize,
+    /// The farthest a drop can move in one step, in cells
+    pub max_step: f32,
+    /// How far out a drop digs around itself, in cells. Under 1 digs only the cell it's in
+    pub brush_radius: f32,
 }
 
-impl Particle {
-    fn new(pos: Vec3) -> Self {
+impl Default for ErosionSettings {
+    fn default() -> Self {
         Self {
-            age: 0,
-            pos,
-            vel: Vec3::zeros(),
-            volume: 1.0,
-            rain: 0.0,
+            time_step: 1.2,
+            friction: 0.05,
+            deposition: 0.1,
+            evaporation: 0.001,
+            height_scale: 40.0,
+            max_steps: 500,
+            max_step: 1.0,
+            brush_radius: 2.0,
         }
-    }
-
-    // TODO: always returns false and `flying` never changes, so this doesn't erode anything yet
-    fn descend(&mut self, grid: &mut HeightGrid) -> bool {
-        loop {
-            const EVAPORATION_RATE: f32 = 0.1;
-            const MAX_AGE: usize = 100;
-
-            if self.age > MAX_AGE {
-                break;
-            }
-
-            // The grid's normal is Y-up, so swap it into this Z-up space
-            let n = grid.surface_normal(self.pos.xy());
-            let grad = nalgebra_glm::vec3(n.x, n.z, n.y);
-
-            // Accelerate particle using classical mechanics
-            let old_pos = self.pos;
-            self.vel += grad / self.volume;
-            self.vel += nalgebra_glm::vec3(0.0, 0.1, 0.0);
-            if nalgebra_glm::length(&self.vel) > 0.0 {
-                self.vel = (2.0_f32).sqrt() * nalgebra_glm::normalize(&self.vel);
-            }
-            self.vel.z -= 1.0; // gravity
-            self.pos += self.vel;
-            let mut flying = false;
-            if self.pos.z < grid.height(self.pos.xy()) {
-                self.pos.z = grid.height(self.pos.xy());
-                flying = false;
-            }
-
-            // Update flow, momentum
-            if !flying {
-                if self.pos.z >= 0.5 {
-                    grid.add_flow(old_pos.xy(), self.rain);
-                } else {
-                    self.rain = 1.0;
-                }
-            }
-
-            self.rain *= 1.0 - EVAPORATION_RATE;
-
-            self.age += 1;
-        }
-        false
     }
 }
 
 impl HeightGrid {
-    /// Drop `total_particles` raindrops at random and let them run downhill, wearing the terrain
-    /// down. The same seed always erodes the same way
-    pub fn erode(&mut self, total_particles: usize, seed: u64) {
+    /// Drop `drops` raindrops at random spots and let them run downhill, carving out dirt where
+    /// they speed up and leaving it where they slow down. Every point a drop crosses gains flow.
+    /// The same seed always erodes the same way. Expects heights from 0 to 1
+    pub fn erode(&mut self, drops: usize, seed: u64) {
+        self.erode_with(drops, seed, &ErosionSettings::default());
+    }
+
+    /// Erode with custom `settings`
+    pub fn erode_with(&mut self, drops: usize, seed: u64, settings: &ErosionSettings) {
+        const MIN_VOLUME: f32 = 0.01;
         let mut rng = rand::rngs::StdRng::seed_from_u64(seed);
-        for _ in 0..total_particles {
-            let mut drop = Particle::new(nalgebra_glm::vec3(
-                rng.gen_range(0.0..self.width as f32),
-                rng.gen_range(0.0..self.width as f32),
-                10.0,
-            ));
-            if self.height(drop.pos.xy()) < 0.5 {
-                continue;
+        let w = self.width as f32;
+        let brush = brush(settings.brush_radius);
+
+        for _ in 0..drops {
+            let mut pos =
+                nalgebra_glm::vec2(rng.gen_range(0.0..w - 1.0), rng.gen_range(0.0..w - 1.0));
+            let mut vel = Vec2::zeros();
+            let mut volume = 1.0;
+            let mut sediment = 0.0;
+
+            for _ in 0..settings.max_steps {
+                if volume < MIN_VOLUME {
+                    break;
+                }
+                let old = pos;
+
+                // Roll downhill: the normal leans the way the ground falls away
+                let scale = settings.height_scale;
+                let n = terrain::surface_normal(
+                    |x, z| self.height(nalgebra_glm::vec2(x, z)) * scale,
+                    pos.x,
+                    pos.y,
+                );
+                vel += settings.time_step * nalgebra_glm::vec2(n.x, n.z) / volume;
+                vel *= 1.0 - settings.time_step * settings.friction;
+
+                // Never skip cells, however fast it's going
+                let mut step = settings.time_step * vel;
+                if step.norm() > settings.max_step {
+                    step = step.normalize() * settings.max_step;
+                }
+                pos += step;
+
+                if !self.contains(pos) || pos.x >= w - 1.0 || pos.y >= w - 1.0 {
+                    break; // ran off the edge, taking its dirt with it
+                }
+
+                // A fast drop going downhill can carry more dirt than a slow one on the flat
+                let drop = self.surface_height(old) - self.surface_height(pos);
+                let capacity = (volume * vel.norm() * drop).max(0.0);
+                let change = settings.time_step * settings.deposition * (capacity - sediment);
+                sediment += change;
+
+                let amount = volume * change;
+                if amount > 0.0 {
+                    self.dig(old, amount, &brush);
+                } else {
+                    self.deposit(old, -amount);
+                }
+                self.add_flow(nalgebra_glm::floor(&old), volume);
+
+                volume *= 1.0 - settings.time_step * settings.evaporation;
             }
-            while drop.descend(self) {}
+        }
+    }
+
+    /// Take `amount` of dirt from around `pos`, spread over `brush`
+    fn dig(&mut self, pos: Vec2, amount: f32, brush: &[(Vec2, f32)]) {
+        let cell = nalgebra_glm::floor(&pos);
+        for (offset, weight) in brush {
+            self.add_height(cell + offset, -amount * weight);
+        }
+    }
+
+    /// Leave `amount` of dirt at `pos`, split between the 4 nearest points by how close they are
+    fn deposit(&mut self, pos: Vec2, amount: f32) {
+        let cell = nalgebra_glm::floor(&pos);
+        let (fx, fz) = (pos.x - cell.x, pos.y - cell.y);
+        let corners = [
+            (nalgebra_glm::vec2(0.0, 0.0), (1.0 - fx) * (1.0 - fz)),
+            (nalgebra_glm::vec2(1.0, 0.0), fx * (1.0 - fz)),
+            (nalgebra_glm::vec2(0.0, 1.0), (1.0 - fx) * fz),
+            (nalgebra_glm::vec2(1.0, 1.0), fx * fz),
+        ];
+        for (offset, weight) in corners {
+            self.add_height(cell + offset, amount * weight);
         }
     }
 
@@ -145,5 +188,99 @@ impl HeightGrid {
                 self.add_height(npos.xy(), -transfer);
             }
         }
+    }
+}
+
+/// Cell offsets within `radius` and how much of a dig each one takes, adding up to 1. Closer
+/// cells take more
+fn brush(radius: f32) -> Vec<(Vec2, f32)> {
+    if radius < 1.0 {
+        return vec![(Vec2::zeros(), 1.0)];
+    }
+    let reach = radius.ceil() as i32;
+    let mut cells: Vec<(Vec2, f32)> = (-reach..=reach)
+        .flat_map(|dx| (-reach..=reach).map(move |dz| nalgebra_glm::vec2(dx as f32, dz as f32)))
+        .map(|offset| (offset, radius - offset.norm()))
+        .filter(|(_, weight)| *weight > 0.0)
+        .collect();
+    let total: f32 = cells.iter().map(|(_, w)| w).sum();
+    for (_, weight) in &mut cells {
+        *weight /= total;
+    }
+    cells
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// A grid sloping down from a ridge along x = 0
+    fn slope(width: usize) -> HeightGrid {
+        let mut grid = HeightGrid::new(width);
+        for z in 0..width {
+            for x in 0..width {
+                let h = 1.0 - x as f32 / width as f32;
+                grid.set_height(nalgebra_glm::vec2(x as f32, z as f32), h);
+            }
+        }
+        grid
+    }
+
+    fn heights(grid: &HeightGrid) -> Vec<f32> {
+        grid.cells.iter().map(|c| c.height).collect()
+    }
+
+    #[test]
+    fn flat_ground_doesnt_erode() {
+        let mut grid = HeightGrid::new(16);
+        grid.erode(200, 1);
+        assert!(heights(&grid).iter().all(|&h| h == 0.0));
+    }
+
+    #[test]
+    fn slopes_get_carved_and_leave_flow() {
+        let mut grid = slope(32);
+        let before = heights(&grid);
+        grid.erode(500, 3);
+        let after = heights(&grid);
+        assert!(after.iter().all(|h| h.is_finite()));
+        let moved: f32 = before.iter().zip(&after).map(|(a, b)| (a - b).abs()).sum();
+        assert!(moved > 0.01, "barely anything moved: {moved}");
+        assert!(grid.cells.iter().any(|c| c.flow > 0.0));
+    }
+
+    #[test]
+    fn a_brush_digs_shallower_dents() {
+        let deepest_dent = |radius: f32| {
+            let mut grid = slope(32);
+            let before = heights(&grid);
+            let settings = ErosionSettings {
+                brush_radius: radius,
+                ..Default::default()
+            };
+            grid.erode_with(300, 5, &settings);
+            before
+                .iter()
+                .zip(heights(&grid))
+                .map(|(a, b)| a - b)
+                .fold(0.0, f32::max)
+        };
+        assert!(deepest_dent(2.0) < deepest_dent(0.0));
+    }
+
+    #[test]
+    fn brush_weights_add_up_to_one() {
+        for radius in [0.0, 1.0, 2.5, 4.0] {
+            let total: f32 = brush(radius).iter().map(|(_, w)| w).sum();
+            assert!((total - 1.0).abs() < 1e-5, "radius {radius}: {total}");
+        }
+    }
+
+    #[test]
+    fn same_seed_erodes_the_same() {
+        let (mut a, mut b) = (slope(24), slope(24));
+        a.erode(300, 9);
+        b.erode(300, 9);
+        assert_eq!(heights(&a), heights(&b));
     }
 }

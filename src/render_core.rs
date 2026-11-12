@@ -358,6 +358,23 @@ impl RenderContext {
         self.add_mesh(Mesh::from_data(data), name)
     }
 
+    /// Swap the mesh behind `id` for new data, freeing the old one. Everything drawing `id` draws
+    /// the new mesh from then on
+    pub fn replace_mesh_data(&self, id: MeshId, data: MeshData) {
+        let mut old = {
+            let mut meshes = self.mesh_manager.borrow_mut();
+            let mesh = meshes.get_mut(id).expect("invalid MeshId");
+            std::mem::replace(mesh, Mesh::from_data(data))
+        };
+        let mut queue = self.deletion_queue.borrow_mut();
+        for vbo in old.vbos.iter_mut() {
+            queue.queue_buffer(vbo);
+        }
+        queue.queue_buffer(&mut old.ibo);
+        queue.queue_vao(&mut old.vao);
+        queue.flush();
+    }
+
     pub fn add_texture(&self, texture: Texture, name: Option<&'static str>) -> TextureId {
         self.texture_manager.borrow_mut().add(texture, name)
     }

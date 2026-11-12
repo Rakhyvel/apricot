@@ -772,6 +772,7 @@ fn print_any_errors() {
     }
 }
 
+#[cfg(debug_assertions)]
 fn get_last_opengl_error() -> Option<String> {
     let mut errors = Vec::new();
 

@@ -63,6 +63,13 @@ impl HeightGrid {
         self.index(p).map_or(0.0, |i| self.cells[i].height)
     }
 
+    /// Set the height of the grid point at `p`. Does nothing off the edge
+    pub fn set_height(&mut self, p: Vec2, height: f32) {
+        if let Some(i) = self.index(p) {
+            self.cells[i].height = height;
+        }
+    }
+
     /// How much water has run over the point at `p`. 0 off the edge
     pub fn flow(&self, p: Vec2) -> f32 {
         self.index(p).map_or(0.0, |i| self.cells[i].flow)

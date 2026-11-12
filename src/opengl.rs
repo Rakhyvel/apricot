@@ -459,9 +459,9 @@ impl Texture {
     }
 
     /// Create an OpenGL texture from a PNG
-    pub fn from_png(texture_filename: &'static str) -> Result<Self, Error> {
+    pub fn from_png(path: impl AsRef<Path>) -> Result<Self, Error> {
         let texture = Texture::new();
-        let path = Path::new(texture_filename);
+        let path = path.as_ref();
         texture.load(path).map_err(|source| Error::Image {
             path: path.into(),
             source,

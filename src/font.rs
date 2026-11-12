@@ -188,20 +188,20 @@ impl FontManager {
     /// Add a new font from a .ttf/.otf to the manager and retrieve it's ID
     pub fn add_font(
         &mut self,
-        path: &'static str,
+        path: impl AsRef<Path>,
         name: &'static str,
         size: u16,
         style: sdl2::ttf::FontStyle,
         renderer: &RenderContext,
     ) -> Result<FontId, Error> {
         let font = {
-            let mut ttf_font =
-                self.ttf_context
-                    .load_font(Path::new(path), size)
-                    .map_err(|msg| Error::Font {
-                        font: format!("{name}"),
-                        msg,
-                    })?;
+            let mut ttf_font = self
+                .ttf_context
+                .load_font(path.as_ref(), size)
+                .map_err(|msg| Error::Font {
+                    font: format!("{name}"),
+                    msg,
+                })?;
             ttf_font.set_style(style);
             Font::new(&ttf_font, renderer)?
         };

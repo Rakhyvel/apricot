@@ -4,6 +4,7 @@ use std::{
     cell::{Cell, RefCell},
     collections::HashMap,
     fmt::Debug,
+    path::Path,
 };
 
 use nalgebra_glm::{vec2, vec4, Mat4, Vec2, Vec3, Vec4};
@@ -378,15 +379,16 @@ impl RenderContext {
         self.texture_manager.borrow_mut().add(texture, name)
     }
 
+    /// Load a PNG into a texture
     pub fn add_texture_from_png(
         &self,
-        texture_filename: &'static str,
+        path: impl AsRef<Path>,
         name: Option<&'static str>,
     ) -> Result<TextureId, Error> {
         Ok(self
             .texture_manager
             .borrow_mut()
-            .add(Texture::from_png(texture_filename)?, name))
+            .add(Texture::from_png(path)?, name))
     }
 
     pub fn add_program(&self, program: Program, name: Option<&'static str>) -> ProgramId {
@@ -397,9 +399,20 @@ impl RenderContext {
         }
     }
 
+    /// Compile a vertex and fragment shader into a program, and name it
+    pub fn add_program_from_source(
+        &self,
+        vert: &'static str,
+        frag: &'static str,
+        name: Option<&'static str>,
+    ) -> Result<ProgramId, Error> {
+        Ok(self.add_program(create_program(vert, frag)?, name))
+    }
+
+    /// Load a .ttf or .otf font
     pub fn add_font(
         &self,
-        path: &'static str,
+        path: impl AsRef<Path>,
         name: &'static str,
         size: u16,
         style: sdl2::ttf::FontStyle,

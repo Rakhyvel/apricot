@@ -25,7 +25,9 @@ impl RenderContext {
         color: Vec4,
     ) {
         self.set_program_from_id(self.builtins.program_2d);
-        let texture = self.get_texture_from_id(texture_id).unwrap();
+        let texture = self
+            .get_texture_from_id(texture_id)
+            .expect("invalid TextureId");
         texture.activate(gl::TEXTURE0);
         texture.associate_uniform(self.get_current_program_id(), 0, "texture0");
         self.get_program_uniform("u_sprite_offset")
@@ -35,7 +37,7 @@ impl RenderContext {
         self.get_program_uniform("u_color").set_vec4(&color);
 
         let (view, proj) = self.camera_2d.view_proj_matrices();
-        let mesh = self.get_mesh_from_id(mesh_id).unwrap();
+        let mesh = self.get_mesh_from_id(mesh_id).expect("invalid MeshId");
         self.draw(&mesh, model, view, proj);
     }
 
@@ -46,9 +48,9 @@ impl RenderContext {
 
         let (nine_slice_width, nine_slice_height) = self
             .get_texture_from_id(nine_slice.texture)
-            .unwrap()
+            .expect("invalid TextureId")
             .get_dimensions()
-            .unwrap();
+            .expect("texture has no dimensions");
 
         // TODO: Clean this up!
         // Coordinates for the texture destination
@@ -248,9 +250,9 @@ impl RenderContext {
 
         let (w, h) = self
             .get_texture_from_id(texture_id)
-            .unwrap()
+            .expect("invalid TextureId")
             .get_dimensions()
-            .unwrap();
+            .expect("texture has no dimensions");
         let sprite_offset = vec2(texture_dest.pos.x / w as f32, texture_dest.pos.y / h as f32);
         let sprite_size = vec2(
             texture_dest.size.x / w as f32,

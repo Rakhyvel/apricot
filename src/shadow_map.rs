@@ -141,7 +141,10 @@ pub struct ShadowPass<'a> {
 
 impl ShadowPass<'_> {
     pub fn draw(&self, mesh_id: MeshId, model: Mat4) {
-        let mesh = self.renderer.get_mesh_from_id(mesh_id).unwrap();
+        let mesh = self
+            .renderer
+            .get_mesh_from_id(mesh_id)
+            .expect("invalid MeshId");
         self.renderer
             .draw(&mesh, model, self.light_view, self.light_proj)
     }
@@ -205,7 +208,9 @@ impl RenderContext {
                 false,
             );
             for id in bvh.iter_frustum(&light_frustum, false) {
-                let model = world.get::<&ModelComponent>(id).unwrap();
+                let model = world
+                    .get::<&ModelComponent>(id)
+                    .expect("entity in the BVH has no ModuleComponent");
                 pass.draw(model.mesh_id, model.get_model_matrix());
             }
         });

@@ -257,9 +257,11 @@ impl RenderContext {
     pub fn set_program(&self, name: Option<&'static str>) {
         let manager = self.program_manager.borrow();
         if let Some(name) = name {
-            let program_id = manager.get_id_from_name(name).unwrap();
+            let program_id = manager
+                .get_id_from_name(name)
+                .unwrap_or_else(|| panic!("no program named {name:?}"));
             *self.program.borrow_mut() = Some(program_id);
-            let program = manager.get_from_id(program_id).unwrap();
+            let program = manager.get_from_id(program_id).expect("invalid ProgramId");
             program.set();
         } else {
             *self.program.borrow_mut() = None;
@@ -272,7 +274,7 @@ impl RenderContext {
     pub fn set_program_from_id(&self, program_id: ProgramId) {
         let manager = self.program_manager.borrow();
         *self.program.borrow_mut() = Some(program_id);
-        let program = manager.get_from_id(program_id).unwrap();
+        let program = manager.get_from_id(program_id).expect("invalid ProgramId");
         program.set();
     }
 
@@ -468,7 +470,7 @@ impl RenderContext {
         self.mesh_manager
             .borrow()
             .get_from_id(mesh_id)
-            .unwrap()
+            .expect("invalid MeshId")
             .aabb
     }
 
@@ -476,7 +478,7 @@ impl RenderContext {
         self.mesh_manager
             .borrow()
             .get_from_id(model.mesh_id)
-            .unwrap()
+            .expect("invalid MeshId")
             .aabb
             .scale(model.scale)
             .translate(model.position)
@@ -591,12 +593,12 @@ impl RenderContext {
 
         let white = self
             .get_texture_from_id(self.builtins.white_texture)
-            .unwrap();
+            .expect("builtin white texture missing");
         white.activate(gl::TEXTURE0);
         white.associate_uniform(self.get_current_program_id(), 0, "texture0");
 
         let (view, proj) = self.camera.borrow().view_proj_matrices();
-        let mesh = self.get_mesh_from_id(mesh_id).unwrap();
+        let mesh = self.get_mesh_from_id(mesh_id).expect("invalid MeshId");
         self.draw(&mesh, model, view, proj);
     }
 

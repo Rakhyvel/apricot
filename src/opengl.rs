@@ -657,7 +657,7 @@ impl Texture {
     /// Associate this texture with a uniform name
     pub fn associate_uniform(&self, program_id: u32, unit: GLint, uniform_name: &str) {
         unsafe {
-            let uniform = CString::new(uniform_name).unwrap();
+            let uniform = CString::new(uniform_name).expect("uniform name contains a null byte");
             gl::Uniform1i(gl::GetUniformLocation(program_id, uniform.as_ptr()), unit)
         }
         print_any_errors();

@@ -57,9 +57,15 @@ impl RenderContext {
 
         // Render each model in the BVH that's inside the frustum
         for model_id in bvh.iter_frustum(camera_frustum, debug) {
-            let model = world.get::<&mut ModelComponent>(model_id).unwrap();
-            let mesh = self.get_mesh_from_id(model.mesh_id).unwrap();
-            let texture = self.get_texture_from_id(model.texture_id).unwrap();
+            let model = world
+                .get::<&mut ModelComponent>(model_id)
+                .expect("entity in the BVH has no ModuleComponent");
+            let mesh = self
+                .get_mesh_from_id(model.mesh_id)
+                .expect("invalid MeshId");
+            let texture = self
+                .get_texture_from_id(model.texture_id)
+                .expect("invalid TextureId");
 
             // If a high precision camera and WorldPosition are both present, compute the model amtrix from
             // the camera-relative f64 offset cast to f32.
@@ -112,11 +118,15 @@ impl RenderContext {
 
         let (view_matrix, proj_matrix) = self.camera.borrow().view_proj_matrices();
         for model_id in bvh.iter_frustum(camera_frustum, false) {
-            let mut model = world.get::<&mut ModelComponent>(model_id).unwrap();
+            let mut model = world
+                .get::<&mut ModelComponent>(model_id)
+                .expect("entity in the BVH has no ModuleComponent");
             if !model.outlined {
                 continue;
             }
-            let mesh = self.get_mesh_from_id(model.mesh_id).unwrap();
+            let mesh = self
+                .get_mesh_from_id(model.mesh_id)
+                .expect("invalid MeshId");
 
             let old_scale = model.get_scale();
             model.set_scale(old_scale * 1.2);

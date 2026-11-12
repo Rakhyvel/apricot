@@ -1,5 +1,3 @@
-use std::borrow::Borrow;
-
 use nalgebra_glm::{vec2, vec3, Mat4, Vec2, Vec4};
 
 use crate::{
@@ -149,16 +147,6 @@ impl RenderContext {
         texture_dest: Rectangle,
         color_mod: &Vec4,
     ) {
-        let res = self.int_screen_resolution.borrow();
-        unsafe {
-            gl::Viewport(0, 0, res.x, res.y);
-            gl::Disable(gl::DEPTH_TEST); // Disable depth test for 2D rendering
-            gl::Enable(gl::CULL_FACE);
-            gl::CullFace(gl::BACK);
-            gl::Enable(gl::BLEND);
-            gl::BlendFunc(gl::SRC_ALPHA, gl::ONE_MINUS_SRC_ALPHA);
-        }
-
         let model_matrix = self.rect_model_matrix(dest);
 
         let (w, h) = self
@@ -287,16 +275,6 @@ impl RenderContext {
     }
 
     fn fill_rect_immediate(&self, dest: Rectangle, color: Vec4) {
-        let res = self.int_screen_resolution.borrow();
-        unsafe {
-            gl::Viewport(0, 0, res.x, res.y);
-            gl::Disable(gl::DEPTH_TEST);
-            gl::Enable(gl::CULL_FACE);
-            gl::CullFace(gl::BACK);
-            gl::Enable(gl::BLEND);
-            gl::BlendFunc(gl::SRC_ALPHA, gl::ONE_MINUS_SRC_ALPHA);
-        }
-
         let model_matrix = self.rect_model_matrix(dest);
 
         self.draw_2d(
@@ -317,15 +295,7 @@ impl RenderContext {
         rotation: f32,
         color: Vec4,
     ) {
-        let res = self.int_screen_resolution.borrow();
-        unsafe {
-            gl::Viewport(0, 0, res.x, res.y);
-            gl::Disable(gl::DEPTH_TEST);
-            gl::Disable(gl::CULL_FACE);
-            gl::CullFace(gl::BACK);
-            gl::Enable(gl::BLEND);
-            gl::BlendFunc(gl::SRC_ALPHA, gl::ONE_MINUS_SRC_ALPHA);
-        }
+        let res = self.int_screen_resolution;
 
         let mut model_matrix = nalgebra_glm::translate(
             &nalgebra_glm::one(),
@@ -359,6 +329,17 @@ impl RenderContext {
             queue.sort_by_key(|(layer, _)| *layer);
             queue.drain(..).collect()
         };
+
+        // Setup the GL context for drawing 2d stuff
+        let res = self.int_screen_resolution;
+        unsafe {
+            gl::Viewport(0, 0, res.x, res.y);
+            gl::Disable(gl::DEPTH_TEST);
+            gl::Disable(gl::CULL_FACE);
+            gl::Enable(gl::BLEND);
+            gl::BlendFunc(gl::SRC_ALPHA, gl::ONE_MINUS_SRC_ALPHA);
+        }
+
         for (_, cmd) in commands {
             match cmd {
                 DrawCommand::FillRect {
@@ -392,11 +373,18 @@ impl RenderContext {
                 }
             }
         }
+
+        // Put things back the way you found them
+        unsafe {
+            gl::Disable(gl::SCISSOR_TEST);
+            gl::Enable(gl::DEPTH_TEST);
+            gl::Enable(gl::CULL_FACE);
+        }
         self.current_draw_layer.set(0);
     }
 
     pub fn apply_scissor(&self, scissor: Option<Rectangle>) {
-        let res = self.int_screen_resolution.borrow();
+        let res = self.int_screen_resolution;
         match scissor {
             Some(r) => unsafe {
                 gl::Enable(gl::SCISSOR_TEST);

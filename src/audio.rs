@@ -1,109 +1,99 @@
-//! WARNING: Audio not fully tested yet, I don't think it works
+//! Loading and playing sound effects
+//! TODO: Some kinda synth stuff like DOS games stuff or midi
 
-use sdl2::mixer::{self, Chunk};
+use std::{cell::RefCell, path::Path};
 
-use crate::error::Error;
+use sdl2::{
+    mixer::{self, Chunk, LoaderRWops, Sdl2MixerContext},
+    rwops::RWops,
+};
 
-enum SoundCommand {
-    Play(String, i32),
-    Quit,
+use crate::{
+    error::Error,
+    registry::{Handle, Registry},
+};
+
+/// How many sounds can play at once
+const CHANNELS: i32 = 16;
+
+/// A decoded sound effect. Empty when there's no audio device
+pub struct Sound(Option<Chunk>);
+
+/// Refers to a sound loaded into `Audio`
+pub type SoundId = Handle<Sound>;
+
+/// Loads and plays sound effects. Stays silent if there's no audio device
+pub struct Audio {
+    mixer: Option<Sdl2MixerContext>,
+    sounds: RefCell<Registry<Sound>>,
 }
 
-pub struct AudioManager {
-    sender: std::sync::mpsc::Sender<SoundCommand>,
-}
-
-const NUM_CHUNKS: usize = 4;
-
-impl AudioManager {
-    pub fn new() -> Result<Self, Error> {
-        // Create a new channel for sending & receiving SoundCommand's
-        let (sender, receiver) = std::sync::mpsc::channel();
-
-        // Initialize SDL2_mixer library with support for OGG files
-        sdl2::mixer::init(sdl2::mixer::InitFlag::OGG).map_err(Error::Sdl)?;
-        sdl2::mixer::open_audio(
-            44_100,
-            sdl2::mixer::AUDIO_S16LSB,
-            sdl2::mixer::DEFAULT_CHANNELS,
-            1_024,
-        )
-        .map_err(Error::Sdl)?;
-        sdl2::mixer::allocate_channels(NUM_CHUNKS as i32);
-
-        // Spawn a new thread to handle audio playback
-        std::thread::spawn(|| {
-            // One slot per mixer channel, `None` means the channel is free
-            // Only this thread touches it so no lock
-            let mut chunks: [Option<Chunk>; NUM_CHUNKS] = Default::default();
-
-            // Pend on commands from the receiver
-            for command in receiver {
-                clear_unused_channels(&mut chunks);
-                match command {
-                    SoundCommand::Play(file_path, volume) => {
-                        let sound = match mixer::Chunk::from_file(&file_path) {
-                            Ok(sound) => sound,
-                            Err(e) => {
-                                eprintln!("couldn't load sound {file_path}: {e}");
-                                continue;
-                            }
-                        };
-                        let Some(i) = chunks.iter().position(Option::is_none) else {
-                            eprintln!("no free channel to play {file_path}");
-                            continue;
-                        };
-                        let channel = mixer::Channel(i as i32);
-                        channel.set_volume(volume);
-                        if let Err(e) = channel.play(&sound, 0) {
-                            eprintln!("couldn't play {file_path}: {e}");
-                            continue;
-                        }
-                        // Keep the chunk alive until the channel finishes playing it
-                        chunks[i] = Some(sound);
-                    }
-
-                    SoundCommand::Quit => break,
-                }
-            }
-
-            // Clean up SDL2_mixer
-            sdl2::mixer::close_audio();
-        });
-
-        Ok(Self { sender })
+impl Audio {
+    pub(crate) fn new() -> Self {
+        let mixer = open_mixer()
+            .map_err(|e| eprintln!("no audio, playing silently: {e}"))
+            .ok();
+        Self {
+            mixer,
+            sounds: RefCell::new(Registry::new()),
+        }
     }
 
-    /// Plays a sound.
-    /// - file_path: relative to the crate directory
-    /// - volume: [0, 128], anything above 128 is clipped to 128.
-    pub fn play_sound(&self, file_path: String, volume: i32) {
-        // Only fails if the audio thread is gone, and a missing sound shouldn't crash the game
-        let _ = self.sender.send(SoundCommand::Play(file_path, volume));
+    /// Load and decode a sound file, like a .wav or .ogg
+    pub fn load_sound(&self, path: impl AsRef<Path>) -> Result<SoundId, Error> {
+        let path = path.as_ref();
+        let chunk = match self.mixer {
+            Some(_) => Some(Chunk::from_file(path).map_err(|msg| Error::Sound {
+                sound: path.display().to_string(),
+                msg,
+            })?),
+            None => None,
+        };
+        Ok(self.sounds.borrow_mut().add(Sound(chunk), None))
     }
-}
 
-fn clear_unused_channels(chunks: &mut [Option<Chunk>; NUM_CHUNKS]) {
-    for (i, slot) in chunks.iter_mut().enumerate() {
-        if !mixer::Channel(i as i32).is_playing() {
-            *slot = None;
+    /// Decode a sound from the bytes of a sound file
+    pub fn load_sound_from_bytes(&self, bytes: &[u8]) -> Result<SoundId, Error> {
+        let error = |msg| Error::Sound {
+            sound: "from bytes".to_string(),
+            msg,
+        };
+        let chunk = match self.mixer {
+            Some(_) => Some(
+                RWops::from_bytes(bytes)
+                    .and_then(|rw| rw.load_wav())
+                    .map_err(error)?,
+            ),
+            None => None,
+        };
+        Ok(self.sounds.borrow_mut().add(Sound(chunk), None))
+    }
+
+    /// Play a sound once at `volume`, from 0 (silent) to 1 (full). Does nothing if every channel
+    /// is already busy
+    pub fn play_sound(&self, sound: SoundId, volume: f32) {
+        let sounds = self.sounds.borrow();
+        let Some(chunk) = &sounds.get(sound).expect("invalid SoundId").0 else {
+            return;
+        };
+        if let Ok(channel) = mixer::Channel::all().play(chunk, 0) {
+            channel.set_volume((volume.clamp(0.0, 1.0) * mixer::MAX_VOLUME as f32) as i32);
         }
     }
 }
 
-impl Drop for AudioManager {
+impl Drop for Audio {
     fn drop(&mut self) {
-        let _ = self.sender.send(SoundCommand::Quit);
+        if self.mixer.is_some() {
+            *self.sounds.get_mut() = Registry::new(); // sounds go before the mixer closes
+            mixer::close_audio();
+        }
     }
 }
 
-pub struct AudioResource {
-    pub audio_mgr: AudioManager,
-}
-#[allow(unreachable_code)]
-impl Default for AudioResource {
-    fn default() -> Self {
-        println!("default called, whuh oh!");
-        Self { audio_mgr: todo!() }
-    }
+fn open_mixer() -> Result<Sdl2MixerContext, String> {
+    let context = mixer::init(mixer::InitFlag::OGG)?;
+    mixer::open_audio(44_100, mixer::AUDIO_S16LSB, mixer::DEFAULT_CHANNELS, 1_024)?;
+    mixer::allocate_channels(CHANNELS);
+    Ok(context)
 }

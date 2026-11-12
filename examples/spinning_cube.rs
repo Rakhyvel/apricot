@@ -5,6 +5,7 @@
 //! Ctrl  - go faster
 //! Tab   - free the cursor
 //! P     - pause spinning
+//! B     - beep
 //! Esc   - quit
 //! Move the mouse to look around
 //! Run with `cargo run --example spinning_cube`.
@@ -13,6 +14,7 @@ use std::f32::consts::FRAC_PI_4;
 
 use apricot::{
     app::{run, App, AppConfig, Scene},
+    audio::SoundId,
     camera::ProjectionKind,
     error::Error,
     fly_controller::FlyController,
@@ -37,6 +39,7 @@ struct SpinningCube {
     fly: FlyController,
     angle: f32,
     paused: bool,
+    beep: SoundId,
     light: DirectionalLightSource,
     checker: TextureId,
 }
@@ -57,6 +60,7 @@ impl SpinningCube {
             fly,
             angle: 0.0,
             paused: false,
+            beep: app.audio.load_sound_from_bytes(&beep_wav()).unwrap(),
             light: DirectionalLightSource::new(vec3(0.5, 1.0, 0.3), 2048).unwrap(),
             checker: renderer.create_texture_rgba(10, 10, &checkerboard(10)),
         }
@@ -73,6 +77,9 @@ impl Scene for SpinningCube {
         }
         app.renderer.set_camera(self.fly.camera());
 
+        if app.input.key_pressed(Scancode::B) {
+            app.audio.play_sound(self.beep, 0.5);
+        }
         if app.input.key_pressed(Scancode::P) {
             self.paused = !self.paused;
         }
@@ -127,4 +134,35 @@ fn checkerboard(n: u32) -> Vec<u8> {
             }
         })
         .collect()
+}
+
+/// A short 880 Hz beep as the bytes of a .wav file, so the example doesn't need a sound file
+fn beep_wav() -> Vec<u8> {
+    const RATE: u32 = 44_100;
+    let samples: Vec<i16> = (0..RATE / 8)
+        .map(|i| {
+            let t = i as f32 / RATE as f32;
+            let fade = 1.0 - i as f32 / (RATE / 8) as f32; // fade out so it doesn't click
+            ((t * 880.0 * std::f32::consts::TAU).sin() * fade * 12_000.0) as i16
+        })
+        .collect();
+
+    let data_len = samples.len() as u32 * 2;
+    let mut wav = Vec::new();
+    wav.extend_from_slice(b"RIFF");
+    wav.extend_from_slice(&(36 + data_len).to_le_bytes());
+    wav.extend_from_slice(b"WAVEfmt ");
+    wav.extend_from_slice(&16u32.to_le_bytes()); // format chunk size
+    wav.extend_from_slice(&1u16.to_le_bytes()); // plain PCM
+    wav.extend_from_slice(&1u16.to_le_bytes()); // mono
+    wav.extend_from_slice(&RATE.to_le_bytes());
+    wav.extend_from_slice(&(RATE * 2).to_le_bytes()); // bytes per second
+    wav.extend_from_slice(&2u16.to_le_bytes()); // bytes per sample
+    wav.extend_from_slice(&16u16.to_le_bytes()); // bits per sample
+    wav.extend_from_slice(b"data");
+    wav.extend_from_slice(&data_len.to_le_bytes());
+    for sample in samples {
+        wav.extend_from_slice(&sample.to_le_bytes());
+    }
+    wav
 }

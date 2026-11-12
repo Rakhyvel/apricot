@@ -14,6 +14,7 @@ use sdl2::event::{Event, EventType, WindowEvent};
 use sdl2::video::SwapInterval;
 use sdl2::Sdl;
 
+use crate::audio::Audio;
 use crate::error::Error;
 use crate::input::{Input, Scancode};
 use crate::rectangle::Rectangle;
@@ -27,6 +28,8 @@ pub struct App {
     pub window_size: nalgebra_glm::I32Vec2,
     /// The OpenGL rendering context
     pub renderer: RenderContext,
+    /// Sound effects
+    pub audio: Audio,
 
     // Main loop stuff
     /// Whether or not the app is running
@@ -115,6 +118,7 @@ pub fn run<S: Scene + 'static>(cfg: AppConfig, init: impl FnOnce(&App) -> S) -> 
     let mut app = App {
         window_size: cfg.window_size,
         renderer: RenderContext::new()?,
+        audio: Audio::new(),
         // sdl_context,
         running: Cell::new(true),
         cursor_captured: Cell::new(cfg.cursor_captured),

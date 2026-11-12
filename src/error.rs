@@ -24,8 +24,8 @@ pub enum Error {
     #[error("couldn't parse .obj: {0}")]
     Obj(#[from] obj::ObjError),
 
-    #[error("couldn't load sound {path}: {msg}")]
-    Sound { path: PathBuf, msg: String },
+    #[error("couldn't load sound {sound}: {msg}")]
+    Sound { sound: String, msg: String },
 
     #[error("framebuffer incomplete (status {0:#x})")]
     Framebuffer(u32),

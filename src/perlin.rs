@@ -126,7 +126,7 @@ impl PerlinMap {
         for y in 0..self.map_width {
             for x in 0..self.map_width {
                 self.cells.push(Cell {
-                    height: perlin2d(
+                    height: noise(
                         x as f32 + offset.x,
                         y as f32 + offset.y,
                         level_of_detail,
@@ -366,7 +366,10 @@ impl PerlinMap {
     }
 }
 
-fn perlin2d(x: f32, y: f32, freq: f32, depth: i32, seed: i32) -> f32 {
+/// Smooth 2D noise at (`x`, `y`), roughly between 0 and 1. Lower `frequency` makes bigger, gentler
+/// hills, and each extra octave adds finer detail on top.
+pub fn noise(x: f32, y: f32, frequency: f32, octaves: i32, seed: i32) -> f32 {
+    let (freq, depth) = (frequency, octaves);
     let mut xa = x * freq;
     let mut ya = y * freq;
     let mut amp: f32 = 1.0;
@@ -385,8 +388,9 @@ fn perlin2d(x: f32, y: f32, freq: f32, depth: i32, seed: i32) -> f32 {
 }
 
 fn noise2d(x: f32, y: f32, seed: i32) -> f32 {
-    let x_int = x as i32;
-    let y_int = y as i32;
+    // floor so negative coordinates don't fold back on themselves
+    let x_int = x.floor() as i32;
+    let y_int = y.floor() as i32;
     let x_frac: f32 = x - (x_int as f32);
     let y_frac: f32 = y - (y_int as f32);
 
@@ -427,4 +431,28 @@ fn tri_normal(
     let edge1 = v1 - v0;
     let edge2 = v2 - v0;
     nalgebra_glm::cross(&edge1, &edge2).normalize()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn noise_stays_in_range_and_repeats() {
+        for i in -50..50 {
+            let (x, y) = (i as f32 * 3.7, i as f32 * -1.3);
+            let n = noise(x, y, 0.05, 6, 7);
+            assert!((0.0..=1.0).contains(&n), "noise({x}, {y}) = {n}");
+            assert_eq!(n, noise(x, y, 0.05, 6, 7));
+        }
+    }
+
+    #[test]
+    fn noise_is_smooth_across_zero() {
+        // Neighbors on either side of the origin should be close, not mirrored jumps
+        let step = 0.01;
+        let left = noise(-step, 0.5, 1.0, 1, 3);
+        let right = noise(step, 0.5, 1.0, 1, 3);
+        assert!((left - right).abs() < 0.01, "{left} vs {right}");
+    }
 }

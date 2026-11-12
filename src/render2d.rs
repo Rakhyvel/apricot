@@ -1,9 +1,6 @@
 use nalgebra_glm::{vec2, vec3, Mat4, Vec2, Vec4};
 
-use crate::{
-    mesh_data::MeshData,
-    render_core::MeshId,
-};
+use crate::{mesh_data::MeshData, render_core::MeshId};
 
 use super::{
     rectangle::Rectangle,

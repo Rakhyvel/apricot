@@ -17,6 +17,7 @@ pub mod physics;
 pub mod plane;
 pub mod ray;
 pub mod rectangle;
+pub mod registry;
 pub mod render2d;
 pub mod render_core;
 pub mod shadow_map;

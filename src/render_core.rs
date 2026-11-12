@@ -15,6 +15,7 @@ use crate::{
     frustum::Frustum,
     mesh_data::MeshData,
     opengl::{create_program, DeletionQueue, Fbo},
+    registry::{Handle, Registry},
     shadow_map::ActiveLight,
     tri::Tri,
 };
@@ -63,9 +64,9 @@ pub struct RenderContext {
     pub(crate) clip_stack: RefCell<Vec<Rectangle>>,
 
     // Managers
-    mesh_manager: RefCell<ResourceManager<Mesh, MeshId>>,
-    texture_manager: RefCell<ResourceManager<Texture, TextureId>>,
-    program_manager: RefCell<ResourceManager<Program, ProgramId>>,
+    mesh_manager: RefCell<Registry<Mesh>>,
+    texture_manager: RefCell<Registry<Texture>>,
+    program_manager: RefCell<Registry<Program>>,
     font_manager: RefCell<FontManager>,
     pub(crate) poly_meshes: RefCell<HashMap<(u32, u32), MeshId>>,
 
@@ -94,27 +95,14 @@ pub struct Builtins {
     pub plane: MeshId,
 }
 
-struct ResourceManager<Resource, Id: OpaqueId> {
-    resources: Vec<Resource>,
-    keys: HashMap<&'static str, Id>,
-}
+/// Refers to a mesh added to the renderer
+pub type MeshId = Handle<Mesh>;
 
-pub trait OpaqueId: Copy {
-    fn new(id: usize) -> Self;
-    fn as_usize(&self) -> usize;
-}
+/// Refers to a texture added to the renderer
+pub type TextureId = Handle<Texture>;
 
-/// Opaque type used by the mesh manager to associate meshes.
-#[derive(Copy, Clone, Debug)]
-pub struct MeshId(usize);
-
-/// Opaque type used by the texture manager to associate textures.
-#[derive(Copy, Clone, Debug)]
-pub struct TextureId(usize);
-
-/// Opaque type used by the program manager to associate programs.
-#[derive(Copy, Clone, Debug)]
-pub struct ProgramId(usize);
+/// Refers to a shader program added to the renderer
+pub type ProgramId = Handle<Program>;
 
 /// How a `LinePath` looks
 #[derive(Clone, Copy, Debug)]
@@ -167,9 +155,9 @@ impl RenderContext {
             create_program(vert, frag).expect("apricot built-in shader failed to compile")
         }
 
-        let mut programs = ResourceManager::new();
-        let mut textures = ResourceManager::new();
-        let mut meshes = ResourceManager::new();
+        let mut programs = Registry::new();
+        let mut textures = Registry::new();
+        let mut meshes = Registry::new();
 
         let builtins = Builtins {
             program_2d: programs.add(
@@ -212,7 +200,7 @@ impl RenderContext {
                 white.set_pixels(1, 1, &[255; 4]);
                 textures.add(white, Some("white"))
             },
-            font: FontId::new(0),
+            font: FontId::placeholder(0),
             quad: meshes.add(Mesh::from_data(&MeshData::quad()), Some("quad")),
             cube: meshes.add(Mesh::from_data(&MeshData::cube()), Some("cube")),
             plane: meshes.add(Mesh::from_data(&MeshData::plane()), Some("plane")),
@@ -221,7 +209,7 @@ impl RenderContext {
         let mut renderer = Self {
             camera: RefCell::new(Camera::default()),
             program: RefCell::new(None),
-            font: Cell::new(FontId::new(0)), // replaced by the default font below
+            font: Cell::new(FontId::placeholder(0)), // replaced by the default font below
             clip_stack: RefCell::new(Vec::new()),
 
             mesh_manager: RefCell::new(meshes),
@@ -321,10 +309,10 @@ impl RenderContext {
         let manager = self.program_manager.borrow();
         if let Some(name) = name {
             let program_id = manager
-                .get_id_from_name(name)
+                .lookup(name)
                 .unwrap_or_else(|| panic!("no program named {name:?}"));
             *self.program.borrow_mut() = Some(program_id);
-            let program = manager.get_from_id(program_id).expect("invalid ProgramId");
+            let program = manager.get(program_id).expect("invalid ProgramId");
             program.set();
         } else {
             *self.program.borrow_mut() = None;
@@ -337,7 +325,7 @@ impl RenderContext {
     pub fn set_program_from_id(&self, program_id: ProgramId) {
         let manager = self.program_manager.borrow();
         *self.program.borrow_mut() = Some(program_id);
-        let program = manager.get_from_id(program_id).expect("invalid ProgramId");
+        let program = manager.get(program_id).expect("invalid ProgramId");
         program.set();
     }
 
@@ -459,15 +447,15 @@ impl RenderContext {
     }
 
     pub fn get_mesh_from_id(&self, id: MeshId) -> Option<std::cell::Ref<'_, Mesh>> {
-        std::cell::Ref::filter_map(self.mesh_manager.borrow(), |m| m.get_from_id(id)).ok()
+        std::cell::Ref::filter_map(self.mesh_manager.borrow(), |m| m.get(id)).ok()
     }
 
     pub fn get_texture_from_id(&self, id: TextureId) -> Option<std::cell::Ref<'_, Texture>> {
-        std::cell::Ref::filter_map(self.texture_manager.borrow(), |m| m.get_from_id(id)).ok()
+        std::cell::Ref::filter_map(self.texture_manager.borrow(), |m| m.get(id)).ok()
     }
 
     pub fn get_program_from_id(&self, id: ProgramId) -> Option<std::cell::Ref<'_, Program>> {
-        std::cell::Ref::filter_map(self.program_manager.borrow(), |m| m.get_from_id(id)).ok()
+        std::cell::Ref::filter_map(self.program_manager.borrow(), |m| m.get(id)).ok()
     }
 
     pub fn get_font_from_id(&self, id: FontId) -> Option<std::cell::Ref<'_, Font>> {
@@ -476,11 +464,11 @@ impl RenderContext {
     }
 
     pub fn get_mesh_id_from_name(&self, name: &'static str) -> Option<MeshId> {
-        self.mesh_manager.borrow().get_id_from_name(name)
+        self.mesh_manager.borrow().lookup(name)
     }
 
     pub fn get_texture_id_from_name(&self, name: &'static str) -> Option<TextureId> {
-        self.texture_manager.borrow().get_id_from_name(name)
+        self.texture_manager.borrow().lookup(name)
     }
 
     /// Make a texture from tightly packed RGBA bytes, `w * h * 4` of them
@@ -498,7 +486,7 @@ impl RenderContext {
     }
 
     pub fn get_program_id_from_name(&self, name: &'static str) -> Option<ProgramId> {
-        self.program_manager.borrow().get_id_from_name(name)
+        self.program_manager.borrow().lookup(name)
     }
 
     pub fn get_font_id_from_name(&self, name: &'static str) -> Option<FontId> {
@@ -508,7 +496,7 @@ impl RenderContext {
     pub fn get_mesh_aabb(&self, mesh_id: MeshId) -> AABB {
         self.mesh_manager
             .borrow()
-            .get_from_id(mesh_id)
+            .get(mesh_id)
             .expect("invalid MeshId")
             .aabb
     }
@@ -683,108 +671,17 @@ impl Drop for RenderContext {
     fn drop(&mut self) {
         let mut deletion_queue = self.deletion_queue.borrow_mut();
 
-        self.mesh_manager
-            .borrow_mut()
-            .queue_all(&mut deletion_queue);
-        self.texture_manager
-            .borrow_mut()
-            .queue_all(&mut deletion_queue);
-        deletion_queue.flush();
-    }
-}
-
-impl<Resource, Id: OpaqueId + Debug> ResourceManager<Resource, Id> {
-    pub fn new() -> Self {
-        Self {
-            resources: vec![],
-            keys: HashMap::new(),
-        }
-    }
-
-    pub fn add(&mut self, res: Resource, name: Option<&'static str>) -> Id {
-        let id = Id::new(self.resources.len());
-        self.resources.push(res);
-        if let Some(name) = name {
-            self.keys.insert(name, id);
-        }
-        id
-    }
-
-    pub fn add_or_replace(&mut self, res: Resource, name: &'static str) -> Id {
-        match self.keys.get(name).copied() {
-            Some(id) => {
-                self.resources[id.as_usize()] = res;
-                id
-            }
-            None => self.add(res, Some(name)),
-        }
-    }
-
-    pub fn get_from_id(&self, id: Id) -> Option<&Resource> {
-        self.resources.get(id.as_usize())
-    }
-
-    pub fn get_id_from_name(&self, name: &'static str) -> Option<Id> {
-        self.keys.get(name).copied()
-    }
-}
-
-impl<Resource, Id: OpaqueId> Default for ResourceManager<Resource, Id> {
-    fn default() -> Self {
-        Self {
-            resources: vec![],
-            keys: HashMap::new(),
-        }
-    }
-}
-
-impl ResourceManager<Mesh, MeshId> {
-    pub fn queue_all(&mut self, deletion_queue: &mut DeletionQueue) {
-        for mesh in self.resources.iter_mut() {
+        for (_, mesh) in self.mesh_manager.borrow_mut().iter_mut() {
             for vbo in mesh.vbos.iter_mut() {
                 deletion_queue.queue_buffer(vbo);
             }
             deletion_queue.queue_buffer(&mut mesh.ibo);
             deletion_queue.queue_vao(&mut mesh.vao);
         }
-    }
-}
-
-impl ResourceManager<Texture, TextureId> {
-    pub fn queue_all(&mut self, deletion_queue: &mut DeletionQueue) {
-        for texture in self.resources.iter_mut() {
+        for (_, texture) in self.texture_manager.borrow_mut().iter_mut() {
             deletion_queue.queue_texture(texture);
         }
-    }
-}
-
-impl OpaqueId for MeshId {
-    fn new(id: usize) -> Self {
-        MeshId(id)
-    }
-
-    fn as_usize(&self) -> usize {
-        self.0
-    }
-}
-
-impl OpaqueId for TextureId {
-    fn new(id: usize) -> Self {
-        TextureId(id)
-    }
-
-    fn as_usize(&self) -> usize {
-        self.0
-    }
-}
-
-impl OpaqueId for ProgramId {
-    fn new(id: usize) -> Self {
-        ProgramId(id)
-    }
-
-    fn as_usize(&self) -> usize {
-        self.0
+        deletion_queue.flush();
     }
 }
 

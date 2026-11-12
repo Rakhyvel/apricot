@@ -2,14 +2,15 @@
 
 use nalgebra_glm::{vec2, Vec2, Vec4};
 use sdl2::{pixels::Color, rect::Rect, surface::Surface, ttf::Sdl2TtfContext};
-use std::{collections::HashMap, path::Path};
+use std::path::Path;
 
 use crate::error::Error;
 
 use super::{
     opengl::Texture,
     rectangle::Rectangle,
-    render_core::{OpaqueId, RenderContext, TextureId},
+    registry::{Handle, Registry},
+    render_core::{RenderContext, TextureId},
 };
 
 #[derive(Copy, Clone, Default)]
@@ -33,16 +34,13 @@ pub struct Font {
     line_skip: usize, //< Used for newlines, the amount of pixels to increment Y cursor by
 }
 
-/// Opaque type used by a FontManager to associate fonts.
-#[derive(Copy, Clone)]
-/// An opaque reference id to a font within the manager
-pub struct FontId(usize);
+/// Refers to a font added to the renderer
+pub type FontId = Handle<Font>;
 
 /// Manages the loading and rendering of fonts
 pub struct FontManager {
     ttf_context: Sdl2TtfContext,
-    fonts: Vec<Font>,                    //< List of fonts
-    keys: HashMap<&'static str, FontId>, //< Maps font names to ids in the font list
+    fonts: Registry<Font>,
 }
 
 impl Font {
@@ -180,8 +178,7 @@ impl FontManager {
         let ttf_context = sdl2::ttf::init().map_err(|msg| Error::Sdl(format!("{msg}")))?;
         Ok(Self {
             ttf_context,
-            fonts: vec![],
-            keys: HashMap::new(),
+            fonts: Registry::new(),
         })
     }
 
@@ -236,35 +233,22 @@ impl FontManager {
     }
 
     fn push(&mut self, font: Font, name: &'static str) -> FontId {
-        let id = FontId::new(self.fonts.len());
-        self.fonts.push(font);
-        self.keys.insert(name, id);
-        id
+        self.fonts.add(font, Some(name))
     }
 
     /// Retrieve a font from it's ID
     pub fn get_font_from_id(&self, id: FontId) -> Option<&Font> {
-        self.fonts.get(id.as_usize())
+        self.fonts.get(id)
     }
 
     /// Get a font ID from it's name
     pub fn get_id_from_name(&self, name: &'static str) -> Option<FontId> {
-        self.keys.get(name).copied()
+        self.fonts.lookup(name)
     }
 
     /// Get a font from it's name
     pub fn get_font(&self, name: &'static str) -> Option<&Font> {
         self.get_font_from_id(self.get_id_from_name(name)?)
-    }
-}
-
-impl OpaqueId for FontId {
-    fn new(id: usize) -> Self {
-        FontId(id)
-    }
-
-    fn as_usize(&self) -> usize {
-        self.0
     }
 }
 

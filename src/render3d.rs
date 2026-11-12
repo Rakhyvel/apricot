@@ -52,8 +52,8 @@ impl RenderContext {
             .set_mat4(&directional_light.light_proj_view());
 
         // Get the camera frustum, view matrix, and proj matrix
-        let camera_frustum = &self.camera.borrow().frustum();
-        let (view_matrix, proj_matrix) = self.camera.borrow().view_proj_matrices();
+        let camera_frustum = &self.camera_frustum();
+        let (view_matrix, proj_matrix) = self.camera_view_proj();
 
         // Render each model in the BVH that's inside the frustum
         for model_id in bvh.iter_frustum(camera_frustum, debug) {
@@ -111,11 +111,11 @@ impl RenderContext {
             gl::Disable(gl::DEPTH_TEST);
         }
         self.set_program_from_id(self.builtins.program_3d_solid);
-        let camera_frustum = &self.camera.borrow().frustum();
+        let camera_frustum = &self.camera_frustum();
 
         self.get_program_uniform("u_color").set_vec4(&color);
 
-        let (view_matrix, proj_matrix) = self.camera.borrow().view_proj_matrices();
+        let (view_matrix, proj_matrix) = self.camera_view_proj();
         for model_id in bvh.iter_frustum(camera_frustum, false) {
             let mut model = world
                 .get::<&mut ModelComponent>(model_id)
@@ -148,7 +148,7 @@ impl RenderContext {
             gl::BlendFunc(gl::SRC_ALPHA, gl::ONE_MINUS_SRC_ALPHA);
             gl::Disable(gl::MULTISAMPLE);
         }
-        let (view_matrix, proj_matrix) = self.camera.borrow().view_proj_matrices();
+        let (view_matrix, proj_matrix) = self.camera_view_proj();
         for (entity, line_path) in world.query::<&LinePathComponent>().iter() {
             let position = match hp_camera {
                 Some(hp) => {

@@ -57,7 +57,7 @@ impl RenderContext {
             .set_vec2(&sprite_size);
         self.get_program_uniform("u_color").set_vec4(&color);
 
-        let (view, proj) = self.camera_2d.view_proj_matrices();
+        let (view, proj) = self.camera_2d.view_proj_matrices(1.0);
         let mesh = self.get_mesh_from_id(mesh_id).expect("invalid MeshId");
         self.draw(&mesh, model, view, proj);
     }

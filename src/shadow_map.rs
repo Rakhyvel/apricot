@@ -53,19 +53,21 @@ impl DirectionalLightSource {
         })
     }
 
-    /// Fit the light's orthographic view box around everything `camera` can see
-    pub fn fit_to_camera(&mut self, camera: &Camera) {
-        self.fit_to_slice(camera, 0.1, self.shadow_distance);
+    /// Fit the light's orthographic view box around everything `camera` can see on a screen with
+    /// the given aspect ratio
+    pub fn fit_to_camera(&mut self, camera: &Camera, aspect: f32) {
+        self.fit_to_slice(camera, aspect, 0.1, self.shadow_distance);
     }
 
-    pub fn fit_to_slice(&mut self, camera: &Camera, near: f32, far: f32) {
-        let (view, cam_proj) = camera.view_proj_matrices();
+    /// Fit the light's view box around the part of `camera`'s view between `near` and `far`
+    pub fn fit_to_slice(&mut self, camera: &Camera, aspect: f32, near: f32, far: f32) {
+        let view = camera.view_matrix();
         let proj = match camera.projection_kind {
             ProjectionKind::Perspective {
                 fov_rad,
                 far: cam_far,
-            } => nalgebra_glm::perspective(camera.aspect_ratio(), fov_rad, near, far.min(cam_far)),
-            ProjectionKind::Orthographic { .. } => cam_proj,
+            } => nalgebra_glm::perspective(aspect, fov_rad, near, far.min(cam_far)),
+            ProjectionKind::Orthographic { .. } => camera.proj_matrix(aspect),
         };
 
         let corners =
@@ -157,7 +159,7 @@ impl RenderContext {
         light: &mut DirectionalLightSource,
         draw_casters: impl FnOnce(&ShadowPass),
     ) {
-        light.fit_to_camera(&self.camera.borrow());
+        light.fit_to_camera(&self.camera.borrow(), self.aspect_ratio());
 
         light.frame_buffer.bind();
         unsafe {

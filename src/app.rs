@@ -159,6 +159,7 @@ pub fn run<S: Scene + 'static>(cfg: AppConfig, init: impl FnOnce(&App) -> S) -> 
         right_drag_dist: 0.0,
         mouse_left_dragging: false,
     };
+    app.renderer.int_screen_resolution = app.window_size; // so the aspect is right in `init`
 
     let mut scene_stack: Vec<Box<dyn Scene>> = vec![Box::new(init(&app))];
 
@@ -214,14 +215,14 @@ pub fn run<S: Scene + 'static>(cfg: AppConfig, init: impl FnOnce(&App) -> S) -> 
         }
 
         let seconds_since_fps_report = current - start;
+
+        if seconds_since_fps_report >= Duration::from_secs(1) {
+            app.fps = (frames as f64 / seconds_since_fps_report.as_secs_f64()).round() as u32;
+        }
         if seconds_since_fps_report > Duration::from_secs(5) {
             println!("5 seconds;  fps: {}", frames / 5);
             start = current;
             frames = 0;
-        }
-
-        if seconds_since_fps_report >= Duration::from_secs(1) {
-            app.fps = (frames as f64 / seconds_since_fps_report.as_secs_f64()).round() as u32;
         }
     }
 
@@ -292,12 +293,8 @@ impl App {
                     ..
                 } => {
                     self.window_size = nalgebra_glm::I32Vec2::new(new_width, new_height);
-                    let mut camera = self.renderer.camera.borrow_mut();
-                    camera.set_aspect_ratio(new_width as f32 / new_height as f32);
+                    self.renderer.int_screen_resolution = self.window_size;
                     unsafe { gl::Viewport(0, 0, new_width, new_height) };
-                    self.renderer
-                        .camera_2d
-                        .set_aspect_ratio(new_width as f32 / new_height as f32);
                 }
 
                 Event::KeyDown {

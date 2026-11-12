@@ -12,6 +12,7 @@ use obj::{load_obj, Obj, TexturedVertex};
 
 use crate::{
     error::Error,
+    frustum::Frustum,
     mesh_data::MeshData,
     opengl::{create_program, DeletionQueue, Fbo},
     shadow_map::ActiveLight,
@@ -237,7 +238,6 @@ impl RenderContext {
                     near: 0.1,
                     far: 10.0,
                 },
-                4.0 / 3.0,
             ),
             builtins,
         };
@@ -254,6 +254,26 @@ impl RenderContext {
 
     pub fn set_camera(&self, camera: Camera) {
         *self.camera.borrow_mut() = camera
+    }
+
+    /// The window's aspect ratio (width / height)
+    pub fn aspect_ratio(&self) -> f32 {
+        let res = self.int_screen_resolution;
+        if res.y == 0 {
+            1.0
+        } else {
+            res.x as f32 / res.y as f32
+        }
+    }
+
+    /// The current camera's view and projection matrices, fitted to the window
+    pub fn camera_view_proj(&self) -> (Mat4, Mat4) {
+        self.camera.borrow().view_proj_matrices(self.aspect_ratio())
+    }
+
+    /// The current camera's view frustum, fitted to the window
+    pub fn camera_frustum(&self) -> Frustum {
+        self.camera.borrow().frustum(self.aspect_ratio())
     }
 
     pub fn set_program(&self, name: Option<&'static str>) {
@@ -562,7 +582,7 @@ impl RenderContext {
         white.activate(gl::TEXTURE0);
         white.associate_uniform(self.get_current_program_id(), 0, "texture0");
 
-        let (view, proj) = self.camera.borrow().view_proj_matrices();
+        let (view, proj) = self.camera_view_proj();
         let mesh = self.get_mesh_from_id(mesh_id).expect("invalid MeshId");
         self.draw(&mesh, model, view, proj);
     }

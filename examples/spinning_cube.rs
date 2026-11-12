@@ -38,7 +38,6 @@ impl SpinningCube {
                 fov_rad: FRAC_PI_4,
                 far: 10.0,
             },
-            app.window_size.x as f32 / app.window_size.y as f32,
         ));
 
         Self {

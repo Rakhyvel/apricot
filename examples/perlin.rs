@@ -24,7 +24,7 @@ use apricot::{
     rectangle::Rectangle,
     render_core::{MeshId, RenderContext},
     shadow_map::DirectionalLightSource,
-    terrain::{normal_at, scatter},
+    terrain::{normal_at, scatter, surface_height},
 };
 use nalgebra_glm::{vec2, vec3, vec4};
 
@@ -124,7 +124,7 @@ impl Terrain {
         for (i, p) in spots.into_iter().enumerate() {
             // A little size variety, so it doesn't look like a tree farm
             let scale = 0.8 + 0.6 * perlin::noise(p.x, p.y, 0.7, 1, SEED + 1);
-            let base = vec3(p.x, ground(p.x, p.y) - 0.2, p.y);
+            let base = vec3(p.x, surface_height(ground, p.x, p.y), p.y);
 
             let trunk = nalgebra_glm::scale(
                 &nalgebra_glm::translation(&(base + vec3(0.0, 0.75 * scale, 0.0))),

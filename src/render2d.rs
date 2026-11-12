@@ -73,7 +73,10 @@ impl RenderContext {
             .expect("invalid TextureId")
             .get_dimensions()
             .expect("texture has no dimensions");
-        let src = nine_slice_rects(Rectangle::new(0.0, 0.0, w as f32, h as f32), nine_slice.border);
+        let src = nine_slice_rects(
+            Rectangle::new(0.0, 0.0, w as f32, h as f32),
+            nine_slice.border,
+        );
 
         let border = nine_slice
             .border
@@ -115,6 +118,30 @@ impl RenderContext {
         ));
     }
 
+    /// Turns a rectangle in pixels into a model matrix for the built-in quad. Both edges get
+    /// snapped to whole pixels, so rectangles that share an edge always meet exactly.
+    fn rect_model_matrix(&self, rect: Rectangle) -> Mat4 {
+        let res = self.int_screen_resolution;
+        let (res_x, res_y) = (res.x as f32, res.y as f32);
+        let (x0, y0) = (rect.pos.x.floor(), rect.pos.y.floor());
+        let (x1, y1) = (
+            (rect.pos.x + rect.size.x).floor(),
+            (rect.pos.y + rect.size.y).floor(),
+        );
+        let (w, h) = (x1 - x0, y1 - y0);
+        nalgebra_glm::scale(
+            &nalgebra_glm::translate(
+                &nalgebra_glm::one(),
+                &vec3(
+                    1.0 - (2.0 * x0 + w) / res_x,
+                    1.0 - (2.0 * y0 + h) / res_y,
+                    3.0,
+                ),
+            ),
+            &vec3(w / res_x, h / res_y, 0.1),
+        )
+    }
+
     fn copy_texture_immediate(
         &self,
         dest: Rectangle,
@@ -132,17 +159,7 @@ impl RenderContext {
             gl::BlendFunc(gl::SRC_ALPHA, gl::ONE_MINUS_SRC_ALPHA);
         }
 
-        let model_matrix: Mat4 = nalgebra_glm::scale(
-            &nalgebra_glm::translate(
-                &nalgebra_glm::one(),
-                &vec3(
-                    1.0 - 2.0 * dest.pos.x.floor() / res.x as f32 - dest.size.x / res.x as f32,
-                    1.0 - 2.0 * dest.pos.y.floor() / res.y as f32 - dest.size.y / res.y as f32,
-                    3.0,
-                ),
-            ),
-            &vec3(dest.size.x / res.x as f32, dest.size.y / res.y as f32, 0.1),
-        );
+        let model_matrix = self.rect_model_matrix(dest);
 
         let (w, h) = self
             .get_texture_from_id(texture_id)
@@ -280,17 +297,7 @@ impl RenderContext {
             gl::BlendFunc(gl::SRC_ALPHA, gl::ONE_MINUS_SRC_ALPHA);
         }
 
-        let model_matrix: Mat4 = nalgebra_glm::scale(
-            &nalgebra_glm::translate(
-                &nalgebra_glm::one(),
-                &vec3(
-                    1.0 - 2.0 * dest.pos.x / res.x as f32 - dest.size.x / res.x as f32,
-                    1.0 - 2.0 * dest.pos.y / res.y as f32 - dest.size.y / res.y as f32,
-                    3.0,
-                ),
-            ),
-            &vec3(dest.size.x / res.x as f32, dest.size.y / res.y as f32, 0.1),
-        );
+        let model_matrix = self.rect_model_matrix(dest);
 
         self.draw_2d(
             self.builtins.quad,

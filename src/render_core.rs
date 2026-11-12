@@ -8,7 +8,6 @@ use std::{
 };
 
 use nalgebra_glm::{vec2, vec4, Mat4, Vec2, Vec3, Vec4};
-use obj::{load_obj, Obj, TexturedVertex};
 
 use crate::{
     error::Error,
@@ -764,18 +763,9 @@ impl Mesh {
         }
     }
 
+    /// Upload a mesh straight from the bytes of a .obj file
     pub fn from_obj(obj_file_data: &[u8]) -> Result<Self, Error> {
-        let obj: Obj<TexturedVertex> = load_obj(obj_file_data)?;
-        let vb: Vec<TexturedVertex> = obj.vertices;
-
-        let indices = vec_u32_from_vec_u16(&obj.indices);
-        let vertices = flatten_positions(&vb);
-        let normals = flatten_normals(&vb);
-        let uv = flatten_uv(&vb);
-
-        let data = vec![&vertices, &normals, &uv];
-
-        Ok(Self::new(indices, data))
+        Ok(Self::from_data(&MeshData::from_obj(obj_file_data)?))
     }
 
     pub fn from_data(data: &MeshData) -> Self {
@@ -785,19 +775,9 @@ impl Mesh {
         )
     }
 
-    pub fn triangles(&self) -> Vec<Tri> {
-        let verts = &self.positions;
-        self.indices
-            .chunks(3)
-            .map(|tri| {
-                let (i0, i1, i2) = (tri[0] as usize, tri[1] as usize, tri[2] as usize);
-                Tri::new(
-                    nalgebra_glm::vec3(verts[i0 * 3], verts[i0 * 3 + 1], verts[i0 * 3 + 2]),
-                    nalgebra_glm::vec3(verts[i1 * 3], verts[i1 * 3 + 1], verts[i1 * 3 + 2]),
-                    nalgebra_glm::vec3(verts[i2 * 3], verts[i2 * 3 + 1], verts[i2 * 3 + 2]),
-                )
-            })
-            .collect()
+    /// Every triangle, in the mesh's own space
+    pub fn triangles(&self) -> impl Iterator<Item = Tri> + '_ {
+        crate::mesh_data::triangles(&self.positions, &self.indices)
     }
 
     pub fn positions(&self) -> &[f32] {
@@ -807,42 +787,4 @@ impl Mesh {
     pub fn indices(&self) -> &Vec<u32> {
         &self.indices
     }
-}
-
-fn flatten_positions(vertices: &Vec<TexturedVertex>) -> Vec<f32> {
-    let mut retval = vec![];
-    for vertex in vertices {
-        retval.push(vertex.position[0]);
-        retval.push(vertex.position[1]);
-        retval.push(vertex.position[2]);
-    }
-    retval
-}
-
-fn flatten_normals(vertices: &Vec<TexturedVertex>) -> Vec<f32> {
-    let mut retval = vec![];
-    for vertex in vertices {
-        retval.push(vertex.normal[0]);
-        retval.push(vertex.normal[1]);
-        retval.push(vertex.normal[2]);
-    }
-    retval
-}
-
-fn flatten_uv(vertices: &Vec<TexturedVertex>) -> Vec<f32> {
-    let mut retval = vec![];
-    for vertex in vertices {
-        retval.push(vertex.texture[0]);
-        retval.push(vertex.texture[1]);
-        retval.push(vertex.texture[2]);
-    }
-    retval
-}
-
-fn vec_u32_from_vec_u16(input: &Vec<u16>) -> Vec<u32> {
-    let mut retval = vec![];
-    for x in input {
-        retval.push(*x as u32);
-    }
-    retval
 }

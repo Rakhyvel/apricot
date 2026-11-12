@@ -1,4 +1,7 @@
 use nalgebra_glm::{vec3, Vec3};
+use obj::{load_obj, Obj, TexturedVertex};
+
+use crate::{error::Error, tri::Tri};
 
 #[derive(Clone, Debug, Default)]
 pub struct MeshData {
@@ -9,6 +12,23 @@ pub struct MeshData {
 }
 
 impl MeshData {
+    /// Read a mesh out of the bytes of a Wavefront .obj file, like from `include_bytes!`
+    pub fn from_obj(bytes: &[u8]) -> Result<Self, Error> {
+        let obj: Obj<TexturedVertex> = load_obj(bytes)?;
+        let flat = |f: fn(&TexturedVertex) -> [f32; 3]| obj.vertices.iter().flat_map(f).collect();
+        Ok(Self {
+            positions: flat(|v| v.position),
+            normals: flat(|v| v.normal),
+            uvs: flat(|v| v.texture),
+            indices: obj.indices.iter().map(|&i| i as u32).collect(),
+        })
+    }
+
+    /// Every triangle, in the mesh's own space. Use `Tri::transformed` to move them into the world
+    pub fn triangles(&self) -> impl Iterator<Item = Tri> + '_ {
+        triangles(&self.positions, &self.indices)
+    }
+
     /// An XY quad spanning -1..1 that faces the -Z direction.
     pub fn quad() -> Self {
         Self {
@@ -391,7 +411,40 @@ mod tests {
     }
 
     #[test]
+    fn from_obj_reads_one_triangle() {
+        let obj =
+            b"v 0 0 0\nv 1 0 0\nv 0 1 0\nvt 0 0\nvt 1 0\nvt 0 1\nvn 0 0 1\nf 1/1/1 2/2/1 3/3/1\n";
+        let data = MeshData::from_obj(obj).unwrap();
+        check(&data);
+        assert_eq!(data.vertex_count(), 3);
+        assert_eq!(data.triangles().count(), 1);
+    }
+
+    #[test]
+    fn triangles_match_the_indices() {
+        let quad = MeshData::quad();
+        let tris: Vec<Tri> = quad.triangles().collect();
+        assert_eq!(tris.len(), 2);
+        assert_eq!(tris[0].v0(), quad.position(quad.indices[0]));
+        assert_eq!(tris[1].v2(), quad.position(quad.indices[5]));
+    }
+
+    #[test]
     fn plane_is_valid() {
         check(&MeshData::plane());
     }
+}
+
+/// The triangles made by `indices` into flat xyz `positions`
+pub(crate) fn triangles<'a>(
+    positions: &'a [f32],
+    indices: &'a [u32],
+) -> impl Iterator<Item = Tri> + 'a {
+    let corner = |i: u32| {
+        let i = i as usize * 3;
+        vec3(positions[i], positions[i + 1], positions[i + 2])
+    };
+    indices
+        .chunks_exact(3)
+        .map(move |t| Tri::new(corner(t[0]), corner(t[1]), corner(t[2])))
 }

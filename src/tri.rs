@@ -35,6 +35,12 @@ impl Tri {
         self.normal
     }
 
+    /// This triangle moved, rotated, or scaled by `matrix`
+    pub fn transformed(&self, matrix: &nalgebra_glm::Mat4) -> Tri {
+        let apply = |v: nalgebra_glm::Vec3| (matrix * nalgebra_glm::vec4(v.x, v.y, v.z, 1.0)).xyz();
+        Tri::new(apply(self.v0), apply(self.v1), apply(self.v2))
+    }
+
     pub fn raycast(&self, ray: &Ray) -> Option<f32> {
         let e1 = self.v1 - self.v0;
         let e2 = self.v2 - self.v0;

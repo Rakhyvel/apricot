@@ -153,7 +153,6 @@ impl<K: Copy + Eq + Hash> ModelSet<K> {
                     .expect("invalid MeshId");
                 let t = mesh
                     .triangles()
-                    .iter()
                     .filter_map(|tri| tri.raycast(&local_ray))
                     .min_by(f32::total_cmp)?;
 

@@ -10,7 +10,7 @@
 use std::cell::Cell;
 use std::time::{Duration, Instant};
 
-use sdl2::event::{Event, WindowEvent};
+use sdl2::event::{Event, EventType, WindowEvent};
 pub use sdl2::keyboard::Scancode;
 use sdl2::video::SwapInterval;
 use sdl2::Sdl;
@@ -31,6 +31,7 @@ pub struct App {
     // Main loop stuff
     /// Whether or not the app is running
     pub running: Cell<bool>,
+    cursor_captured: Cell<bool>,
     /// How many seconds the app has been up
     pub seconds: f64,
     /// How many ticks have occured since the app started
@@ -86,8 +87,8 @@ pub struct AppConfig {
     pub title: &'static str,
     /// The window's starting size, in pixels
     pub window_size: nalgebra_glm::I32Vec2,
-    /// Keep the mouse captured in the window, for mouse-look cameras
-    pub mouse_warp: bool,
+    /// Whether the cursor starts out hidden and locked to the window.
+    pub cursor_captured: bool,
     /// Whether pressing Escape quits the app
     pub escape_quits: bool,
 }
@@ -97,7 +98,7 @@ impl Default for AppConfig {
         Self {
             title: "Apricot app",
             window_size: nalgebra_glm::I32Vec2::new(800, 600),
-            mouse_warp: false,
+            cursor_captured: false,
             escape_quits: true,
         }
     }
@@ -153,6 +154,7 @@ pub fn run<S: Scene + 'static>(cfg: AppConfig, init: impl FnOnce(&App) -> S) -> 
         renderer: RenderContext::new()?,
         // sdl_context,
         running: Cell::new(true),
+        cursor_captured: Cell::new(cfg.cursor_captured),
         dt: Duration::from_secs_f64(1.0 / 60.0),
         keys: [false; 256],
         keys_pressed: [false; 256],
@@ -188,6 +190,7 @@ pub fn run<S: Scene + 'static>(cfg: AppConfig, init: impl FnOnce(&App) -> S) -> 
     let mut lag = Duration::ZERO;
     let mut elapsed: Duration;
     let mut frames = 0;
+    let mut cursor_applied = false;
     while app.running.get() {
         app.seconds = time.elapsed().as_secs_f64();
         current = time.elapsed();
@@ -198,20 +201,29 @@ pub fn run<S: Scene + 'static>(cfg: AppConfig, init: impl FnOnce(&App) -> S) -> 
 
         let scene_stale = false;
         while lag >= app.dt {
+            let captured = app.cursor_captured();
+            if captured != cursor_applied {
+                let mouse = sdl_context.mouse();
+                mouse.set_relative_mouse_mode(captured);
+                if !captured {
+                    // Let go in the middle, not wherever it was while hidden
+                    let center = app.window_size / 2;
+                    mouse.warp_mouse_in_window(&window, center.x, center.y);
+                    app.mouse_pos = nalgebra_glm::vec2(center.x as f32, center.y as f32);
+                }
+                // Toss the jump the switch makes, so the camera doesn't lurch
+                sdl_context
+                    .event()
+                    .map_err(Error::Sdl)?
+                    .flush_event(EventType::MouseMotion);
+                cursor_applied = captured;
+            }
+
             app.reset_input();
             app.poll_input(&sdl_context)?;
             if cfg.escape_quits && app.key_pressed(Scancode::Escape) {
                 app.quit();
             }
-            if cfg.mouse_warp {
-                sdl_context.mouse().warp_mouse_in_window(
-                    &window,
-                    app.window_size.x / 2,
-                    app.window_size.y / 2,
-                );
-                sdl_context.mouse().set_relative_mouse_mode(true);
-            }
-
             if let Some(scene) = scene_stack.last_mut() {
                 scene.update(&app);
                 app.ticks += 1;
@@ -259,6 +271,17 @@ impl App {
     /// Returns true if the current left click for this tick has been consumed
     pub fn is_click_consumed(&self) -> bool {
         self.click_consumed.get()
+    }
+
+    /// Capture the cursor (hide it and lock it to the window, for mouse-look) or let it go, like
+    /// when opening an inventory. Takes effect next tick
+    pub fn set_cursor_captured(&self, captured: bool) {
+        self.cursor_captured.set(captured);
+    }
+
+    /// Whether the cursor is captured
+    pub fn cursor_captured(&self) -> bool {
+        self.cursor_captured.get()
     }
 
     /// Close the app after this frame

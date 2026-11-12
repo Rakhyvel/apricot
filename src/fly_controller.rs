@@ -7,7 +7,7 @@ use crate::{
 use nalgebra_glm::Vec3;
 
 /// A free-flying controller. Move the mouse to turn, WASD to fly,
-/// Space and Shift to rise and sink, Ctrl to go faster. Works best with `AppConfig::mouse_warp` on.
+/// Space and Shift to rise and sink, Ctrl to go faster. Works best with the cursor captured.
 #[derive(Debug, Clone)]
 pub struct FlyController {
     pub position: Vec3,

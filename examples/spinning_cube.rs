@@ -3,6 +3,7 @@
 //! Space - go up
 //! Shift - go down
 //! Ctrl  - go faster
+//! Tab   - free the cursor
 //! P     - pause spinning
 //! Esc   - quit
 //! Move the mouse to look around
@@ -24,7 +25,7 @@ fn main() -> Result<(), Error> {
     run(
         AppConfig {
             title: "Spinning Cube",
-            mouse_warp: true, // capture the mouse for the fly camera
+            cursor_captured: true, // for the fly camera
             ..Default::default()
         },
         SpinningCube::new,
@@ -63,7 +64,12 @@ impl SpinningCube {
 
 impl Scene for SpinningCube {
     fn update(&mut self, app: &App) {
-        self.fly.update(app);
+        if app.key_pressed(Scancode::Tab) {
+            app.set_cursor_captured(!app.cursor_captured());
+        }
+        if app.cursor_captured() {
+            self.fly.update(app); // the cursor's free for clicking menus otherwise
+        }
         app.renderer.set_camera(self.fly.camera());
 
         if app.key_pressed(Scancode::P) {
@@ -82,7 +88,7 @@ impl Scene for SpinningCube {
             &vec3(0.3, 1.0, 0.2).normalize(),
         );
         let floor = nalgebra_glm::scale(
-            &nalgebra_glm::translate(&nalgebra_glm::identity(), &vec3(0.0, -0.5, 0.0)),
+            &nalgebra_glm::translate(&nalgebra_glm::identity(), &vec3(0.0, -1.5, 0.0)),
             &vec3(10.0, 1.0, 10.0),
         );
 

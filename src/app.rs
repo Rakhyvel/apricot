@@ -268,6 +268,15 @@ impl App {
         self.click_consumed.set(true);
     }
 
+    /// Whether there's an unconsumed left click this tick, consuming it if there is.
+    pub fn take_click(&self) -> bool {
+        let clicked = self.mouse_left_clicked && !self.is_click_consumed();
+        if clicked {
+            self.consume_click();
+        }
+        clicked
+    }
+
     /// Returns true if the current left click for this tick has been consumed
     pub fn is_click_consumed(&self) -> bool {
         self.click_consumed.get()

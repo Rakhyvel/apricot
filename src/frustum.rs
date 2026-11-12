@@ -52,28 +52,20 @@ impl Frustum {
             nalgebra_glm::vec4(-1.0, 1.0, 0.9999999, 1.0), // far-top-left
             nalgebra_glm::vec4(1.0, 1.0, 0.9999999, 1.0), // far-top-right
         ];
-        let corners_w: Vec<nalgebra_glm::Vec4> = clip_space_corners
-            .iter()
-            .map(|&corner| inv_proj_view * corner)
-            .collect();
-        // Divide by w
-        let corners: Vec<nalgebra_glm::Vec3> = corners_w
-            .iter()
-            .map(|&corner| corner.xyz() / corner.w) // Convert from Vec4 to Vec3
-            .collect();
-        Self::from_corners(corners.try_into().unwrap())
+        let corners = clip_space_corners.map(|corner| {
+            let c = inv_proj_view * corner;
+            c.xyz() / c.w
+        });
+        Self::from_corners(corners)
     }
 
     /// Transform a frustum by a Mat4
     pub fn transform(&self, matrix: nalgebra_glm::Mat4) -> Self {
-        let new_corners_w: Vec<nalgebra_glm::Vec4> = self
-            .corners
-            .iter()
-            .map(|c| matrix * nalgebra_glm::vec4(c.x, c.y, c.z, 1.0))
-            .collect();
-        let new_corners: Vec<nalgebra_glm::Vec3> =
-            new_corners_w.iter().map(|&c| c.xyz() / c.w).collect();
-        Self::from_corners(new_corners.try_into().unwrap())
+        let new_corners = self.corners.map(|c| {
+            let c = matrix * nalgebra_glm::vec4(c.x, c.y, c.z, 1.0);
+            c.xyz() / c.w
+        });
+        Self::from_corners(new_corners)
     }
 
     /// Get a frustum's planes

@@ -1,6 +1,7 @@
 //! This module contains OpenGL objects.
 
 use std::{
+    cell::Cell,
     ffi::{CStr, CString},
     marker::PhantomData,
     path::Path,
@@ -440,6 +441,8 @@ impl Uniform {
 #[derive(Default)]
 pub struct Texture {
     pub id: GLuint,
+    width: Cell<i32>,
+    height: Cell<i32>,
 }
 
 impl Texture {
@@ -448,7 +451,11 @@ impl Texture {
         let mut id: GLuint = 0;
         unsafe { gl::GenTextures(1, &mut id) }
         print_any_errors();
-        Self { id }
+        Self {
+            id,
+            width: Cell::new(0),
+            height: Cell::new(0),
+        }
     }
 
     /// Create an OpenGL texture from a PNG
@@ -474,6 +481,7 @@ impl Texture {
 
             let width = surface.width() as i32;
             let height = surface.height() as i32;
+            texture.set_size(width, height);
 
             gl::TexImage2D(
                 gl::TEXTURE_2D,
@@ -517,9 +525,36 @@ impl Texture {
         print_any_errors();
     }
 
+    /// Fill the texture with tightly packed RGBA bytes, `width * height * 4` of them. Updating a
+    /// texture without changing its size is cheap
     pub fn set_pixels(&self, width: i32, height: i32, data: &[u8]) {
+        assert_eq!(
+            data.len(),
+            (width * height * 4) as usize,
+            "expected {width}x{height} RGBA pixels"
+        );
         self.bind();
 
+        if self.get_dimensions() == Some((width, height)) {
+            // Same size, so just overwrite the pixels instead of reallocating
+            unsafe {
+                gl::TexSubImage2D(
+                    gl::TEXTURE_2D,
+                    0,
+                    0,
+                    0,
+                    width,
+                    height,
+                    gl::RGBA,
+                    gl::UNSIGNED_BYTE,
+                    data.as_ptr() as *const _,
+                );
+            }
+            print_any_errors();
+            return;
+        }
+
+        self.set_size(width, height);
         unsafe {
             gl::TexParameteri(
                 gl::TEXTURE_2D,
@@ -538,7 +573,6 @@ impl Texture {
             gl::TexParameteri(gl::TEXTURE_2D, gl::TEXTURE_MAG_FILTER, gl::NEAREST as GLint);
             print_any_errors();
 
-            // TODO: This re-allocates each time, replace with TexSubImage2D
             gl::TexImage2D(
                 gl::TEXTURE_2D,
                 0,
@@ -570,6 +604,7 @@ impl Texture {
     /// Load this texture as a depth buffer
     pub fn load_depth_buffer(&self, width: i32, height: i32) {
         self.bind();
+        self.set_size(width, height);
 
         unsafe {
             gl::TexImage2D(
@@ -664,27 +699,15 @@ impl Texture {
         print_any_errors();
     }
 
-    /// Retrieve the width and height of this texture
+    /// The width and height of this texture, or `None` if it has no pixels yet
     pub fn get_dimensions(&self) -> Option<(i32, i32)> {
-        let mut width: GLint = 0;
-        let mut height: GLint = 0;
+        let (width, height) = (self.width.get(), self.height.get());
+        (width > 0 && height > 0).then_some((width, height))
+    }
 
-        unsafe {
-            gl::BindTexture(gl::TEXTURE_2D, self.id);
-            print_any_errors();
-            gl::GetTexLevelParameteriv(gl::TEXTURE_2D, 0, gl::TEXTURE_WIDTH, &mut width);
-            print_any_errors();
-            gl::GetTexLevelParameteriv(gl::TEXTURE_2D, 0, gl::TEXTURE_HEIGHT, &mut height);
-            print_any_errors();
-            gl::BindTexture(gl::TEXTURE_2D, 0);
-            print_any_errors();
-        }
-
-        if width > 0 && height > 0 {
-            Some((width, height))
-        } else {
-            None
-        }
+    fn set_size(&self, width: i32, height: i32) {
+        self.width.set(width);
+        self.height.set(height);
     }
 }
 

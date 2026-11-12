@@ -410,26 +410,18 @@ impl RenderContext {
         self.texture_manager.borrow().get_id_from_name(name)
     }
 
+    /// Make a texture from tightly packed RGBA bytes, `w * h * 4` of them
     pub fn create_texture_rgba(&self, w: u32, h: u32, bytes: &[u8]) -> TextureId {
-        debug_assert_eq!(
-            bytes.len(),
-            (w * h * 4) as usize,
-            "rgba buffer size mismatch"
-        );
         let texture = Texture::new();
         texture.set_pixels(w as i32, h as i32, bytes);
         self.add_texture(texture, None)
     }
 
+    /// Replace a texture's pixels. Cheap to call every frame as long as the size stays the same
     pub fn update_texture_rgba(&self, id: TextureId, w: u32, h: u32, bytes: &[u8]) {
-        debug_assert_eq!(
-            bytes.len(),
-            (w * h * 4) as usize,
-            "rgba buffer size mismatch"
-        );
-        if let Some(texture) = self.get_texture_from_id(id) {
-            texture.set_pixels(w as i32, h as i32, bytes);
-        }
+        self.get_texture_from_id(id)
+            .expect("invalid TextureId")
+            .set_pixels(w as i32, h as i32, bytes);
     }
 
     pub fn get_program_id_from_name(&self, name: &'static str) -> Option<ProgramId> {

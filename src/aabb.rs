@@ -157,10 +157,12 @@ impl AABB {
         0.5 * (bottom_left + top_right)
     }
 
-    /// Transforms the min and max points of an AABB by a Mat4
-    pub fn transform(&mut self, matrix: nalgebra_glm::Mat4) {
-        self.min = (matrix * nalgebra_glm::vec4(self.min.x, self.min.y, self.min.z, 1.0)).xyz();
-        self.max = (matrix * nalgebra_glm::vec4(self.max.x, self.max.y, self.max.z, 1.0)).xyz();
+    /// The smallest AABB that fits this one after it's been moved, scaled, or rotated by `matrix`
+    pub fn transformed(&self, matrix: &nalgebra_glm::Mat4) -> Self {
+        AABB::from_points(
+            self.corners()
+                .map(|c| (matrix * nalgebra_glm::vec4(c.x, c.y, c.z, 1.0)).xyz()),
+        )
     }
 
     /// Determines whether two AABBs intersect
@@ -245,5 +247,26 @@ impl AABB {
 impl Default for AABB {
     fn default() -> Self {
         Self::new()
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn transformed_fits_a_rotated_box() {
+        let unit = AABB::from_min_max(
+            nalgebra_glm::vec3(-0.5, -0.5, -0.5),
+            nalgebra_glm::vec3(0.5, 0.5, 0.5),
+        );
+        let rotated = nalgebra_glm::rotate_y(&nalgebra_glm::identity(), std::f32::consts::FRAC_PI_4);
+        let fitted = unit.transformed(&rotated);
+
+        // Turned 45 degrees, the corners poke out to half the diagonal
+        let half_diagonal = 0.5 * 2.0f32.sqrt();
+        assert!((fitted.max.x - half_diagonal).abs() < 1e-5);
+        assert!((fitted.min.z + half_diagonal).abs() < 1e-5);
+        assert!((fitted.max.y - 0.5).abs() < 1e-5);
     }
 }

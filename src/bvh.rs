@@ -5,7 +5,7 @@ use rand::{rngs::StdRng, Rng, SeedableRng};
 
 use super::{aabb::AABB, frustum::Frustum, ray::Ray, sphere::Sphere};
 
-/// A Bounding Volume Hierarchy implementation. I'd recommend using BVH<Entity> if using hecs, for faster iteration.
+/// A Bounding Volume Hierarchy implementation. For drawing models, `ModelSet` manages one for you
 pub struct BVH<Object: Copy + Clone> {
     nodes: Vec<BVHNode<Object>>,
     root_id: BVHNodeId,

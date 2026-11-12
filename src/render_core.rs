@@ -115,17 +115,6 @@ pub struct TextureId(usize);
 #[derive(Copy, Clone, Debug)]
 pub struct ProgramId(usize);
 
-/// An actual model, with geometry, a position, scale, rotation, and texture.
-pub struct ModelComponent {
-    pub mesh_id: MeshId,
-    pub texture_id: TextureId,
-    position: nalgebra_glm::Vec3,
-    scale: nalgebra_glm::Vec3,
-    model_matrix: nalgebra_glm::Mat4,
-    pub shown: bool,
-    pub outlined: bool,
-}
-
 pub struct LinePathComponent {
     pub vao: Vao,
     pub vertices_buffer: Buffer<f32>,
@@ -460,16 +449,6 @@ impl RenderContext {
             .aabb
     }
 
-    pub fn get_model_aabb(&self, model: &ModelComponent) -> AABB {
-        self.mesh_manager
-            .borrow()
-            .get_from_id(model.mesh_id)
-            .expect("invalid MeshId")
-            .aabb
-            .scale(model.scale)
-            .translate(model.position)
-    }
-
     pub fn get_current_program_id(&self) -> u32 {
         match *self.program.borrow() {
             Some(id) => self
@@ -750,68 +729,6 @@ impl OpaqueId for ProgramId {
 
     fn as_usize(&self) -> usize {
         self.0
-    }
-}
-
-impl ModelComponent {
-    pub fn new(
-        mesh_id: MeshId,
-        texture_id: TextureId,
-        position: nalgebra_glm::Vec3,
-        scale: nalgebra_glm::Vec3,
-    ) -> Self {
-        Self {
-            mesh_id,
-            texture_id,
-            position,
-            scale,
-            model_matrix: Self::construct_model_matrix(&position, &scale),
-            shown: true,
-            outlined: false,
-        }
-    }
-
-    pub fn set_position(&mut self, position: nalgebra_glm::Vec3) {
-        self.position = position;
-        self.regen_model_matrix();
-    }
-
-    pub fn get_position(&self) -> nalgebra_glm::Vec3 {
-        self.position
-    }
-
-    pub fn set_scale(&mut self, scale: nalgebra_glm::Vec3) {
-        self.scale = scale;
-        self.regen_model_matrix();
-    }
-
-    pub fn get_scale(&self) -> nalgebra_glm::Vec3 {
-        self.scale
-    }
-
-    pub fn get_model_matrix(&self) -> nalgebra_glm::Mat4 {
-        self.model_matrix
-    }
-
-    pub fn get_model_matrix_with_position(&self, position: Vec3) -> Mat4 {
-        nalgebra_glm::scale(
-            &nalgebra_glm::translate(&nalgebra_glm::one(), &position),
-            &self.scale,
-        )
-    }
-
-    fn regen_model_matrix(&mut self) {
-        self.model_matrix = Self::construct_model_matrix(&self.position, &self.scale);
-    }
-
-    fn construct_model_matrix(
-        position: &nalgebra_glm::Vec3,
-        scale: &nalgebra_glm::Vec3,
-    ) -> nalgebra_glm::Mat4 {
-        nalgebra_glm::scale(
-            &nalgebra_glm::translate(&nalgebra_glm::one(), position),
-            scale,
-        )
     }
 }
 

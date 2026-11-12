@@ -1,14 +1,12 @@
-use hecs::{Entity, World};
 use nalgebra_glm::{vec3, vec4, Mat4, Vec3};
 
 use crate::{camera::ProjectionKind, error::Error, render_core::MeshId};
 
 use super::{
-    bvh::BVH,
     camera::Camera,
     frustum::Frustum,
     opengl::{Fbo, Texture},
-    render_core::{ModelComponent, RenderContext},
+    render_core::RenderContext,
 };
 
 pub struct DirectionalLightSource {
@@ -146,6 +144,14 @@ impl ShadowPass<'_> {
         self.renderer
             .draw(&mesh, model, self.light_view, self.light_proj)
     }
+
+    /// Everything the light can see. Anything outside it can't cast a shadow
+    pub fn frustum(&self) -> Frustum {
+        Frustum::from_inv_proj_view(
+            nalgebra_glm::inverse(&(self.light_proj * self.light_view)),
+            false,
+        )
+    }
 }
 
 impl RenderContext {
@@ -192,25 +198,5 @@ impl RenderContext {
     /// Stop lighting `draw_mesh` with the last shaddow pass's light
     pub fn clear_light(&self) {
         self.active_light.set(None);
-    }
-
-    pub fn directional_light_system(
-        &self,
-        light: &mut DirectionalLightSource,
-        world: &mut World,
-        bvh: &BVH<Entity>,
-    ) {
-        self.shadow_pass(light, |pass| {
-            let light_frustum = Frustum::from_inv_proj_view(
-                nalgebra_glm::inverse(&(pass.light_proj * pass.light_view)),
-                false,
-            );
-            for id in bvh.iter_frustum(&light_frustum, false) {
-                let model = world
-                    .get::<&ModelComponent>(id)
-                    .expect("entity in the BVH has no ModuleComponent");
-                pass.draw(model.mesh_id, model.get_model_matrix());
-            }
-        });
     }
 }

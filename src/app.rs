@@ -101,6 +101,7 @@ pub fn run<S: Scene + 'static>(cfg: AppConfig, init: impl FnOnce(&App) -> S) -> 
     gl_attr.set_multisample_buffers(1);
     gl_attr.set_multisample_samples(4);
     gl_attr.set_depth_size(24);
+    gl_attr.set_stencil_size(8); // for model outlines
 
     let window = video_subsystem
         .window(

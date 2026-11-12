@@ -12,7 +12,6 @@ sdl2 = { version = "0.34.5", features = [
 ], default-features = false }
 gl = "*"
 nalgebra-glm = "*"
-hecs = "0.10.5"
 karta = { git = "https://github.com/Rakhyvel/Karta.git" }
 
 # For reading in textures

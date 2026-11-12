@@ -1,11 +1,9 @@
 //! This module implements chunked loading of infinite terrain
 
-use hecs::{Entity, World};
-
 use super::{
-    bvh::BVH,
+    model_set::{Model, ModelSet},
     perlin::{HeightMap, PerlinMap},
-    render_core::{ModelComponent, RenderContext, TextureId},
+    render_core::{RenderContext, TextureId},
 };
 
 #[derive(Default)]
@@ -26,6 +24,7 @@ pub struct Chunk {
 /// A chunked perlin noise map, which allows for infinite chunks to be loaded
 pub struct ChunkedPerlinMap {
     chunks: Vec<Chunk>,
+    models: ModelSet<usize>,
     map_width: usize,
     chunk_width: usize,
 
@@ -55,46 +54,35 @@ impl Chunk {
         }
     }
 
-    /// Generate a new chunk, textured with `texture`
-    pub fn generate(
-        &mut self,
-        renderer: &RenderContext,
-        texture: TextureId,
-        world: &mut World,
-        bvh: &mut BVH<Entity>,
-    ) {
-        if !self.generated {
-            self.map.generate(
-                self.level_of_detail,
-                10,
-                self.seed,
-                self.amplitude,
-                self.pos,
-            );
-            self.hydration
-                .generate(self.level_of_detail, 2, self.seed, self.amplitude, self.pos);
-
-            self.map.create_bulge();
-            self.map.create_shelf(0.6, 0.4);
-
-            // self.map.erode(64, rand::Rng::gen(&mut rng));
-
-            let pos_with_z = nalgebra_glm::vec3(self.pos.x, self.pos.y, 0.0);
-            let (i, v, n, u) = self.create_mesh();
-            let grass_mesh = renderer.add_mesh_from_verts(i, vec![&v, &n, &u], None);
-            let chunk_entity = world.spawn((ModelComponent::new(
-                grass_mesh,
-                texture,
-                pos_with_z,
-                nalgebra_glm::vec3(1.0, 1.0, 1.0),
-            ),));
-            bvh.insert(
-                chunk_entity,
-                renderer.get_mesh_aabb(grass_mesh).translate(pos_with_z),
-            );
-
-            self.generated = true;
+    /// Generate the chunk's terrain the first time it's called, giving back its model
+    pub fn generate(&mut self, renderer: &RenderContext, texture: TextureId) -> Option<Model> {
+        if self.generated {
+            return None;
         }
+        self.map.generate(
+            self.level_of_detail,
+            10,
+            self.seed,
+            self.amplitude,
+            self.pos,
+        );
+        self.hydration
+            .generate(self.level_of_detail, 2, self.seed, self.amplitude, self.pos);
+
+        self.map.create_bulge();
+        self.map.create_shelf(0.6, 0.4);
+
+        // self.map.erode(64, rand::Rng::gen(&mut rng));
+
+        let pos_with_z = nalgebra_glm::vec3(self.pos.x, self.pos.y, 0.0);
+        let (i, v, n, u) = self.create_mesh();
+        let grass_mesh = renderer.add_mesh_from_verts(i, vec![&v, &n, &u], None);
+        self.generated = true;
+        Some(Model::new(
+            grass_mesh,
+            texture,
+            nalgebra_glm::translation(&pos_with_z),
+        ))
     }
 
     fn pos(&self) -> nalgebra_glm::Vec2 {
@@ -234,6 +222,7 @@ impl ChunkedPerlinMap {
             Self::generate_chunks(map_width, chunk_width, level_of_detail, seed, amplitude);
         Self {
             chunks,
+            models: ModelSet::new(),
             map_width,
             chunk_width,
             level_of_detail,
@@ -242,23 +231,27 @@ impl ChunkedPerlinMap {
         }
     }
 
-    /// Check the surrounding chunks to see if they need to be generated
+    /// Generate any chunks around `p` that haven't been yet, textured with `texture`
     pub fn check_chunks(
         &mut self,
         renderer: &RenderContext,
         texture: TextureId,
         p: nalgebra_glm::Vec2,
-        world: &mut World,
-        bvh: &mut BVH<Entity>,
     ) {
         for y in -3..4 {
             for x in -3..4 {
                 let chunk_offset = nalgebra_glm::vec2(x as f32, y as f32);
-                let chunk_pos = chunk_offset * (self.chunk_width as f32) + p;
-                let chunk = self.chunk_at_mut(chunk_pos);
-                chunk.generate(renderer, texture, world, bvh);
+                let index = self.chunk_index(chunk_offset * (self.chunk_width as f32) + p);
+                if let Some(model) = self.chunks[index].generate(renderer, texture) {
+                    self.models.insert(renderer, index, model);
+                }
             }
         }
+    }
+
+    /// The generated chunks' models, keyed by chunk index. Draw these to see the terrain
+    pub fn models(&self) -> &ModelSet<usize> {
+        &self.models
     }
 
     /// Get the height of the map at a position _without_ storing the chunk
@@ -294,15 +287,13 @@ impl ChunkedPerlinMap {
     }
 
     fn chunk_at(&self, p: nalgebra_glm::Vec2) -> &Chunk {
-        let side_chunks = self.map_width / self.chunk_width;
-        let chunk_p = p / self.chunk_width as f32;
-        &self.chunks[chunk_p.y as usize * side_chunks + chunk_p.x as usize]
+        &self.chunks[self.chunk_index(p)]
     }
 
-    fn chunk_at_mut(&mut self, p: nalgebra_glm::Vec2) -> &mut Chunk {
+    fn chunk_index(&self, p: nalgebra_glm::Vec2) -> usize {
         let side_chunks = self.map_width / self.chunk_width;
         let chunk_p = p / self.chunk_width as f32;
-        &mut self.chunks[chunk_p.y as usize * side_chunks + chunk_p.x as usize]
+        chunk_p.y as usize * side_chunks + chunk_p.x as usize
     }
 }
 

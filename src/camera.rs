@@ -110,6 +110,18 @@ impl Camera {
         Frustum::from_inv_proj_view(self.inv_proj_view(aspect), false)
     }
 
+    /// Roughly how many pixels across the radius of a sphere at `center` looks on a screen
+    /// `viewport_height` pixels tall.
+    pub fn projected_radius_px(&self, center: Vec3, radius: f32, viewport_height: f32) -> f32 {
+        let half_view_height = match self.projection_kind {
+            ProjectionKind::Perspective { fov_rad, .. } => {
+                (fov_rad / 2.0).tan() * nalgebra_glm::distance(&self.position, &center)
+            }
+            ProjectionKind::Orthographic { bottom, top, .. } => (top - bottom) / 2.0,
+        };
+        radius / half_view_height * viewport_height / 2.0
+    }
+
     /// A ray from the camera through pixel (`x`, `y`) of a `width` by `height` image
     pub fn get_ray(&self, x: f32, y: f32, width: f32, height: f32) -> Ray {
         let (lower_left_corner, horizontal, vertical) = match self.projection_kind {
@@ -212,6 +224,22 @@ impl FloatingOrigin {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn projected_radius_fills_the_screen_at_the_view_edge() {
+        let camera = Camera::new(
+            Vec3::zeros(),
+            nalgebra_glm::vec3(0.0, 0.0, -1.0),
+            nalgebra_glm::vec3(0.0, 1.0, 0.0),
+            ProjectionKind::Perspective {
+                fov_rad: std::f32::consts::FRAC_PI_2,
+                far: 100.0,
+            },
+        );
+        // With a 90 degree view, a radius-10 sphere 10 away spans the whole screen height
+        let px = camera.projected_radius_px(nalgebra_glm::vec3(0.0, 0.0, -10.0), 10.0, 600.0);
+        assert!((px - 300.0).abs() < 1e-3);
+    }
 
     #[test]
     fn floating_origin_keeps_precision_far_away() {

@@ -285,6 +285,14 @@ impl RenderContext {
         self.camera.borrow().frustum(self.aspect_ratio())
     }
 
+    /// Roughly how many pixels across the radius of a sphere at `center` looks on screen
+    pub fn projected_radius_px(&self, center: Vec3, radius: f32) -> f32 {
+        let height = self.int_screen_resolution.y as f32;
+        self.camera
+            .borrow()
+            .projected_radius_px(center, radius, height)
+    }
+
     /// Where a world-space point lands on screen, in pixels. `None` if it's behind the camera
     pub fn world_to_screen(&self, p: Vec3) -> Option<Vec2> {
         let (view, proj) = self.camera_view_proj();

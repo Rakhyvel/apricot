@@ -99,6 +99,48 @@ impl MeshData {
         }
     }
 
+    /// Regular polygon with radius 1 in the XY plane, first vertex on +X
+    pub fn ngon(sides: u32) -> Self {
+        let mut positions = vec![0.0, 0.0, 0.0]; // the center
+        let mut indices = Vec::new();
+        for i in 0..sides {
+            let a = i as f32 / sides as f32 * std::f32::consts::TAU;
+            positions.extend_from_slice(&[a.cos(), a.sin(), 0.0]);
+            indices.extend_from_slice(&[0, 1 + i, 1 + (i + 1) % sides]);
+        }
+        let n = positions.len() / 3;
+        Self {
+            positions,
+            normals: [0.0, 0.0, 1.0].repeat(n),
+            uvs: vec![0.0; n * 3],
+            indices,
+        }
+    }
+
+    /// Outline of a regular polygon, outer radius 1, inner radius `inner` (0..1)
+    pub fn ngon_ring(sides: u32, inner: f32) -> Self {
+        let mut positions = Vec::new();
+        let mut indices = Vec::new();
+        for i in 0..sides {
+            let a = i as f32 / sides as f32 * std::f32::consts::TAU;
+            let (c, s) = (a.cos(), a.sin());
+            positions.extend_from_slice(&[c, s, 0.0]); // outer, index 2i
+            positions.extend_from_slice(&[c * inner, s * inner, 0.0]); // inner, index 2i+1
+        }
+        for i in 0..sides {
+            let j = (i + 1) % sides;
+            let (o0, i0, o1, i1) = (2 * i, 2 * i + 1, 2 * j, 2 * j + 1);
+            indices.extend_from_slice(&[o0, o1, i0, i0, o1, i1]);
+        }
+        let n = positions.len() / 3;
+        Self {
+            positions,
+            normals: [0.0, 0.0, 1.0].repeat(n),
+            uvs: vec![0.0; n * 3],
+            indices,
+        }
+    }
+
     pub fn vertex_count(&self) -> usize {
         self.positions.len() / 3
     }

@@ -1,4 +1,4 @@
-//! A basic hello-world program showing off a spinning cube.
+//! A basic hello-world program showing off a spinning 3D cube.
 //! Run with `cargo run --example spinning_cube`.
 
 use std::f32::consts::FRAC_PI_4;
@@ -50,7 +50,7 @@ impl SpinningCube {
 
 impl Scene for SpinningCube {
     fn update(&mut self, app: &App) {
-        self.angle += 0.1 * app.dt.as_secs_f32();
+        self.angle += app.dt.as_secs_f32();
     }
 
     fn render(&mut self, app: &App) {

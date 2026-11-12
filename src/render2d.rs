@@ -2,7 +2,10 @@ use std::borrow::Borrow;
 
 use nalgebra_glm::{vec2, vec3, vec4, Mat4, Vec2, Vec4};
 
-use crate::render_core::MeshId;
+use crate::{
+    mesh_data::MeshData,
+    render_core::{Mesh, MeshId},
+};
 
 use super::{
     rectangle::Rectangle,
@@ -289,6 +292,17 @@ impl RenderContext {
         rotation: f32,
         color: Vec4,
     ) {
+        self.queue_polygon(mesh_id, center, radius, rotation, color);
+    }
+
+    fn queue_polygon(
+        &self,
+        mesh_id: MeshId,
+        center: Vec2,
+        radius: f32,
+        rotation: f32,
+        color: Vec4,
+    ) {
         self.draw_queue.borrow_mut().push((
             self.current_draw_layer.get(),
             DrawCommand::FillPolygon {
@@ -300,6 +314,37 @@ impl RenderContext {
                 scissor: self.scissor.get(),
             },
         ));
+    }
+
+    /// Filled regular polygon. `rotation` 0 puts the first vertex at +X.
+    pub fn draw_poly(&self, center: Vec2, sides: u32, radius: f32, rotation: f32, color: Vec4) {
+        self.queue_polygon(self.poly_mesh(sides, 0.0), center, radius, rotation, color);
+    }
+
+    /// Draws the outline of a polygon. `thickness` grows inward from `radius`
+    pub fn draw_poly_lines(
+        &self,
+        center: Vec2,
+        sides: u32,
+        radius: f32,
+        rotation: f32,
+        thickness: f32,
+        color: Vec4,
+    ) {
+        let inner = ((radius - thickness) / radius).max(0.0);
+        self.queue_polygon(
+            self.poly_mesh(sides, inner),
+            center,
+            radius,
+            rotation,
+            color,
+        );
+    }
+
+    /// Circular ring between two radii
+    pub fn draw_ring(&self, center: Vec2, inner_radius: f32, outer_radius: f32, color: Vec4) {
+        let inner = (inner_radius / outer_radius).clamp(0.0, 1.0);
+        self.queue_polygon(self.poly_mesh(64, inner), center, outer_radius, 0.0, color);
     }
 
     fn fill_rect_immediate(&self, dest: Rectangle, color: Vec4) {
@@ -475,5 +520,21 @@ impl RenderContext {
             },
             color,
         );
+    }
+
+    fn poly_mesh(&self, sides: u32, inner: f32) -> MeshId {
+        let sides = sides.max(3);
+        let inner_key = (inner.clamp(0.0, 1.0) * 1024.0).round() as u32;
+        if let Some(&id) = self.poly_meshes.borrow().get(&(sides, inner_key)) {
+            return id;
+        }
+        let data = if inner_key == 0 {
+            MeshData::ngon(sides)
+        } else {
+            MeshData::ngon_ring(sides, inner_key as f32 / 1024.0)
+        };
+        let id = self.add_mesh(Mesh::from_data(&data), None);
+        self.poly_meshes.borrow_mut().insert((sides, inner_key), id);
+        id
     }
 }

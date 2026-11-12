@@ -63,6 +63,7 @@ pub struct RenderContext {
     texture_manager: RefCell<ResourceManager<Texture, TextureId>>,
     program_manager: RefCell<ResourceManager<Program, ProgramId>>,
     font_manager: RefCell<FontManager>,
+    pub(crate) poly_meshes: RefCell<HashMap<(u32, u32), MeshId>>,
 
     // Queues
     deletion_queue: RefCell<DeletionQueue>,
@@ -214,6 +215,7 @@ impl RenderContext {
             texture_manager: RefCell::new(textures),
             program_manager: RefCell::new(programs),
             font_manager: RefCell::new(FontManager::new()?),
+            poly_meshes: RefCell::new(HashMap::new()),
 
             deletion_queue: RefCell::new(DeletionQueue::new()),
             draw_queue: RefCell::new(Vec::new()),

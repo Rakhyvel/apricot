@@ -542,15 +542,26 @@ impl RenderContext {
         }
     }
 
-    /// Draw `mesh_id` with the built-in 3D shader from the current camera, tinted `color`.
+    /// Draw `mesh_id` with the built-in 3D shader from the current camera, in a solid `color`
     pub fn draw_mesh(&self, mesh_id: MeshId, model: Mat4, color: Vec4) {
+        self.draw_mesh_textured(mesh_id, self.builtins.white_texture, model, color);
+    }
+
+    /// Draw `mesh_id` with a texture, tinted by `tint`. A white tint leaves the texture as is
+    pub fn draw_mesh_textured(
+        &self,
+        mesh_id: MeshId,
+        texture_id: TextureId,
+        model: Mat4,
+        tint: Vec4,
+    ) {
         unsafe {
             gl::Enable(gl::DEPTH_TEST); // the 2D pass turns this off
             gl::Enable(gl::CULL_FACE);
             gl::CullFace(gl::BACK);
         }
         self.set_program_from_id(self.builtins.program_3d);
-        self.get_program_uniform("u_color").set_vec4(&color);
+        self.get_program_uniform("u_color").set_vec4(&tint);
         self.get_program_uniform("shadow_map").set_i32(1);
 
         match self.active_light.get() {
@@ -576,11 +587,11 @@ impl RenderContext {
             }
         }
 
-        let white = self
-            .get_texture_from_id(self.builtins.white_texture)
-            .expect("builtin white texture missing");
-        white.activate(gl::TEXTURE0);
-        white.associate_uniform(self.get_current_program_id(), 0, "texture0");
+        let texture = self
+            .get_texture_from_id(texture_id)
+            .expect("invalid TextureId");
+        texture.activate(gl::TEXTURE0);
+        texture.associate_uniform(self.get_current_program_id(), 0, "texture0");
 
         let (view, proj) = self.camera_view_proj();
         let mesh = self.get_mesh_from_id(mesh_id).expect("invalid MeshId");

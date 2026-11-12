@@ -7,6 +7,7 @@ use apricot::{
     app::{run, App, AppConfig, Scene},
     camera::{Camera, ProjectionKind},
     error::Error,
+    render_core::TextureId,
     shadow_map::DirectionalLightSource,
 };
 use nalgebra_glm::{vec2, vec3, vec4};
@@ -24,6 +25,7 @@ fn main() -> Result<(), Error> {
 struct SpinningCube {
     angle: f32,
     light: DirectionalLightSource,
+    checker: TextureId,
 }
 
 impl SpinningCube {
@@ -43,6 +45,7 @@ impl SpinningCube {
         Self {
             angle: 0.0,
             light: DirectionalLightSource::new(vec3(0.5, 1.0, 0.3), 2048).unwrap(),
+            checker: renderer.create_texture_rgba(10, 10, &checkerboard(10)),
         }
     }
 }
@@ -72,7 +75,12 @@ impl Scene for SpinningCube {
         // Render the cube and floor
         renderer.clear(vec4(0.53, 0.81, 0.92, 1.0));
         renderer.draw_mesh(renderer.builtins.cube, cube, vec4(1.0, 0.6, 0.25, 1.0));
-        renderer.draw_mesh(renderer.builtins.plane, floor, vec4(1.0, 1.0, 1.0, 1.0));
+        renderer.draw_mesh_textured(
+            renderer.builtins.plane,
+            self.checker,
+            floor,
+            vec4(1.0, 1.0, 1.0, 1.0),
+        );
 
         renderer.draw_text(
             vec2(10.0, 10.0),
@@ -80,4 +88,17 @@ impl Scene for SpinningCube {
             vec4(0.3, 0.3, 0.3, 1.0),
         );
     }
+}
+
+/// An `n` by `n` light and dark checkerboard, as RGBA bytes
+fn checkerboard(n: u32) -> Vec<u8> {
+    (0..n * n)
+        .flat_map(|i| {
+            if (i % n + i / n) % 2 == 0 {
+                [235, 235, 235, 255]
+            } else {
+                [190, 190, 200, 255]
+            }
+        })
+        .collect()
 }

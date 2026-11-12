@@ -128,10 +128,6 @@ impl DirectionalLightSource {
             texel_size: self.texel_size,
         }
     }
-
-    pub(crate) fn texel_size(&self) -> f32 {
-        self.texel_size
-    }
 }
 
 /// Passed to the closure in `RenderContext::shadow_pass`. Meshes drawn through it cast shadows.

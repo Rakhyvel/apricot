@@ -8,99 +8,54 @@ use crate::{
 use super::{
     bvh::BVH,
     render_core::{ModelComponent, RenderContext},
-    shadow_map::DirectionalLightSource,
 };
 
 use hecs::{Entity, World};
 use nalgebra_glm::{vec4, Vec3, Vec4};
 
 impl RenderContext {
+    /// Draw every model in `bvh` that the camera can see, lit by the last shadow pass's light.
+    /// Entities with a `WorldPosition` are placed relative to `hp_camera`, if there is one
     pub fn render_3d_models_system(
         &self,
-        world: &mut World,
-        directional_light: &DirectionalLightSource,
+        world: &World,
         bvh: &BVH<Entity>,
         hp_camera: Option<&high_precision::Camera>,
         debug: bool,
     ) {
-        // Set to "3d" program (defined by user)
-        self.set_program_from_id(self.builtins.program_3d);
+        // Outlined models mark the stencil buffer for render_3d_outlines_system
+        unsafe { gl::StencilOp(gl::KEEP, gl::REPLACE, gl::REPLACE) };
 
-        self.get_program_uniform("u_color")
-            .set_vec4(&vec4(1.0, 1.0, 1.0, 1.0));
-        self.get_program_uniform("u_shadows").set_i32(1);
-        self.get_program_uniform("u_shadow_texel")
-            .set_f32(directional_light.texel_size());
-        self.get_program_uniform("u_sun_dir")
-            .set_vec3(&directional_light.light_dir);
-
-        // TODO: Not sure what goes here
-        unsafe {
-            gl::Viewport(
-                0,
-                0,
-                self.int_screen_resolution.borrow().x,
-                self.int_screen_resolution.borrow().y,
-            );
-            gl::Enable(gl::CULL_FACE);
-            gl::CullFace(gl::BACK);
-            gl::Enable(gl::DEPTH_TEST);
-            gl::StencilOp(gl::KEEP, gl::REPLACE, gl::REPLACE);
-        }
-
-        self.get_program_uniform("light_mvp")
-            .set_mat4(&directional_light.light_proj_view());
-
-        // Get the camera frustum, view matrix, and proj matrix
-        let camera_frustum = &self.camera_frustum();
-        let (view_matrix, proj_matrix) = self.camera_view_proj();
-
-        // Render each model in the BVH that's inside the frustum
-        for model_id in bvh.iter_frustum(camera_frustum, debug) {
+        for model_id in bvh.iter_frustum(&self.camera_frustum(), debug) {
             let model = world
-                .get::<&mut ModelComponent>(model_id)
-                .expect("entity in the BVH has no ModuleComponent");
-            let mesh = self
-                .get_mesh_from_id(model.mesh_id)
-                .expect("invalid MeshId");
-            let texture = self
-                .get_texture_from_id(model.texture_id)
-                .expect("invalid TextureId");
+                .get::<&ModelComponent>(model_id)
+                .expect("entity in the BVH has no ModelComponent");
 
-            // If a high precision camera and WorldPosition are both present, compute the model amtrix from
-            // the camera-relative f64 offset cast to f32.
-            // Otherwise, fallback to existing f32 model matrix
-            let model_matrix = match hp_camera {
-                Some(hp) => {
-                    if let Ok(wp) = world.get::<&WorldPosition>(model_id) {
-                        let relative_pos: Vec3 = nalgebra_glm::convert(wp.pos - hp.world_pos);
-                        model.get_model_matrix_with_position(relative_pos)
-                    } else {
-                        model.get_model_matrix()
-                    }
+            // Use the camera-relative f64 position when there is one, so far-away things don't jitter
+            let model_matrix = match (hp_camera, world.get::<&WorldPosition>(model_id)) {
+                (Some(hp), Ok(wp)) => {
+                    let relative_pos: Vec3 = nalgebra_glm::convert(wp.pos - hp.world_pos);
+                    model.get_model_matrix_with_position(relative_pos)
                 }
-                None => model.get_model_matrix(),
+                _ => model.get_model_matrix(),
             };
 
-            if model.outlined {
-                unsafe {
+            unsafe {
+                if model.outlined {
                     gl::StencilFunc(gl::ALWAYS, 1, 0xFF);
                     gl::StencilMask(0xFF);
-                }
-            } else {
-                unsafe {
+                } else {
                     gl::StencilMask(0x00);
                 }
             }
 
-            texture.activate(gl::TEXTURE0);
-            texture.associate_uniform(self.get_current_program_id(), 0, "texture0");
-
-            directional_light.activate_framebuffer(self.get_current_program_id());
-
-            self.draw(mesh.borrow(), model_matrix, view_matrix, proj_matrix);
+            self.draw_mesh_textured(
+                model.mesh_id,
+                model.texture_id,
+                model_matrix,
+                vec4(1.0, 1.0, 1.0, 1.0),
+            );
         }
-        // println!("{:?}", rendered);
     }
 
     pub fn render_3d_outlines_system(&self, world: &mut World, bvh: &BVH<Entity>, color: Vec4) {
@@ -119,7 +74,7 @@ impl RenderContext {
         for model_id in bvh.iter_frustum(camera_frustum, false) {
             let mut model = world
                 .get::<&mut ModelComponent>(model_id)
-                .expect("entity in the BVH has no ModuleComponent");
+                .expect("entity in the BVH has no ModelComponent");
             if !model.outlined {
                 continue;
             }

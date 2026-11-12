@@ -36,7 +36,8 @@ pub(crate) enum DrawCommand {
     },
     FillPolygon {
         center: Vec2,
-        radius: f32,
+        /// Half-size in pixels along the mesh's X and Y. For a polygon both are just its radius
+        scale: Vec2,
         mesh_id: MeshId,
         rotation: f32,
         color: Vec4,

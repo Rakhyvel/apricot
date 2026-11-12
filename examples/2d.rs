@@ -1,5 +1,5 @@
 //! Every 2D drawing function in a grid. Shapes that can rotate spin, and a few sizes pulse.
-//! Cells marked "(todo)" are planned functions that don't exist yet.
+//! Cells marked "(todo)" are for planned functions that don't exist yet, so put new ones there.
 //! Run with `cargo run --example 2d`.
 
 use std::f32::consts::TAU;
@@ -156,6 +156,7 @@ impl Scene for Shapes {
                             border: FRAME_BORDER as f32,
                         },
                         Rectangle::new(c.x - w / 2.0, c.y - size * 0.8, w, size * 1.6),
+                        white,
                     )
                 })),
             ),
@@ -184,9 +185,23 @@ impl Scene for Shapes {
                     );
                 })),
             ),
-            ("draw_line", None),
-            ("fill_circle", None),
-            ("draw_texture", None),
+            (
+                "draw_line",
+                Some(Box::new(|c| {
+                    // A spinning asterisk, one line per thickness
+                    for (k, thickness) in [2.0, 4.0, 8.0].into_iter().enumerate() {
+                        let a = spin * 0.5 + k as f32 * TAU / 6.0;
+                        let reach = vec2(a.cos(), a.sin()) * size;
+                        r.draw_line(c - reach, c + reach, thickness, pink);
+                    }
+                })),
+            ),
+            (
+                "fill_circle",
+                Some(Box::new(|c| {
+                    r.fill_circle(c, size * (0.4 + 0.6 * pulse), violet)
+                })),
+            ),
         ];
 
         r.clear(vec4(0.12, 0.12, 0.15, 1.0));

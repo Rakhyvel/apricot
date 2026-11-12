@@ -1,6 +1,6 @@
 use std::borrow::Borrow;
 
-use nalgebra_glm::{vec2, vec3, vec4, Mat4, Vec2, Vec4};
+use nalgebra_glm::{vec2, vec3, Mat4, Vec2, Vec4};
 
 use crate::{
     mesh_data::MeshData,
@@ -12,9 +12,29 @@ use super::{
     render_core::{DrawCommand, RenderContext, TextureId},
 };
 
+/// How many sides circles and rings get. Enough to look round at any reasonable size
+const CIRCLE_SIDES: u32 = 64;
+
+/// A texture that can stretch to any size without its edges getting blurry or squished
+#[derive(Clone, Copy)]
 pub struct NineSlice {
     pub texture: TextureId,
+    /// How wide the edges are, in texture pixels
     pub border: f32,
+}
+
+/// Cuts `outer` into a 3x3 grid with edges `border` wide. Goes left to right, top to bottom
+fn nine_slice_rects(outer: Rectangle, border: f32) -> [Rectangle; 9] {
+    let (x, y) = (outer.pos.x, outer.pos.y);
+    let (w, h) = (outer.size.x, outer.size.y);
+    let xs = [x, x + border, x + w - border];
+    let ys = [y, y + border, y + h - border];
+    let widths = [border, w - 2.0 * border, border];
+    let heights = [border, h - 2.0 * border, border];
+    std::array::from_fn(|i| {
+        let (col, row) = (i % 3, i / 3);
+        Rectangle::new(xs[col], ys[row], widths[col], heights[row])
+    })
 }
 
 impl RenderContext {
@@ -44,153 +64,25 @@ impl RenderContext {
         self.draw(&mesh, model, view, proj);
     }
 
-    pub fn render_nine_slice(&self, nine_slice: NineSlice, dest: Rectangle) {
-        // If `dest` is smaller than two borders, shrink the drawn corners to fit
-        let border = nine_slice
-            .border
-            .min(dest.size.x / 2.0)
-            .min(dest.size.y / 2.0);
-
-        let (nine_slice_width, nine_slice_height) = self
+    /// Draws a nine-slice texture stretched over `dest`. The corners stay their real size, the
+    /// edges stretch one way, and the middle stretches both ways. If `dest` is too small to fit
+    /// two borders, the corners shrink to fit
+    pub fn render_nine_slice(&self, nine_slice: NineSlice, dest: Rectangle, tint: Vec4) {
+        let (w, h) = self
             .get_texture_from_id(nine_slice.texture)
             .expect("invalid TextureId")
             .get_dimensions()
             .expect("texture has no dimensions");
+        let src = nine_slice_rects(Rectangle::new(0.0, 0.0, w as f32, h as f32), nine_slice.border);
 
-        // TODO: Clean this up!
-        // Coordinates for the texture destination
-        let spritesheet_coords = [
-            // top-left corner
-            Rectangle::new(0.0, 0.0, nine_slice.border, nine_slice.border),
-            // top edge
-            Rectangle::new(
-                nine_slice.border,
-                0.0,
-                nine_slice_width as f32 - 2.0 * nine_slice.border,
-                nine_slice.border,
-            ),
-            // top-right corner
-            Rectangle::new(
-                nine_slice_width as f32 - nine_slice.border,
-                0.0,
-                nine_slice.border,
-                nine_slice.border,
-            ),
-            // left edge
-            Rectangle::new(
-                0.0,
-                nine_slice.border,
-                nine_slice.border,
-                nine_slice_height as f32 - 2.0 * nine_slice.border,
-            ),
-            // center
-            Rectangle::new(
-                nine_slice.border,
-                nine_slice.border,
-                nine_slice_width as f32 - 2.0 * nine_slice.border,
-                nine_slice_height as f32 - 2.0 * nine_slice.border,
-            ),
-            // right edge
-            Rectangle::new(
-                nine_slice_width as f32 - nine_slice.border,
-                nine_slice.border,
-                nine_slice.border,
-                nine_slice_height as f32 - 2.0 * nine_slice.border,
-            ),
-            // bottom-left corner
-            Rectangle::new(
-                0.0,
-                nine_slice_height as f32 - nine_slice.border,
-                nine_slice.border,
-                nine_slice.border,
-            ),
-            // bottom edge
-            Rectangle::new(
-                nine_slice.border,
-                nine_slice_height as f32 - nine_slice.border,
-                nine_slice_width as f32 - 2.0 * nine_slice.border,
-                nine_slice.border,
-            ),
-            // bottom-right corner
-            Rectangle::new(
-                nine_slice_width as f32 - nine_slice.border,
-                nine_slice_height as f32 - nine_slice.border,
-                nine_slice.border,
-                nine_slice.border,
-            ),
-        ];
+        let border = nine_slice
+            .border
+            .min(dest.size.x / 2.0)
+            .min(dest.size.y / 2.0);
+        let dest = nine_slice_rects(dest, border);
 
-        let dest_coords = [
-            // top-left corner
-            Rectangle::new(dest.pos.x, dest.pos.y, border, border),
-            // top edge
-            Rectangle::new(
-                dest.pos.x + border,
-                dest.pos.y,
-                dest.size.x - 2.0 * border,
-                border,
-            ),
-            // top-right corner
-            Rectangle::new(
-                dest.pos.x + dest.size.x - border,
-                dest.pos.y,
-                border,
-                border,
-            ),
-            // left edge
-            Rectangle::new(
-                dest.pos.x,
-                dest.pos.y + border,
-                border,
-                dest.size.y - 2.0 * border,
-            ),
-            // center
-            Rectangle::new(
-                dest.pos.x + border,
-                dest.pos.y + border,
-                dest.size.x - 2.0 * border,
-                dest.size.y - 2.0 * border,
-            ),
-            // right edge
-            Rectangle::new(
-                dest.pos.x + dest.size.x - border,
-                dest.pos.y + border,
-                border,
-                dest.size.y - 2.0 * border,
-            ),
-            // bottom-left corner
-            Rectangle::new(
-                dest.pos.x,
-                dest.pos.y + dest.size.y - border,
-                border,
-                border,
-            ),
-            // bottom edge
-            Rectangle::new(
-                dest.pos.x + border,
-                dest.pos.y + dest.size.y - border,
-                dest.size.x - 2.0 * border,
-                border,
-            ),
-            // bottom-right corner
-            Rectangle::new(
-                dest.pos.x + dest.size.x - border,
-                dest.pos.y + dest.size.y - border,
-                border,
-                border,
-            ),
-        ];
-
-        for i in 0..9 {
-            let dest = dest_coords[i];
-            let texture_dest = spritesheet_coords[i];
-
-            self.copy_texture(
-                dest,
-                nine_slice.texture,
-                texture_dest,
-                &vec4(1.0, 1.0, 1.0, 1.0),
-            );
+        for (dest, src) in dest.into_iter().zip(src) {
+            self.copy_texture(dest, nine_slice.texture, src, &tint);
         }
     }
 
@@ -292,14 +184,14 @@ impl RenderContext {
         rotation: f32,
         color: Vec4,
     ) {
-        self.queue_polygon(mesh_id, center, radius, rotation, color);
+        self.queue_polygon(mesh_id, center, vec2(radius, radius), rotation, color);
     }
 
     fn queue_polygon(
         &self,
         mesh_id: MeshId,
         center: Vec2,
-        radius: f32,
+        scale: Vec2,
         rotation: f32,
         color: Vec4,
     ) {
@@ -307,7 +199,7 @@ impl RenderContext {
             self.current_draw_layer.get(),
             DrawCommand::FillPolygon {
                 center,
-                radius,
+                scale,
                 mesh_id,
                 rotation,
                 color,
@@ -318,7 +210,31 @@ impl RenderContext {
 
     /// Filled regular polygon. `rotation` 0 puts the first vertex at +X.
     pub fn draw_poly(&self, center: Vec2, sides: u32, radius: f32, rotation: f32, color: Vec4) {
-        self.queue_polygon(self.poly_mesh(sides, 0.0), center, radius, rotation, color);
+        self.queue_polygon(
+            self.poly_mesh(sides, 0.0),
+            center,
+            vec2(radius, radius),
+            rotation,
+            color,
+        );
+    }
+
+    /// Draws a filled circle
+    pub fn fill_circle(&self, center: Vec2, radius: f32, color: Vec4) {
+        self.draw_poly(center, CIRCLE_SIDES, radius, 0.0, color);
+    }
+
+    /// Draws a line from `a` to `b`. The ends are cut off square, no rounded caps
+    pub fn draw_line(&self, a: Vec2, b: Vec2, thickness: f32, color: Vec4) {
+        let d = b - a;
+        // The quad spans -1..1, so stretch it to half the line's length and thickness
+        self.queue_polygon(
+            self.builtins.quad,
+            (a + b) / 2.0,
+            vec2(d.norm() / 2.0, thickness / 2.0),
+            d.y.atan2(d.x),
+            color,
+        );
     }
 
     /// Draws the outline of a polygon. `thickness` grows inward from `radius`
@@ -335,7 +251,7 @@ impl RenderContext {
         self.queue_polygon(
             self.poly_mesh(sides, inner),
             center,
-            radius,
+            vec2(radius, radius),
             rotation,
             color,
         );
@@ -344,7 +260,13 @@ impl RenderContext {
     /// Circular ring between two radii
     pub fn draw_ring(&self, center: Vec2, inner_radius: f32, outer_radius: f32, color: Vec4) {
         let inner = (inner_radius / outer_radius).clamp(0.0, 1.0);
-        self.queue_polygon(self.poly_mesh(64, inner), center, outer_radius, 0.0, color);
+        self.queue_polygon(
+            self.poly_mesh(CIRCLE_SIDES, inner),
+            center,
+            vec2(outer_radius, outer_radius),
+            0.0,
+            color,
+        );
     }
 
     fn fill_rect_immediate(&self, dest: Rectangle, color: Vec4) {
@@ -383,7 +305,7 @@ impl RenderContext {
     fn fill_polygon_immediate(
         &self,
         center: Vec2,
-        radius: f32,
+        scale: Vec2,
         mesh_id: MeshId,
         rotation: f32,
         color: Vec4,
@@ -411,7 +333,7 @@ impl RenderContext {
             &vec3(2.0 / res.x as f32, 2.0 / res.y as f32, 1.0),
         );
         model_matrix = nalgebra_glm::rotate_z(&model_matrix, rotation);
-        model_matrix = nalgebra_glm::scale(&model_matrix, &vec3(radius, radius, 0.1));
+        model_matrix = nalgebra_glm::scale(&model_matrix, &vec3(scale.x, scale.y, 0.1));
 
         self.draw_2d(
             mesh_id,
@@ -442,14 +364,14 @@ impl RenderContext {
                 }
                 DrawCommand::FillPolygon {
                     center,
-                    radius,
+                    scale,
                     mesh_id,
                     rotation,
                     color,
                     scissor,
                 } => {
                     self.apply_scissor(scissor);
-                    self.fill_polygon_immediate(center, radius, mesh_id, rotation, color)
+                    self.fill_polygon_immediate(center, scale, mesh_id, rotation, color)
                 }
                 DrawCommand::CopyTexture {
                     dest,
@@ -536,5 +458,46 @@ impl RenderContext {
         let id = self.add_mesh(Mesh::from_data(&data), None);
         self.poly_meshes.borrow_mut().insert((sides, inner_key), id);
         id
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn nine_slice_rects_tile_the_outer_rect() {
+        let outer = Rectangle::new(10.0, 20.0, 100.0, 50.0);
+        let rects = nine_slice_rects(outer, 8.0);
+
+        // Corners are exactly border-sized and tucked into the outer corners
+        for i in [0, 2, 6, 8] {
+            assert_eq!((rects[i].size.x, rects[i].size.y), (8.0, 8.0));
+        }
+        assert_eq!((rects[0].pos.x, rects[0].pos.y), (10.0, 20.0));
+        assert_eq!((rects[8].pos.x + 8.0, rects[8].pos.y + 8.0), (110.0, 70.0));
+
+        // Every row and column butts up against the next with no gaps
+        for row in 0..3 {
+            let r = &rects[row * 3..row * 3 + 3];
+            assert_eq!(r[0].pos.x + r[0].size.x, r[1].pos.x);
+            assert_eq!(r[1].pos.x + r[1].size.x, r[2].pos.x);
+        }
+        for col in 0..3 {
+            let (a, b, c) = (rects[col], rects[col + 3], rects[col + 6]);
+            assert_eq!(a.pos.y + a.size.y, b.pos.y);
+            assert_eq!(b.pos.y + b.size.y, c.pos.y);
+        }
+
+        // ...so the areas add up to the whole thing
+        let area: f32 = rects.iter().map(|r| r.size.x * r.size.y).sum();
+        assert_eq!(area, 100.0 * 50.0);
+    }
+
+    #[test]
+    fn nine_slice_rects_collapse_middle_at_two_borders() {
+        let rects = nine_slice_rects(Rectangle::new(0.0, 0.0, 16.0, 16.0), 8.0);
+        assert_eq!(rects[4].size.x, 0.0);
+        assert_eq!(rects[4].size.y, 0.0);
     }
 }

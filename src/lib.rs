@@ -7,7 +7,6 @@ pub mod chunked_map;
 pub mod error;
 pub mod font;
 pub mod frustum;
-pub mod high_precision;
 pub mod mesh_data;
 pub mod model_set;
 pub mod opengl;

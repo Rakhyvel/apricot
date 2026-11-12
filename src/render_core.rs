@@ -129,7 +129,7 @@ impl Default for LineStyle {
     }
 }
 
-/// A 3D line through a list of points, like an orbit or a path
+/// A 3D line through a list of points
 pub struct LinePath {
     vao: Vao,
     vertices_buffer: Buffer<f32>,
@@ -296,7 +296,7 @@ impl RenderContext {
         ))
     }
 
-    /// A ray from the camera through a pixel on screen, like the mouse position
+    /// A ray from the camera through a pixel on screen
     pub fn screen_ray(&self, pos: Vec2) -> Ray {
         let res = self.int_screen_resolution;
         self.camera
@@ -353,7 +353,7 @@ impl RenderContext {
         Ok(self.add_mesh(Mesh::from_obj(obj_file_data)?, name))
     }
 
-    /// Upload some `MeshData`, like from `MeshData::icosphere` or `MeshData::from_obj`
+    /// Upload `data` to the GPU and add it as a mesh
     pub fn add_mesh_data(&self, data: MeshData, name: Option<&'static str>) -> MeshId {
         self.add_mesh(Mesh::from_data(data), name)
     }

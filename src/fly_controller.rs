@@ -76,7 +76,7 @@ impl FlyController {
         nalgebra_glm::vec3(cos_pitch * sin_yaw, sin_pitch, -cos_pitch * cos_yaw)
     }
 
-    /// The camera to hand to `RenderContext::set_camera`
+    /// A camera at the controller's position, looking the way it faces
     pub fn camera(&self) -> Camera {
         Camera::new(
             self.position,

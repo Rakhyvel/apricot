@@ -12,7 +12,7 @@ pub struct MeshData {
 }
 
 impl MeshData {
-    /// Read a mesh out of the bytes of a Wavefront .obj file, like from `include_bytes!`
+    /// Read a mesh out of the bytes of a Wavefront .obj file
     pub fn from_obj(bytes: &[u8]) -> Result<Self, Error> {
         let obj: Obj<TexturedVertex> = load_obj(bytes)?;
         let flat = |f: fn(&TexturedVertex) -> [f32; 3]| obj.vertices.iter().flat_map(f).collect();
@@ -24,7 +24,7 @@ impl MeshData {
         })
     }
 
-    /// Every triangle, in the mesh's own space. Use `Tri::transformed` to move them into the world
+    /// Every triangle, in the mesh's own space
     pub fn triangles(&self) -> impl Iterator<Item = Tri> + '_ {
         triangles(&self.positions, &self.indices)
     }
@@ -289,8 +289,7 @@ impl MeshData {
     }
 
     /// Flat-shaded terrain on the XZ plane, `cells_x` by `cells_z` cells of size 1, with each
-    /// corner raised to `height(x, z)`. The texture stretches over the whole grid once. Scale it
-    /// with the model's transform
+    /// corner raised to `height(x, z)`. The texture stretches over the whole grid once
     pub fn heightmap(cells_x: u32, cells_z: u32, height: impl Fn(f32, f32) -> f32) -> Self {
         let corner = |x: u32, z: u32| {
             let (x, z) = (x as f32, z as f32);

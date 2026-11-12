@@ -91,8 +91,8 @@ impl<K: Copy + Eq + Hash> ModelSet<K> {
         self.entries.get(&key).map(|e| &e.model)
     }
 
-    /// The model under `key`, for changing its texture, tint, outline, or shadow. Use
-    /// `set_transform` to move it
+    /// The model under `key`, to change its texture, tint, outline, or shadow. Changing its
+    /// transform here doesn't move it for culling or picking
     pub fn get_mut(&mut self, key: K) -> Option<&mut Model> {
         self.entries.get_mut(&key).map(|e| &mut e.model)
     }
@@ -127,7 +127,7 @@ impl<K: Copy + Eq + Hash> ModelSet<K> {
     }
 
     /// Keys of the models whose bounding boxes `ray` passes through, in no particular order.
-    /// The boxes are loose, so use `raycast` for picking
+    /// The boxes are loose, so this includes some models the ray misses
     pub fn iter_ray<'a>(&'a self, ray: &'a Ray) -> impl Iterator<Item = K> + 'a {
         self.bvh.iter_ray(ray)
     }

@@ -79,7 +79,7 @@ impl HeightGrid {
     }
 
     /// Push the heights toward the extremes around 0.5, sharpening peaks and deepening valleys.
-    /// Expects heights from 0 to 1, like after `normalize`
+    /// Expects heights from 0 to 1
     pub fn create_bulge(&mut self) {
         for cell in &mut self.cells {
             cell.height = (cell.height - 0.5).powf(3.0) * 150.0 + 0.55;

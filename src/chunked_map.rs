@@ -31,8 +31,7 @@ impl ChunkGrid {
         ((pos.x / size).floor() as i32, (pos.z / size).floor() as i32)
     }
 
-    /// Where a chunk's corner with the smallest X and Z sits, at height 0. Put the chunk's model
-    /// here
+    /// Where a chunk's corner with the smallest X and Z sits, at height 0
     pub fn origin(&self, chunk: ChunkCoord) -> Vec3 {
         let size = self.chunk_size();
         nalgebra_glm::vec3(chunk.0 as f32 * size, 0.0, chunk.1 as f32 * size)
@@ -50,8 +49,8 @@ impl ChunkGrid {
         chunks.into_iter().map(|(_, chunk)| chunk).collect()
     }
 
-    /// The terrain mesh for a chunk, with `height(x, z)` sampled at world positions so neighbors
-    /// line up. Its positions start at 0, so place it at `origin(chunk)`
+    /// The terrain mesh for a chunk, with `height(x, z)` sampled at world positions. Its
+    /// positions are relative to the chunk's corner
     pub fn mesh(&self, chunk: ChunkCoord, height: impl Fn(f32, f32) -> f32) -> MeshData {
         let origin = self.origin(chunk);
         MeshData::heightmap(self.chunk_cells, self.chunk_cells, |x, z| {

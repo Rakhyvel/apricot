@@ -202,8 +202,7 @@ impl Camera {
     }
 }
 
-/// A movable `f64` origin for big worlds. Keep positions in `f64`, and turn them into small `f32`
-/// positions near the camera right before drawing, so far-from-zero things don't jitter
+/// A movable `f64` origin, for turning far-off `f64` positions into small `f32` ones near it
 #[derive(Debug, Copy, Clone, Default)]
 pub struct FloatingOrigin {
     pub pos: DVec3,

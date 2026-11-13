@@ -208,8 +208,8 @@ impl<K: Copy + Eq + Hash> ModelSet<K> {
             ..Default::default()
         }
         .apply();
-        renderer.set_program_from_id(renderer.builtins.program_3d_solid);
-        renderer.get_program_uniform("u_color").set_vec4(&color);
+        let program = renderer.builtins.program_3d_solid;
+        renderer.uniform(program, "u_color").set_vec4(&color);
         let (view, proj) = renderer.camera_view_proj();
 
         for key in self.bvh.iter_frustum(&renderer.camera_frustum(), false) {
@@ -222,7 +222,7 @@ impl<K: Copy + Eq + Hash> ModelSet<K> {
                 .expect("invalid MeshId");
             // A slightly bigger copy, so only the rim pokes out past the stencil
             let bigger = nalgebra_glm::scale(&model.transform, &nalgebra_glm::vec3(1.2, 1.2, 1.2));
-            renderer.draw(&mesh, bigger, view, proj);
+            renderer.draw(program, &mesh, bigger, view, proj);
         }
 
         before.restore();

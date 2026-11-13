@@ -99,21 +99,21 @@ impl RenderContext {
         sprite_size: Vec2,
         color: Vec4,
     ) {
-        self.set_program_from_id(self.builtins.program_2d);
+        let program = self.builtins.program_2d;
         let texture = self
             .get_texture_from_id(texture_id)
             .expect("invalid TextureId");
         texture.activate(0);
-        self.get_program_uniform("texture0").set_i32(0);
-        self.get_program_uniform("u_sprite_offset")
+        self.uniform(program, "texture0").set_i32(0);
+        self.uniform(program, "u_sprite_offset")
             .set_vec2(&sprite_offset);
-        self.get_program_uniform("u_sprite_size")
+        self.uniform(program, "u_sprite_size")
             .set_vec2(&sprite_size);
-        self.get_program_uniform("u_color").set_vec4(&color);
+        self.uniform(program, "u_color").set_vec4(&color);
 
         let (view, proj) = self.camera_2d.view_proj_matrices(1.0);
         let mesh = self.get_mesh_from_id(mesh_id).expect("invalid MeshId");
-        self.draw(&mesh, model, view, proj);
+        self.draw(program, &mesh, model, view, proj);
     }
 
     /// Draws a nine-slice texture stretched over `dest`. The corners stay their real size, the

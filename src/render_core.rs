@@ -32,7 +32,6 @@ const DEFAULT_FONT: &[u8] = include_bytes!("fonts/Not Jam Mono Clean 16.ttf");
 pub struct RenderContext {
     // Updated by the user
     pub camera: RefCell<Camera>,
-    pub program: RefCell<Option<ProgramId>>,
     pub font: Cell<FontId>,
 
     // Managers
@@ -173,7 +172,6 @@ impl RenderContext {
 
         let mut renderer = Self {
             camera: RefCell::new(Camera::default()),
-            program: RefCell::new(None),
             font: Cell::new(FontId::placeholder(0)), // replaced by the default font below
 
             mesh_manager: RefCell::new(meshes),
@@ -264,28 +262,6 @@ impl RenderContext {
         self.camera
             .borrow()
             .get_ray(pos.x, pos.y, res.x as f32, res.y as f32)
-    }
-
-    pub fn set_program(&self, name: Option<&'static str>) {
-        let manager = self.program_manager.borrow();
-        if let Some(name) = name {
-            let program_id = manager
-                .lookup(name)
-                .unwrap_or_else(|| panic!("no program named {name:?}"));
-            *self.program.borrow_mut() = Some(program_id);
-            let program = manager.get(program_id).expect("invalid ProgramId");
-            program.set();
-        } else {
-            *self.program.borrow_mut() = None;
-            Program::unbind();
-        }
-    }
-
-    pub fn set_program_from_id(&self, program_id: ProgramId) {
-        let manager = self.program_manager.borrow();
-        *self.program.borrow_mut() = Some(program_id);
-        let program = manager.get(program_id).expect("invalid ProgramId");
-        program.set();
     }
 
     pub fn set_font(&self, font: FontId) {
@@ -486,35 +462,40 @@ impl RenderContext {
 
     /// The uniform called `uniform_name` in the current program. Does nothing when set if there's
     /// no current program, or it has no such uniform
-    pub fn get_program_uniform(&self, uniform_name: &str) -> Uniform {
-        match self
-            .program
-            .borrow()
-            .and_then(|id| self.get_program_from_id(id))
-        {
-            Some(program) => program.uniform(uniform_name),
-            None => Uniform { id: -1 },
-        }
+    /// The uniform called `name` in `program`. Setting it works any time, whatever's being drawn
+    pub fn uniform(&self, program: ProgramId, name: &str) -> Uniform {
+        self.get_program_from_id(program)
+            .expect("invalid ProgramId")
+            .uniform(name)
+    }
+
+    fn bind(&self, program: ProgramId) {
+        self.get_program_from_id(program)
+            .expect("invalid ProgramId")
+            .bind();
     }
 
     pub fn clear(&self, color: Vec4) {
         opengl::clear(color);
     }
 
+    /// Draw `mesh` with `program`, which gets the model, view, and projection matrices
     pub fn draw(
         &self,
+        program: ProgramId,
         mesh: &Mesh,
         model_matrix: nalgebra_glm::Mat4,
         view_matrix: nalgebra_glm::Mat4,
         proj_matrix: nalgebra_glm::Mat4,
     ) {
-        self.get_program_uniform("u_model_matrix")
+        self.uniform(program, "u_model_matrix")
             .set_mat4(&model_matrix);
-        self.get_program_uniform("u_view_matrix")
+        self.uniform(program, "u_view_matrix")
             .set_mat4(&view_matrix);
-        self.get_program_uniform("u_proj_matrix")
+        self.uniform(program, "u_proj_matrix")
             .set_mat4(&proj_matrix);
 
+        self.bind(program);
         mesh.raw.draw();
     }
 
@@ -544,25 +525,24 @@ impl RenderContext {
         options: &DrawOptions,
     ) {
         let before = options.apply();
-        self.set_program_from_id(self.builtins.program_3d);
-        self.get_program_uniform("u_color").set_vec4(&tint);
-        self.get_program_uniform("shadow_map").set_i32(1);
+        let program = self.builtins.program_3d;
+        self.uniform(program, "u_color").set_vec4(&tint);
+        self.uniform(program, "shadow_map").set_i32(1);
 
         match self.active_light.get() {
             Some(light) => {
-                self.get_program_uniform("u_sun_dir")
+                self.uniform(program, "u_sun_dir")
                     .set_vec3(&light.light_dir);
-                self.get_program_uniform("light_mvp")
+                self.uniform(program, "light_mvp")
                     .set_mat4(&light.light_proj_view);
-                self.get_program_uniform("u_shadows").set_i32(1);
-                self.get_program_uniform("u_shadow_texel")
+                self.uniform(program, "u_shadows").set_i32(1);
+                self.uniform(program, "u_shadow_texel")
                     .set_f32(light.texel_size);
                 opengl::bind_texture_id(1, light.depth_map);
             }
             None => {
-                self.get_program_uniform("u_sun_dir")
-                    .set_vec3(&Vec3::zeros());
-                self.get_program_uniform("u_shadows").set_i32(0);
+                self.uniform(program, "u_sun_dir").set_vec3(&Vec3::zeros());
+                self.uniform(program, "u_shadows").set_i32(0);
             }
         }
 
@@ -570,29 +550,27 @@ impl RenderContext {
             .get_texture_from_id(texture_id)
             .expect("invalid TextureId");
         texture.activate(0);
-        self.get_program_uniform("texture0").set_i32(0);
+        self.uniform(program, "texture0").set_i32(0);
 
         let (view, proj) = self.camera_view_proj();
         let mesh = self.get_mesh_from_id(mesh_id).expect("invalid MeshId");
-        self.draw(&mesh, model, view, proj);
+        self.draw(program, &mesh, model, view, proj);
         before.restore();
     }
 
     /// Draw a line path from the current camera, moved by `transform`
     pub fn draw_line_path(&self, path: &LinePath, transform: Mat4) {
         let style = &path.style;
-        self.set_program_from_id(self.builtins.program_line);
+        let program = self.builtins.program_line;
 
         let (view, proj) = self.camera_view_proj();
-        self.get_program_uniform("u_model_matrix")
-            .set_mat4(&transform);
-        self.get_program_uniform("u_view_matrix").set_mat4(&view);
-        self.get_program_uniform("u_proj_matrix").set_mat4(&proj);
-        self.get_program_uniform("u_color").set_vec4(&style.color);
-        self.get_program_uniform("u_seam").set_f32(style.seam);
-        self.get_program_uniform("u_fade")
-            .set_i32(style.fade as i32);
-        self.get_program_uniform("u_num_vertices")
+        self.uniform(program, "u_model_matrix").set_mat4(&transform);
+        self.uniform(program, "u_view_matrix").set_mat4(&view);
+        self.uniform(program, "u_proj_matrix").set_mat4(&proj);
+        self.uniform(program, "u_color").set_vec4(&style.color);
+        self.uniform(program, "u_seam").set_f32(style.seam);
+        self.uniform(program, "u_fade").set_i32(style.fade as i32);
+        self.uniform(program, "u_num_vertices")
             .set_i32(path.mesh.vertex_count() as i32);
 
         let options = DrawOptions {
@@ -601,12 +579,13 @@ impl RenderContext {
             line_width: style.width,
             ..Default::default()
         };
-        self.draw_raw(&path.mesh, &options);
+        self.draw_raw(&path.mesh, program, &options);
     }
 
-    /// Draw a `RawMesh` with the current program and `options`
-    pub fn draw_raw(&self, mesh: &RawMesh, options: &DrawOptions) {
+    /// Draw a `RawMesh` with `program` and `options`
+    pub fn draw_raw(&self, mesh: &RawMesh, program: ProgramId, options: &DrawOptions) {
         let before = options.apply();
+        self.bind(program);
         mesh.draw();
         before.restore();
     }

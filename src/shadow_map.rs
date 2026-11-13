@@ -1,6 +1,10 @@
 use nalgebra_glm::{vec3, vec4, Mat4, Vec3};
 
-use crate::{camera::ProjectionKind, error::Error, render_core::MeshId};
+use crate::{
+    camera::ProjectionKind,
+    error::Error,
+    render_core::{MeshId, ProgramId},
+};
 
 use super::{
     camera::Camera,
@@ -130,6 +134,7 @@ impl DirectionalLightSource {
 /// Passed to the closure in `RenderContext::shadow_pass`. Meshes drawn through it cast shadows.
 pub struct ShadowPass<'a> {
     renderer: &'a RenderContext,
+    program: ProgramId,
     light_view: Mat4,
     light_proj: Mat4,
 }
@@ -141,7 +146,7 @@ impl ShadowPass<'_> {
             .get_mesh_from_id(mesh_id)
             .expect("invalid MeshId");
         self.renderer
-            .draw(&mesh, model, self.light_view, self.light_proj)
+            .draw(self.program, &mesh, model, self.light_view, self.light_proj)
     }
 
     /// Everything the light can see. Anything outside it can't cast a shadow
@@ -170,10 +175,10 @@ impl RenderContext {
         }
         .apply();
         opengl::clear_depth();
-        self.set_program_from_id(self.builtins.program_shadow);
 
         draw_casters(&ShadowPass {
             renderer: self,
+            program: self.builtins.program_shadow,
             light_view: light.light_view,
             light_proj: light.light_proj,
         });

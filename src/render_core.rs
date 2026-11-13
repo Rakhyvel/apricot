@@ -13,7 +13,7 @@ use crate::{
     error::Error,
     frustum::Frustum,
     mesh_data::MeshData,
-    opengl::{create_program, DeletionQueue, Fbo},
+    opengl::{create_program, DeletionQueue, DrawOptions, Fbo, Primitive, RawMesh},
     registry::{Handle, Registry},
     shadow_map::ActiveLight,
     tri::Tri,
@@ -131,18 +131,14 @@ impl Default for LineStyle {
 
 /// A 3D line through a list of points
 pub struct LinePath {
-    vao: Vao,
-    vertices_buffer: Buffer<f32>,
-    num_vertices: i32,
+    mesh: RawMesh,
     pub style: LineStyle,
 }
 
 /// Stores the geometry of a mesh. Meshes are registered in the mesh manager, and can be potentially shared across
 /// multiple models.
 pub struct Mesh {
-    vao: Vao,
-    vbos: Vec<Buffer<f32>>,
-    ibo: Buffer<u32>,
+    raw: RawMesh,
     positions: Vec<f32>,
     indices: Vec<u32>,
     aabb: AABB,
@@ -367,11 +363,7 @@ impl RenderContext {
             std::mem::replace(mesh, Mesh::from_data(data))
         };
         let mut queue = self.deletion_queue.borrow_mut();
-        for vbo in old.vbos.iter_mut() {
-            queue.queue_buffer(vbo);
-        }
-        queue.queue_buffer(&mut old.ibo);
-        queue.queue_vao(&mut old.vao);
+        old.raw.queue_into(&mut queue);
         queue.flush();
     }
 
@@ -577,21 +569,7 @@ impl RenderContext {
         self.get_program_uniform("u_proj_matrix")
             .set_mat4(&proj_matrix);
 
-        unsafe {
-            // Setup geometry for rendering
-            mesh.vao.bind();
-
-            // Make the render call!
-            gl::DrawElements(
-                gl::TRIANGLES,
-                mesh.indices.len() as i32,
-                gl::UNSIGNED_INT,
-                std::ptr::null(),
-            );
-
-            // Unbind the VAO
-            mesh.vao.unbind();
-        }
+        mesh.raw.draw();
     }
 
     /// Draw `mesh_id` with the built-in 3D shader from the current camera, in a solid `color`
@@ -607,11 +585,7 @@ impl RenderContext {
         model: Mat4,
         tint: Vec4,
     ) {
-        unsafe {
-            gl::Enable(gl::DEPTH_TEST); // the 2D pass turns this off
-            gl::Enable(gl::CULL_FACE);
-            gl::CullFace(gl::BACK);
-        }
+        let before = DrawOptions::default().apply();
         self.set_program_from_id(self.builtins.program_3d);
         self.get_program_uniform("u_color").set_vec4(&tint);
         self.get_program_uniform("shadow_map").set_i32(1);
@@ -647,22 +621,13 @@ impl RenderContext {
         let (view, proj) = self.camera_view_proj();
         let mesh = self.get_mesh_from_id(mesh_id).expect("invalid MeshId");
         self.draw(&mesh, model, view, proj);
+        before.restore();
     }
 
     /// Draw a line path from the current camera, moved by `transform`
     pub fn draw_line_path(&self, path: &LinePath, transform: Mat4) {
         let style = &path.style;
         self.set_program_from_id(self.builtins.program_line);
-        unsafe {
-            if style.depth_test {
-                gl::Enable(gl::DEPTH_TEST);
-                gl::DepthFunc(gl::LEQUAL);
-            } else {
-                gl::Disable(gl::DEPTH_TEST);
-            }
-            gl::DepthMask(gl::FALSE);
-            gl::LineWidth(style.width);
-        }
 
         let (view, proj) = self.camera_view_proj();
         self.get_program_uniform("u_model_matrix")
@@ -674,16 +639,22 @@ impl RenderContext {
         self.get_program_uniform("u_fade")
             .set_i32(style.fade as i32);
         self.get_program_uniform("u_num_vertices")
-            .set_i32(path.num_vertices);
+            .set_i32(path.mesh.vertex_count() as i32);
 
-        unsafe {
-            path.vao.bind();
-            gl::DrawArrays(gl::LINE_STRIP, 0, path.num_vertices);
-            path.vao.unbind();
+        let options = DrawOptions {
+            depth_test: style.depth_test,
+            depth_write: false, // lines shouldn't hide what's drawn after them
+            line_width: style.width,
+            ..Default::default()
+        };
+        self.draw_raw(&path.mesh, &options);
+    }
 
-            gl::DepthMask(gl::TRUE);
-            gl::DepthFunc(gl::LESS);
-        }
+    /// Draw a `RawMesh` with the current program and `options`
+    pub fn draw_raw(&self, mesh: &RawMesh, options: &DrawOptions) {
+        let before = options.apply();
+        mesh.draw();
+        before.restore();
     }
 }
 
@@ -692,11 +663,7 @@ impl Drop for RenderContext {
         let mut deletion_queue = self.deletion_queue.borrow_mut();
 
         for (_, mesh) in self.mesh_manager.borrow_mut().iter_mut() {
-            for vbo in mesh.vbos.iter_mut() {
-                deletion_queue.queue_buffer(vbo);
-            }
-            deletion_queue.queue_buffer(&mut mesh.ibo);
-            deletion_queue.queue_vao(&mut mesh.vao);
+            mesh.raw.queue_into(&mut deletion_queue);
         }
         for (_, texture) in self.texture_manager.borrow_mut().iter_mut() {
             deletion_queue.queue_texture(texture);
@@ -708,32 +675,19 @@ impl Drop for RenderContext {
 impl LinePath {
     /// A line through `points`, in order
     pub fn new(points: &[Vec3], style: LineStyle) -> Self {
-        let vao = Vao::gen();
-        let vertices_buffer: Buffer<f32> = Buffer::gen(gl::ARRAY_BUFFER);
-        vao.attrib(0, &vertices_buffer, 3, 3, 0);
-        vao.unbind();
-
-        let mut path = Self {
-            vao,
-            vertices_buffer,
-            num_vertices: 0,
+        Self {
+            mesh: RawMesh::new(&flatten(points), &[3], Primitive::LineStrip),
             style,
-        };
-        path.set_points(points);
-        path
+        }
     }
 
     /// Replace the points the line goes through. Cheaper than making a new `LinePath`
     pub fn set_points(&mut self, points: &[Vec3]) {
-        let flat: Vec<f32> = points.iter().flat_map(|p| [p.x, p.y, p.z]).collect();
-        self.vertices_buffer.set_data(&flat);
-        self.vertices_buffer.unbind();
-        self.num_vertices = points.len() as i32;
+        self.mesh.set_vertices(&flatten(points));
     }
 
     pub fn queue_deletion(&mut self, renderer: &RenderContext) {
-        renderer.queue_vao_deletion(&mut self.vao);
-        renderer.queue_buffer_deletion(&mut self.vertices_buffer);
+        self.mesh.queue_deletion(renderer);
     }
 }
 
@@ -741,29 +695,13 @@ impl Mesh {
     /// Upload `data` to the GPU. Keeps the positions and indices on the CPU for bounding boxes and
     /// raycasts, but the normals and UVs only live on the GPU
     pub fn from_data(data: MeshData) -> Self {
-        let vao = Vao::gen();
-        let ibo = Buffer::<u32>::gen(gl::ELEMENT_ARRAY_BUFFER);
-        ibo.set_data(&data.indices);
-
-        // Attribute slots match the shaders: 0 = position, 1 = normal, 2 = uv
-        let vbos: Vec<Buffer<f32>> = [&data.positions, &data.normals, &data.uvs]
-            .iter()
-            .enumerate()
-            .map(|(i, attribute)| {
-                let vbo = Buffer::<f32>::gen(gl::ARRAY_BUFFER);
-                vbo.set_data(attribute);
-                vao.attrib(i as u32, &vbo, 3, 3, 0);
-                vbo
-            })
-            .collect();
-
-        vao.set_index_buffer(&ibo);
-
-        // Unbind the VAO and any left over array buffer
-        vao.unbind();
-        unsafe {
-            gl::BindBuffer(gl::ARRAY_BUFFER, 0);
-        }
+        // Slots match the shaders: 0 = position, 1 = normal, 2 = uv
+        let raw = RawMesh::with_indices(
+            &data.interleaved(),
+            &data.indices,
+            &[3, 3, 3],
+            Primitive::Triangles,
+        );
 
         let aabb = AABB::from_points(
             data.positions
@@ -772,9 +710,7 @@ impl Mesh {
         );
 
         Mesh {
-            vao,
-            vbos,
-            ibo,
+            raw,
             positions: data.positions,
             indices: data.indices,
             aabb,
@@ -798,4 +734,8 @@ impl Mesh {
     pub fn indices(&self) -> &Vec<u32> {
         &self.indices
     }
+}
+
+fn flatten(points: &[Vec3]) -> Vec<f32> {
+    points.iter().flat_map(|p| [p.x, p.y, p.z]).collect()
 }

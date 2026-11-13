@@ -322,6 +322,21 @@ impl MeshData {
         data
     }
 
+    /// Every vertex's position, normal, and uv back to back, 9 floats per vertex
+    pub(crate) fn interleaved(&self) -> Vec<f32> {
+        (0..self.vertex_count())
+            .flat_map(|i| {
+                let v = i * 3..i * 3 + 3;
+                [
+                    &self.positions[v.clone()],
+                    &self.normals[v.clone()],
+                    &self.uvs[v],
+                ]
+                .concat()
+            })
+            .collect()
+    }
+
     pub fn vertex_count(&self) -> usize {
         self.positions.len() / 3
     }
@@ -426,6 +441,19 @@ mod tests {
         assert_eq!(tris.len(), 2);
         assert_eq!(tris[0].v0(), quad.position(quad.indices[0]));
         assert_eq!(tris[1].v2(), quad.position(quad.indices[5]));
+    }
+
+    #[test]
+    fn interleaving_keeps_each_vertex_together() {
+        let quad = MeshData::quad();
+        let all = quad.interleaved();
+        assert_eq!(all.len(), quad.vertex_count() * 9);
+        for i in 0..quad.vertex_count() {
+            let v = &all[i * 9..i * 9 + 9];
+            assert_eq!(v[0..3], quad.positions[i * 3..i * 3 + 3]);
+            assert_eq!(v[3..6], quad.normals[i * 3..i * 3 + 3]);
+            assert_eq!(v[6..9], quad.uvs[i * 3..i * 3 + 3]);
+        }
     }
 
     #[test]

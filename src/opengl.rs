@@ -329,6 +329,224 @@ impl Vao {
     }
 }
 
+/// How a `RawMesh`'s vertices join up
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Primitive {
+    /// Every 3 vertices make a triangle
+    Triangles,
+    /// Every 2 vertices make a line
+    Lines,
+    /// One line through every vertex in order
+    LineStrip,
+    /// Each vertex is its own dot
+    Points,
+}
+
+impl Primitive {
+    fn gl(self) -> GLenum {
+        match self {
+            Primitive::Triangles => gl::TRIANGLES,
+            Primitive::Lines => gl::LINES,
+            Primitive::LineStrip => gl::LINE_STRIP,
+            Primitive::Points => gl::POINTS,
+        }
+    }
+}
+
+/// Vertices with whatever layout a shader wants, in one interleaved buffer
+pub struct RawMesh {
+    vao: Vao,
+    vbo: Buffer<f32>,
+    ibo: Option<Buffer<u32>>,
+    stride: usize,
+    count: usize,
+    primitive: Primitive,
+}
+
+impl RawMesh {
+    /// A mesh from `vertices`, split up by `layout`: how many floats each shader input takes, in
+    /// order. `[3, 1]` gives slot 0 three floats and slot 1 one float, repeating for every vertex
+    pub fn new(vertices: &[f32], layout: &[usize], primitive: Primitive) -> Self {
+        let vao = Vao::gen();
+        let vbo = Buffer::<f32>::gen(gl::ARRAY_BUFFER);
+        let stride: usize = layout.iter().sum();
+        assert!(stride > 0, "a vertex layout needs at least one float");
+
+        let mut offset = 0;
+        for (slot, &components) in layout.iter().enumerate() {
+            vao.attrib(slot as u32, &vbo, components, stride, offset);
+            offset += components;
+        }
+        vao.unbind();
+        vbo.unbind();
+
+        let mut mesh = Self {
+            vao,
+            vbo,
+            ibo: None,
+            stride,
+            count: 0,
+            primitive,
+        };
+        mesh.set_vertices(vertices);
+        mesh
+    }
+
+    /// A mesh from `vertices` that draws them in the order `indices` gives
+    pub fn with_indices(
+        vertices: &[f32],
+        indices: &[u32],
+        layout: &[usize],
+        primitive: Primitive,
+    ) -> Self {
+        let mut mesh = Self::new(vertices, layout, primitive);
+        let ibo = Buffer::<u32>::gen(gl::ELEMENT_ARRAY_BUFFER);
+        ibo.set_data(indices);
+        mesh.vao.set_index_buffer(&ibo);
+        mesh.vao.unbind();
+        mesh.count = indices.len();
+        mesh.ibo = Some(ibo);
+        mesh
+    }
+
+    /// Replace the vertices, keeping the same layout
+    pub fn set_vertices(&mut self, vertices: &[f32]) {
+        assert_eq!(
+            vertices.len() % self.stride,
+            0,
+            "expected whole vertices of {} floats",
+            self.stride
+        );
+        self.vbo.set_data(vertices);
+        self.vbo.unbind();
+        if self.ibo.is_none() {
+            self.count = vertices.len() / self.stride;
+        }
+    }
+
+    /// How many vertices get drawn
+    pub fn vertex_count(&self) -> usize {
+        self.count
+    }
+
+    pub fn queue_deletion(&mut self, renderer: &crate::render_core::RenderContext) {
+        renderer.queue_vao_deletion(&mut self.vao);
+        renderer.queue_buffer_deletion(&mut self.vbo);
+        if let Some(ibo) = &mut self.ibo {
+            renderer.queue_buffer_deletion(ibo);
+        }
+    }
+
+    pub(crate) fn queue_into(&mut self, queue: &mut DeletionQueue) {
+        queue.queue_vao(&mut self.vao);
+        queue.queue_buffer(&mut self.vbo);
+        if let Some(ibo) = &mut self.ibo {
+            queue.queue_buffer(ibo);
+        }
+    }
+
+    pub(crate) fn draw(&self) {
+        self.vao.bind();
+        unsafe {
+            match self.ibo {
+                Some(_) => gl::DrawElements(
+                    self.primitive.gl(),
+                    self.count as i32,
+                    gl::UNSIGNED_INT,
+                    null(),
+                ),
+                None => gl::DrawArrays(self.primitive.gl(), 0, self.count as i32),
+            }
+        }
+        print_any_errors();
+        self.vao.unbind();
+    }
+}
+
+/// GL settings for a draw. Whatever they change gets put back afterward
+#[derive(Debug, Clone, Copy)]
+pub struct DrawOptions {
+    /// Whether things in front hide things behind
+    pub depth_test: bool,
+    /// Whether this draw hides things drawn after it
+    pub depth_write: bool,
+    /// Whether triangles facing away aren't drawn
+    pub culling: bool,
+    /// Whether see-through colors mix with what's behind them
+    pub blending: bool,
+    /// Whether the vertex shader sets each point's size with `gl_PointSize`
+    pub shader_point_size: bool,
+    /// How thick lines are, in pixels. Most drivers only support 1
+    pub line_width: f32,
+}
+
+impl Default for DrawOptions {
+    fn default() -> Self {
+        Self {
+            depth_test: true,
+            depth_write: true,
+            culling: true,
+            blending: true,
+            shader_point_size: false,
+            line_width: 1.0,
+        }
+    }
+}
+
+impl DrawOptions {
+    /// Switch GL over to these options, giving back the settings to restore afterward
+    pub(crate) fn apply(&self) -> DrawOptions {
+        let before = DrawOptions::current();
+        self.set();
+        before
+    }
+
+    /// Put these options back, like after `apply`
+    pub(crate) fn restore(&self) {
+        self.set();
+    }
+
+    fn current() -> DrawOptions {
+        let mut depth_write: gl::types::GLboolean = gl::TRUE;
+        let mut line_width: f32 = 1.0;
+        unsafe {
+            gl::GetBooleanv(gl::DEPTH_WRITEMASK, &mut depth_write);
+            gl::GetFloatv(gl::LINE_WIDTH, &mut line_width);
+            DrawOptions {
+                depth_test: gl::IsEnabled(gl::DEPTH_TEST) == gl::TRUE,
+                depth_write: depth_write == gl::TRUE,
+                culling: gl::IsEnabled(gl::CULL_FACE) == gl::TRUE,
+                blending: gl::IsEnabled(gl::BLEND) == gl::TRUE,
+                shader_point_size: gl::IsEnabled(gl::PROGRAM_POINT_SIZE) == gl::TRUE,
+                line_width,
+            }
+        }
+    }
+
+    fn set(&self) {
+        let toggle = |cap: GLenum, on: bool| unsafe {
+            if on {
+                gl::Enable(cap)
+            } else {
+                gl::Disable(cap)
+            }
+        };
+        toggle(gl::DEPTH_TEST, self.depth_test);
+        toggle(gl::CULL_FACE, self.culling);
+        toggle(gl::BLEND, self.blending);
+        toggle(gl::PROGRAM_POINT_SIZE, self.shader_point_size);
+        unsafe {
+            gl::DepthMask(if self.depth_write {
+                gl::TRUE
+            } else {
+                gl::FALSE
+            });
+            gl::LineWidth(self.line_width);
+        }
+        print_any_errors();
+    }
+}
+
 impl Drop for Vao {
     fn drop(&mut self) {
         if self.id != 0 {

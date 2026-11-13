@@ -1,6 +1,6 @@
 use nalgebra_glm::{vec2, vec3, Mat4, Vec2, Vec4};
 
-use crate::{mesh_data::MeshData, render_core::MeshId};
+use crate::{mesh_data::MeshData, opengl::DrawOptions, render_core::MeshId};
 
 use super::{
     rectangle::Rectangle,
@@ -334,13 +334,13 @@ impl RenderContext {
 
         // Setup the GL context for drawing 2d stuff
         let res = self.int_screen_resolution;
-        unsafe {
-            gl::Viewport(0, 0, res.x, res.y);
-            gl::Disable(gl::DEPTH_TEST);
-            gl::Disable(gl::CULL_FACE);
-            gl::Enable(gl::BLEND);
-            gl::BlendFunc(gl::SRC_ALPHA, gl::ONE_MINUS_SRC_ALPHA);
+        unsafe { gl::Viewport(0, 0, res.x, res.y) };
+        let before = DrawOptions {
+            depth_test: false,
+            culling: false,
+            ..Default::default()
         }
+        .apply();
 
         for (_, cmd) in commands {
             match cmd {
@@ -382,11 +382,8 @@ impl RenderContext {
         );
 
         // Put things back the way you found them
-        unsafe {
-            gl::Disable(gl::SCISSOR_TEST);
-            gl::Enable(gl::DEPTH_TEST);
-            gl::Enable(gl::CULL_FACE);
-        }
+        unsafe { gl::Disable(gl::SCISSOR_TEST) };
+        before.restore();
         self.current_draw_layer.set(0);
     }
 

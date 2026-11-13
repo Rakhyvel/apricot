@@ -2,7 +2,6 @@
 
 use std::{
     cell::{Cell, RefCell},
-    collections::HashMap,
     fmt::Debug,
     path::Path,
 };
@@ -25,53 +24,25 @@ use super::{
     font::{Font, FontId, FontManager},
     opengl::{Program, Texture, Uniform},
     ray::Ray,
-    rectangle::Rectangle,
+    render2d::Queue2d,
 };
 
 const DEFAULT_FONT: &[u8] = include_bytes!("fonts/Not Jam Mono Clean 16.ttf");
-
-pub(crate) enum DrawCommand {
-    FillRect {
-        rect: Rectangle,
-        color: Vec4,
-        scissor: Option<Rectangle>,
-    },
-    FillPolygon {
-        center: Vec2,
-        /// Half-size in pixels along the mesh's X and Y. For a polygon both are just its radius
-        scale: Vec2,
-        mesh_id: MeshId,
-        rotation: f32,
-        color: Vec4,
-        scissor: Option<Rectangle>,
-    },
-    CopyTexture {
-        dest: Rectangle,
-        texture_id: TextureId,
-        texture_dest: Rectangle,
-        color_mod: Vec4,
-        scissor: Option<Rectangle>,
-    },
-}
 
 pub struct RenderContext {
     // Updated by the user
     pub camera: RefCell<Camera>,
     pub program: RefCell<Option<ProgramId>>,
     pub font: Cell<FontId>,
-    /// Nested clip rects. The top one clips both drawing and `App::mouse_over`
-    pub(crate) clip_stack: RefCell<Vec<Rectangle>>,
 
     // Managers
     mesh_manager: RefCell<Registry<Mesh>>,
     texture_manager: RefCell<Registry<Texture>>,
     program_manager: RefCell<Registry<Program>>,
     font_manager: RefCell<FontManager>,
-    pub(crate) poly_meshes: RefCell<HashMap<(u32, u32), MeshId>>,
 
     // Queues
-    pub(crate) draw_queue: RefCell<Vec<(i32, DrawCommand)>>,
-    pub(crate) current_draw_layer: Cell<i32>,
+    pub(crate) queue_2d: Queue2d,
 
     // Updated by the app
     pub(crate) active_light: Cell<Option<ActiveLight>>,
@@ -204,16 +175,13 @@ impl RenderContext {
             camera: RefCell::new(Camera::default()),
             program: RefCell::new(None),
             font: Cell::new(FontId::placeholder(0)), // replaced by the default font below
-            clip_stack: RefCell::new(Vec::new()),
 
             mesh_manager: RefCell::new(meshes),
             texture_manager: RefCell::new(textures),
             program_manager: RefCell::new(programs),
             font_manager: RefCell::new(FontManager::new()?),
-            poly_meshes: RefCell::new(HashMap::new()),
 
-            draw_queue: RefCell::new(Vec::new()),
-            current_draw_layer: Cell::new(0),
+            queue_2d: Queue2d::default(),
 
             active_light: Cell::new(None),
             int_screen_resolution: nalgebra_glm::I32Vec2::new(0, 0),

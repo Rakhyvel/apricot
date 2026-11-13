@@ -1,3 +1,8 @@
+use std::{
+    cell::{Cell, RefCell},
+    collections::HashMap,
+};
+
 use nalgebra_glm::{vec2, vec3, Mat4, Vec2, Vec4};
 
 use crate::{
@@ -8,11 +13,59 @@ use crate::{
 
 use super::{
     rectangle::Rectangle,
-    render_core::{DrawCommand, RenderContext, TextureId},
+    render_core::{RenderContext, TextureId},
 };
 
 /// How many sides circles and rings get. Enough to look round at any reasonable size
 const CIRCLE_SIDES: u32 = 64;
+
+/// What 2D drawing keeps between calls. The queued draws, the draw layer, the clip stack, and the
+/// polygon meshes it's made so far
+#[derive(Default)]
+pub(crate) struct Queue2d {
+    draws: RefCell<Vec<Queued>>,
+    layer: Cell<i32>,
+    clips: RefCell<Vec<Rectangle>>,
+    poly_meshes: RefCell<HashMap<(u32, u32), MeshId>>,
+}
+
+/// A draw waiting for the end of the frame, with the layer and clip it was made under
+struct Queued {
+    layer: i32,
+    clip: Option<Rectangle>,
+    command: DrawCommand,
+}
+
+enum DrawCommand {
+    FillRect {
+        rect: Rectangle,
+        color: Vec4,
+    },
+    FillPolygon {
+        center: Vec2,
+        /// Half-size in pixels along the mesh's X and Y. For a polygon both are just its radius
+        scale: Vec2,
+        mesh_id: MeshId,
+        rotation: f32,
+        color: Vec4,
+    },
+    CopyTexture {
+        dest: Rectangle,
+        texture_id: TextureId,
+        texture_dest: Rectangle,
+        color_mod: Vec4,
+    },
+}
+
+impl Queue2d {
+    fn push(&self, command: DrawCommand) {
+        self.draws.borrow_mut().push(Queued {
+            layer: self.layer.get(),
+            clip: self.clips.borrow().last().copied(),
+            command,
+        });
+    }
+}
 
 /// A texture that can stretch to any size without its edges getting blurry or squished
 #[derive(Clone, Copy)]
@@ -100,7 +153,7 @@ impl RenderContext {
     /// Set the current draw layer. Draw calls on higher layers render on top of lower layers,
     /// regardless of call order. Layer 0 is the default. Resets to 0 after flush_2d_queue.
     pub fn set_draw_layer(&self, layer: i32) {
-        self.current_draw_layer.set(layer);
+        self.queue_2d.layer.set(layer);
     }
 
     pub fn copy_texture(
@@ -110,16 +163,12 @@ impl RenderContext {
         texture_dest: Rectangle,
         color_mod: &Vec4,
     ) {
-        self.draw_queue.borrow_mut().push((
-            self.current_draw_layer.get(),
-            DrawCommand::CopyTexture {
-                dest,
-                texture_id,
-                texture_dest,
-                color_mod: *color_mod,
-                scissor: self.current_clip(),
-            },
-        ));
+        self.queue_2d.push(DrawCommand::CopyTexture {
+            dest,
+            texture_id,
+            texture_dest,
+            color_mod: *color_mod,
+        });
     }
 
     /// Turns a rectangle in pixels into a model matrix for the built-in quad. Both edges get
@@ -177,14 +226,8 @@ impl RenderContext {
     }
 
     pub fn fill_rect(&self, dest: Rectangle, color: Vec4) {
-        self.draw_queue.borrow_mut().push((
-            self.current_draw_layer.get(),
-            DrawCommand::FillRect {
-                rect: dest,
-                color,
-                scissor: self.current_clip(),
-            },
-        ));
+        self.queue_2d
+            .push(DrawCommand::FillRect { rect: dest, color });
     }
 
     pub fn fill_polygon(
@@ -206,17 +249,13 @@ impl RenderContext {
         rotation: f32,
         color: Vec4,
     ) {
-        self.draw_queue.borrow_mut().push((
-            self.current_draw_layer.get(),
-            DrawCommand::FillPolygon {
-                center,
-                scale,
-                mesh_id,
-                rotation,
-                color,
-                scissor: self.current_clip(),
-            },
-        ));
+        self.queue_2d.push(DrawCommand::FillPolygon {
+            center,
+            scale,
+            mesh_id,
+            rotation,
+            color,
+        });
     }
 
     /// Filled regular polygon. `rotation` 0 puts the first vertex at +X.
@@ -330,11 +369,8 @@ impl RenderContext {
 
     /// Execute all queued 2D draw commands in layer order. Called once per frame after scene.render().
     pub fn flush_2d_queue(&self) {
-        let commands: Vec<(i32, DrawCommand)> = {
-            let mut queue = self.draw_queue.borrow_mut();
-            queue.sort_by_key(|(layer, _)| *layer);
-            queue.drain(..).collect()
-        };
+        let mut draws = std::mem::take(&mut *self.queue_2d.draws.borrow_mut());
+        draws.sort_by_key(|draw| draw.layer); // stable, so same-layer draws keep their order
 
         // Setup the GL context for drawing 2d stuff
         let res = self.int_screen_resolution;
@@ -346,70 +382,52 @@ impl RenderContext {
         }
         .apply();
 
-        for (_, cmd) in commands {
-            match cmd {
-                DrawCommand::FillRect {
-                    rect,
-                    color,
-                    scissor,
-                } => {
-                    self.apply_scissor(scissor);
-                    self.fill_rect_immediate(rect, color)
-                }
+        for draw in draws {
+            opengl::set_scissor(draw.clip, res.y);
+            match draw.command {
+                DrawCommand::FillRect { rect, color } => self.fill_rect_immediate(rect, color),
                 DrawCommand::FillPolygon {
                     center,
                     scale,
                     mesh_id,
                     rotation,
                     color,
-                    scissor,
-                } => {
-                    self.apply_scissor(scissor);
-                    self.fill_polygon_immediate(center, scale, mesh_id, rotation, color)
-                }
+                } => self.fill_polygon_immediate(center, scale, mesh_id, rotation, color),
                 DrawCommand::CopyTexture {
                     dest,
                     texture_id,
                     texture_dest,
                     color_mod,
-                    scissor,
-                } => {
-                    self.apply_scissor(scissor);
-                    self.copy_texture_immediate(dest, texture_id, texture_dest, &color_mod);
-                }
+                } => self.copy_texture_immediate(dest, texture_id, texture_dest, &color_mod),
             }
         }
 
         debug_assert!(
-            self.clip_stack.borrow().is_empty(),
+            self.queue_2d.clips.borrow().is_empty(),
             "push_clip without a matching pop_clip"
         );
 
         // Put things back the way you found them
         opengl::set_scissor(None, res.y);
         before.restore();
-        self.current_draw_layer.set(0);
+        self.queue_2d.layer.set(0);
     }
 
     /// Push a rectangle to the clip stack
     pub fn push_clip(&self, r: Rectangle) {
-        let mut stack = self.clip_stack.borrow_mut();
+        let mut stack = self.queue_2d.clips.borrow_mut();
         let r = stack.last().map_or(r, |outer| outer.intersect(&r));
         stack.push(r);
     }
 
     /// Pop most recently pushed rectangle from the clip stack
     pub fn pop_clip(&self) {
-        self.clip_stack.borrow_mut().pop();
+        self.queue_2d.clips.borrow_mut().pop();
     }
 
     /// The rectangle at the top of the clip stack
     pub fn current_clip(&self) -> Option<Rectangle> {
-        self.clip_stack.borrow().last().copied()
-    }
-
-    fn apply_scissor(&self, scissor: Option<Rectangle>) {
-        opengl::set_scissor(scissor, self.int_screen_resolution.y);
+        self.queue_2d.clips.borrow().last().copied()
     }
 
     pub fn draw_rect(&self, rect: Rectangle, thickness: f32, color: Vec4) {
@@ -453,7 +471,7 @@ impl RenderContext {
     fn poly_mesh(&self, sides: u32, inner: f32) -> MeshId {
         let sides = sides.max(3);
         let inner_key = (inner.clamp(0.0, 1.0) * 1024.0).round() as u32;
-        if let Some(&id) = self.poly_meshes.borrow().get(&(sides, inner_key)) {
+        if let Some(&id) = self.queue_2d.poly_meshes.borrow().get(&(sides, inner_key)) {
             return id;
         }
         let data = if inner_key == 0 {
@@ -462,7 +480,10 @@ impl RenderContext {
             MeshData::ngon_ring(sides, inner_key as f32 / 1024.0)
         };
         let id = self.add_mesh_data(data, None);
-        self.poly_meshes.borrow_mut().insert((sides, inner_key), id);
+        self.queue_2d
+            .poly_meshes
+            .borrow_mut()
+            .insert((sides, inner_key), id);
         id
     }
 }

@@ -117,12 +117,6 @@ impl DirectionalLightSource {
         self.light_proj * self.light_view
     }
 
-    pub fn activate_framebuffer(&self, program_id: u32) {
-        self.depth_map.activate(1);
-        self.depth_map
-            .associate_uniform(program_id, 1, "shadow_map");
-    }
-
     pub(crate) fn active(&self) -> ActiveLight {
         ActiveLight {
             light_dir: self.light_dir.normalize(),

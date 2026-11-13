@@ -516,16 +516,6 @@ impl RenderContext {
             .aabb
     }
 
-    pub fn get_current_program_id(&self) -> u32 {
-        match *self.program.borrow() {
-            Some(id) => self
-                .get_program_from_id(id)
-                .expect("invalid ProgramId")
-                .id(),
-            None => 0,
-        }
-    }
-
     /// The uniform called `uniform_name` in the current program. Does nothing when set if there's
     /// no current program, or it has no such uniform
     pub fn get_program_uniform(&self, uniform_name: &str) -> Uniform {

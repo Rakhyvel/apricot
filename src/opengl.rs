@@ -65,7 +65,7 @@ impl Shader {
     }
 
     /// Retrieve the OpenGL ID of this shader
-    pub fn id(&self) -> GLuint {
+    pub(crate) fn id(&self) -> GLuint {
         self.id
     }
 }
@@ -165,11 +165,6 @@ impl Program {
             gl::UseProgram(0);
         }
     }
-
-    /// Retrieve the OpenGL ID of this program
-    pub fn id(&self) -> GLuint {
-        self.id
-    }
 }
 
 impl Drop for Program {
@@ -211,7 +206,7 @@ pub fn create_program(vert_data: &'static str, frag_data: &'static str) -> Resul
 
 /// OpenGL Vertex Buffer Object. Contains vertex data given as input to the vertex shader.
 pub struct Buffer<T> {
-    pub id: GLuint,
+    pub(crate) id: GLuint,
     target: GLenum,
     phantom: PhantomData<T>,
 }
@@ -269,7 +264,7 @@ impl<T> Drop for Buffer<T> {
 
 /// OpenGL Vertex Array Object
 pub struct Vao {
-    pub id: GLuint,
+    pub(crate) id: GLuint,
 }
 
 impl Vao {
@@ -628,7 +623,7 @@ impl Drop for Vao {
 
 /// An OpenGL Uniform location
 pub struct Uniform {
-    pub id: GLint,
+    pub(crate) id: GLint,
 }
 
 impl Uniform {
@@ -664,7 +659,7 @@ impl Uniform {
 /// An OpenGL Texture
 #[derive(Default)]
 pub struct Texture {
-    pub id: GLuint,
+    pub(crate) id: GLuint,
     width: Cell<i32>,
     height: Cell<i32>,
 }
@@ -914,15 +909,6 @@ impl Texture {
         print_any_errors();
     }
 
-    /// Associate this texture with a uniform name
-    pub fn associate_uniform(&self, program_id: u32, unit: GLint, uniform_name: &str) {
-        unsafe {
-            let uniform = CString::new(uniform_name).expect("uniform name contains a null byte");
-            gl::Uniform1i(gl::GetUniformLocation(program_id, uniform.as_ptr()), unit)
-        }
-        print_any_errors();
-    }
-
     /// The width and height of this texture, or `None` if it has no pixels yet
     pub fn get_dimensions(&self) -> Option<(i32, i32)> {
         let (width, height) = (self.width.get(), self.height.get());
@@ -944,7 +930,7 @@ impl Drop for Texture {
 /// An OpenGL Frame Buffer Object
 #[derive(Default)]
 pub struct Fbo {
-    pub id: GLuint,
+    pub(crate) id: GLuint,
 }
 
 impl Fbo {

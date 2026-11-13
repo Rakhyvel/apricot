@@ -263,12 +263,7 @@ impl<T> Buffer<T> {
 
 impl<T> Drop for Buffer<T> {
     fn drop(&mut self) {
-        if self.id != 0 {
-            eprintln!(
-                "WARNING: Buffer {} dropped without being queued for deletion!",
-                self.id
-            );
-        }
+        unsafe { gl::DeleteBuffers(1, &self.id) };
     }
 }
 
@@ -434,22 +429,6 @@ impl RawMesh {
     /// How many vertices get drawn
     pub fn vertex_count(&self) -> usize {
         self.count
-    }
-
-    pub fn queue_deletion(&mut self, renderer: &crate::render_core::RenderContext) {
-        renderer.queue_vao_deletion(&mut self.vao);
-        renderer.queue_buffer_deletion(&mut self.vbo);
-        if let Some(ibo) = &mut self.ibo {
-            renderer.queue_buffer_deletion(ibo);
-        }
-    }
-
-    pub(crate) fn queue_into(&mut self, queue: &mut DeletionQueue) {
-        queue.queue_vao(&mut self.vao);
-        queue.queue_buffer(&mut self.vbo);
-        if let Some(ibo) = &mut self.ibo {
-            queue.queue_buffer(ibo);
-        }
     }
 
     pub(crate) fn draw(&self) {
@@ -643,91 +622,7 @@ pub(crate) fn bind_texture_id(unit: u32, id: GLuint) {
 
 impl Drop for Vao {
     fn drop(&mut self) {
-        if self.id != 0 {
-            eprintln!(
-                "WARNING: Vao {} dropped without being queued for deletion!",
-                self.id
-            );
-        }
-    }
-}
-
-pub struct DeletionQueue {
-    vaos: Vec<GLuint>,
-    buffers: Vec<GLuint>,
-    textures: Vec<GLuint>,
-    programs: Vec<GLuint>,
-    shaders: Vec<GLuint>,
-    fbos: Vec<GLuint>,
-}
-
-impl DeletionQueue {
-    pub fn new() -> Self {
-        Self {
-            vaos: Vec::new(),
-            buffers: Vec::new(),
-            textures: Vec::new(),
-            programs: Vec::new(),
-            shaders: Vec::new(),
-            fbos: Vec::new(),
-        }
-    }
-
-    pub fn queue_vao(&mut self, vao: &mut Vao) {
-        self.vaos.push(vao.id);
-        vao.id = 0;
-    }
-
-    pub fn queue_buffer<T>(&mut self, buffer: &mut Buffer<T>) {
-        self.buffers.push(buffer.id);
-        buffer.id = 0;
-    }
-
-    pub fn queue_texture(&mut self, texture: &mut Texture) {
-        self.textures.push(texture.id);
-        texture.id = 0;
-    }
-
-    pub fn queue_fbo(&mut self, fbo: &mut Fbo) {
-        self.fbos.push(fbo.id);
-        fbo.id = 0;
-    }
-
-    pub fn flush(&mut self) {
-        unsafe {
-            if !self.vaos.is_empty() {
-                gl::DeleteVertexArrays(self.vaos.len() as i32, self.vaos.as_ptr());
-                self.vaos.clear();
-            }
-            if !self.buffers.is_empty() {
-                gl::DeleteBuffers(self.buffers.len() as i32, self.buffers.as_ptr());
-                self.buffers.clear();
-            }
-            if !self.textures.is_empty() {
-                gl::DeleteTextures(self.textures.len() as i32, self.textures.as_ptr());
-                self.textures.clear();
-            }
-            if !self.programs.is_empty() {
-                for id in self.programs.drain(..) {
-                    gl::DeleteProgram(id);
-                }
-            }
-            if !self.shaders.is_empty() {
-                for id in self.shaders.drain(..) {
-                    gl::DeleteShader(id);
-                }
-            }
-            if !self.fbos.is_empty() {
-                gl::DeleteFramebuffers(self.fbos.len() as i32, self.fbos.as_ptr());
-                self.fbos.clear();
-            }
-        }
-    }
-}
-
-impl Default for DeletionQueue {
-    fn default() -> Self {
-        Self::new()
+        unsafe { gl::DeleteVertexArrays(1, &self.id) };
     }
 }
 
@@ -1042,12 +937,7 @@ impl Texture {
 
 impl Drop for Texture {
     fn drop(&mut self) {
-        if self.id != 0 {
-            eprintln!(
-                "WARNING: Texture {} dropped without being queued for deletion!",
-                self.id
-            );
-        }
+        unsafe { gl::DeleteTextures(1, &self.id) };
     }
 }
 
@@ -1085,12 +975,7 @@ impl Fbo {
 
 impl Drop for Fbo {
     fn drop(&mut self) {
-        if self.id != 0 {
-            eprintln!(
-                "WARNING: Fbo {} dropped without being queued for deletion!",
-                self.id
-            );
-        }
+        unsafe { gl::DeleteFramebuffers(1, &self.id) };
     }
 }
 

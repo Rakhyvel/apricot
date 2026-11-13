@@ -9,7 +9,7 @@
 //! Move the mouse to look around
 //! Run with `cargo run --example perlin`.
 
-use std::f32::consts::FRAC_PI_4;
+use std::{collections::HashSet, f32::consts::FRAC_PI_4};
 
 use apricot::{
     app::{run, App, AppConfig, Scene},
@@ -32,6 +32,8 @@ use nalgebra_glm::{vec2, vec3, vec4};
 const CHUNK_CELLS: u32 = 32;
 /// How many chunks out from the camera get built
 const VIEW_RADIUS: i32 = 6;
+/// Chunks farther than this get unloaded. A little past the view, so turning around doesn't rebuild them
+const UNLOAD_RADIUS: i32 = VIEW_RADIUS + 2;
 /// How many chunks get built per tick, so flying fast doesn't hitch
 const CHUNKS_PER_TICK: usize = 2;
 /// How tall the tallest peak is
@@ -73,6 +75,8 @@ struct Terrain {
     trunk: MeshId,
     leaves: MeshId,
     chunk_count: usize,
+    /// The chunk the camera was over last tick
+    last_chunk: Option<ChunkCoord>,
 }
 
 impl Terrain {
@@ -97,6 +101,7 @@ impl Terrain {
             trunk: app.renderer.builtins.cube,
             leaves: app.renderer.add_mesh_data(MeshData::icosphere(1), None),
             chunk_count: 0,
+            last_chunk: None,
         }
     }
 
@@ -144,6 +149,34 @@ impl Terrain {
                 .insert(renderer, Thing::Leaves(chunk, i), leaves);
         }
     }
+
+    /// Unload every chunk, and its trees, too far from `pos`
+    fn unload_far_chunks(&mut self, renderer: &RenderContext, pos: nalgebra_glm::Vec3) {
+        let keep: HashSet<ChunkCoord> = self
+            .grid
+            .chunks_near(pos, UNLOAD_RADIUS)
+            .into_iter()
+            .collect();
+        let far: Vec<Thing> = self
+            .models
+            .iter()
+            .map(|(key, _)| key)
+            .filter(|key| match key {
+                Thing::Chunk(c) | Thing::Trunk(c, _) | Thing::Leaves(c, _) => !keep.contains(c),
+            })
+            .collect();
+        for key in far {
+            let Some(model) = self.models.remove(key) else {
+                continue;
+            };
+            // Trees share their meshes, but each chunk's ground mesh and texture are its own
+            if let Thing::Chunk(_) = key {
+                renderer.unload_mesh(model.mesh);
+                renderer.unload_texture(model.texture);
+                self.chunk_count -= 1;
+            }
+        }
+    }
 }
 
 impl Scene for Terrain {
@@ -155,6 +188,12 @@ impl Scene for Terrain {
             self.fly.update(app);
         }
         app.renderer.set_camera(self.fly.camera());
+
+        let here = self.grid.chunk_at(self.fly.position);
+        if self.last_chunk != Some(here) {
+            self.last_chunk = Some(here);
+            self.unload_far_chunks(&app.renderer, self.fly.position);
+        }
 
         // Build the closest missing chunks first
         let missing: Vec<ChunkCoord> = self

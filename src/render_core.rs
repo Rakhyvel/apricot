@@ -13,7 +13,7 @@ use crate::{
     error::Error,
     frustum::Frustum,
     mesh_data::MeshData,
-    opengl::{self, create_program, DeletionQueue, DrawOptions, Fbo, Primitive, RawMesh},
+    opengl::{self, create_program, DrawOptions, Primitive, RawMesh},
     registry::{Handle, Registry},
     shadow_map::ActiveLight,
     tri::Tri,
@@ -23,7 +23,7 @@ use super::{
     aabb::AABB,
     camera::{Camera, ProjectionKind},
     font::{Font, FontId, FontManager},
-    opengl::{Buffer, Program, Texture, Uniform, Vao},
+    opengl::{Program, Texture, Uniform},
     ray::Ray,
     rectangle::Rectangle,
 };
@@ -70,7 +70,6 @@ pub struct RenderContext {
     pub(crate) poly_meshes: RefCell<HashMap<(u32, u32), MeshId>>,
 
     // Queues
-    deletion_queue: RefCell<DeletionQueue>,
     pub(crate) draw_queue: RefCell<Vec<(i32, DrawCommand)>>,
     pub(crate) current_draw_layer: Cell<i32>,
 
@@ -213,7 +212,6 @@ impl RenderContext {
             font_manager: RefCell::new(FontManager::new()?),
             poly_meshes: RefCell::new(HashMap::new()),
 
-            deletion_queue: RefCell::new(DeletionQueue::new()),
             draw_queue: RefCell::new(Vec::new()),
             current_draw_layer: Cell::new(0),
 
@@ -352,17 +350,32 @@ impl RenderContext {
         self.add_mesh(Mesh::from_data(data), name)
     }
 
+    /// Free a mesh. Its id stops working, so anything still drawing it will panic
+    pub fn unload_mesh(&self, id: MeshId) {
+        self.mesh_manager.borrow_mut().remove(id);
+    }
+
+    /// Free a texture. Its id stops working, so anything still drawing it will panic
+    pub fn unload_texture(&self, id: TextureId) {
+        self.texture_manager.borrow_mut().remove(id);
+    }
+
+    /// Free a font. If it was the current font, text goes back to the default font
+    pub fn unload_font(&self, id: FontId) {
+        let Some(font) = self.font_manager.borrow_mut().remove(id) else {
+            return;
+        };
+        self.unload_texture(font.cache_texture);
+        if self.font.get() == id {
+            self.font.set(self.builtins.font);
+        }
+    }
+
     /// Swap the mesh behind `id` for new data, freeing the old one. Everything drawing `id` draws
     /// the new mesh from then on
     pub fn replace_mesh_data(&self, id: MeshId, data: MeshData) {
-        let mut old = {
-            let mut meshes = self.mesh_manager.borrow_mut();
-            let mesh = meshes.get_mut(id).expect("invalid MeshId");
-            std::mem::replace(mesh, Mesh::from_data(data))
-        };
-        let mut queue = self.deletion_queue.borrow_mut();
-        old.raw.queue_into(&mut queue);
-        queue.flush();
+        let mut meshes = self.mesh_manager.borrow_mut();
+        *meshes.get_mut(id).expect("invalid MeshId") = Mesh::from_data(data);
     }
 
     pub fn add_texture(&self, texture: Texture, name: Option<&'static str>) -> TextureId {
@@ -526,27 +539,6 @@ impl RenderContext {
         }
     }
 
-    pub fn queue_vao_deletion(&self, vao: &mut Vao) {
-        self.deletion_queue.borrow_mut().queue_vao(vao);
-    }
-
-    pub fn queue_buffer_deletion<T>(&self, buffer: &mut Buffer<T>) {
-        self.deletion_queue.borrow_mut().queue_buffer(buffer);
-    }
-
-    pub fn queue_texture_deletion(&self, texture: &mut Texture) {
-        self.deletion_queue.borrow_mut().queue_texture(texture);
-    }
-
-    pub fn queue_fbo_deletion(&self, fbo: &mut Fbo) {
-        self.deletion_queue.borrow_mut().queue_fbo(fbo);
-    }
-
-    /// Free every GL object queued for deletion
-    pub fn flush_deletion_queue(&self) {
-        self.deletion_queue.borrow_mut().flush();
-    }
-
     pub fn clear(&self, color: Vec4) {
         opengl::clear(color);
     }
@@ -662,20 +654,6 @@ impl RenderContext {
     }
 }
 
-impl Drop for RenderContext {
-    fn drop(&mut self) {
-        let mut deletion_queue = self.deletion_queue.borrow_mut();
-
-        for (_, mesh) in self.mesh_manager.borrow_mut().iter_mut() {
-            mesh.raw.queue_into(&mut deletion_queue);
-        }
-        for (_, texture) in self.texture_manager.borrow_mut().iter_mut() {
-            deletion_queue.queue_texture(texture);
-        }
-        deletion_queue.flush();
-    }
-}
-
 impl LinePath {
     /// A line through `points`, in order
     pub fn new(points: &[Vec3], style: LineStyle) -> Self {
@@ -688,10 +666,6 @@ impl LinePath {
     /// Replace the points the line goes through. Cheaper than making a new `LinePath`
     pub fn set_points(&mut self, points: &[Vec3]) {
         self.mesh.set_vertices(&flatten(points));
-    }
-
-    pub fn queue_deletion(&mut self, renderer: &RenderContext) {
-        self.mesh.queue_deletion(renderer);
     }
 }
 

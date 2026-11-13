@@ -232,6 +232,11 @@ impl FontManager {
         Ok(self.push(font, name))
     }
 
+    /// Take the font out of the manager, giving it back
+    pub fn remove(&mut self, id: FontId) -> Option<Font> {
+        self.fonts.remove(id)
+    }
+
     fn push(&mut self, font: Font, name: &'static str) -> FontId {
         self.fonts.add(font, Some(name))
     }

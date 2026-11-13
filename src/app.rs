@@ -184,7 +184,6 @@ pub fn run<S: Scene + 'static>(cfg: AppConfig, init: impl FnOnce(&App) -> S) -> 
             }
             app.renderer.flush_2d_queue();
             window.gl_swap_window();
-            app.renderer.flush_deletion_queue(); // free anything let go of this frame
         }
 
         let seconds_since_fps_report = current - start;

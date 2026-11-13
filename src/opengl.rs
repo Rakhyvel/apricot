@@ -1,7 +1,8 @@
 //! This module contains OpenGL objects.
 
 use std::{
-    cell::Cell,
+    cell::{Cell, RefCell},
+    collections::HashMap,
     ffi::{CStr, CString},
     marker::PhantomData,
     path::Path,
@@ -82,9 +83,22 @@ impl Drop for Shader {
 /// An OpenGL program
 pub struct Program {
     id: GLuint,
+    locations: RefCell<HashMap<String, GLint>>,
 }
 
 impl Program {
+    /// The uniform called `name`. Its location is only looked up the first time
+    pub fn uniform(&self, name: &str) -> Uniform {
+        if let Some(&id) = self.locations.borrow().get(name) {
+            return Uniform { id };
+        }
+        let uniform = Uniform::new(self.id, name);
+        self.locations
+            .borrow_mut()
+            .insert(name.to_string(), uniform.id);
+        uniform
+    }
+
     fn from_shaders(shaders: &[Shader]) -> Result<Self, Error> {
         let id = unsafe { gl::CreateProgram() };
         print_any_errors();
@@ -132,7 +146,10 @@ impl Program {
             print_any_errors();
         }
 
-        Ok(Program { id })
+        Ok(Program {
+            id,
+            locations: RefCell::new(HashMap::new()),
+        })
     }
 
     /// Tell OpenGL to use this program

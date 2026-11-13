@@ -47,7 +47,7 @@ impl RenderContext {
             .get_texture_from_id(texture_id)
             .expect("invalid TextureId");
         texture.activate(gl::TEXTURE0);
-        texture.associate_uniform(self.get_current_program_id(), 0, "texture0");
+        self.get_program_uniform("texture0").set_i32(0);
         self.get_program_uniform("u_sprite_offset")
             .set_vec2(&sprite_offset);
         self.get_program_uniform("u_sprite_size")

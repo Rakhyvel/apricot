@@ -523,8 +523,17 @@ impl RenderContext {
         }
     }
 
+    /// The uniform called `uniform_name` in the current program. Does nothing when set if there's
+    /// no current program, or it has no such uniform
     pub fn get_program_uniform(&self, uniform_name: &str) -> Uniform {
-        Uniform::new(self.get_current_program_id(), uniform_name)
+        match self
+            .program
+            .borrow()
+            .and_then(|id| self.get_program_from_id(id))
+        {
+            Some(program) => program.uniform(uniform_name),
+            None => Uniform { id: -1 },
+        }
     }
 
     pub fn queue_vao_deletion(&self, vao: &mut Vao) {
@@ -614,7 +623,6 @@ impl RenderContext {
                 self.get_program_uniform("light_mvp")
                     .set_mat4(&light.light_proj_view);
                 self.get_program_uniform("u_shadows").set_i32(1);
-                self.get_program_uniform("shadow_map").set_i32(1); // texture unit 1
                 self.get_program_uniform("u_shadow_texel")
                     .set_f32(light.texel_size);
                 unsafe {
@@ -634,7 +642,7 @@ impl RenderContext {
             .get_texture_from_id(texture_id)
             .expect("invalid TextureId");
         texture.activate(gl::TEXTURE0);
-        texture.associate_uniform(self.get_current_program_id(), 0, "texture0");
+        self.get_program_uniform("texture0").set_i32(0);
 
         let (view, proj) = self.camera_view_proj();
         let mesh = self.get_mesh_from_id(mesh_id).expect("invalid MeshId");

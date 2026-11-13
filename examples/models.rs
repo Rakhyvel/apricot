@@ -92,9 +92,12 @@ impl Models {
             models.insert(renderer, Thing::Shape(x, z), model);
         }
 
+        let light = DirectionalLightSource::new(vec3(0.5, 1.0, 0.3), 2048).unwrap();
+        app.renderer.set_light(Some(&light));
+
         Self {
             angle: 0.0,
-            light: DirectionalLightSource::new(vec3(0.5, 1.0, 0.3), 2048).unwrap(),
+            light,
             models,
             hovered: None,
             ring: LinePath::new(

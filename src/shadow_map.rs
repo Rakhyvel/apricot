@@ -24,6 +24,8 @@ pub struct DirectionalLightSource {
     light_view: Mat4,
     light_proj: Mat4,
     texel_size: f32,
+    /// Whether it's had a shadow pass yet
+    has_shadows: bool,
 }
 
 #[derive(Clone, Copy)]
@@ -32,6 +34,7 @@ pub(crate) struct ActiveLight {
     pub light_proj_view: Mat4,
     pub depth_map: u32,
     pub texel_size: f32,
+    pub shadows: bool,
 }
 
 impl DirectionalLightSource {
@@ -52,6 +55,7 @@ impl DirectionalLightSource {
             light_view: Mat4::identity(),
             light_proj: Mat4::identity(),
             texel_size: 0.0,
+            has_shadows: false,
         })
     }
 
@@ -127,6 +131,7 @@ impl DirectionalLightSource {
             light_proj_view: self.light_proj_view(),
             depth_map: self.depth_map.id,
             texel_size: self.texel_size,
+            shadows: self.has_shadows,
         }
     }
 }
@@ -186,11 +191,22 @@ impl RenderContext {
         light.frame_buffer.unbind();
         opengl::set_viewport(self.int_screen_resolution.x, self.int_screen_resolution.y);
         before.restore();
-        self.active_light.set(Some(light.active()));
+
+        light.has_shadows = true;
+        // Keep the light being drawn with up to date, if it's this one
+        let lit_by_this = self
+            .active_light
+            .get()
+            .is_some_and(|active| active.depth_map == light.depth_map.id);
+        if lit_by_this {
+            self.active_light.set(Some(light.active()));
+        }
     }
 
-    /// Stop lighting `draw_mesh` with the last shaddow pass's light
-    pub fn clear_light(&self) {
-        self.active_light.set(None);
+    /// Light everything drawn after this with `light`, or with nothing for `None`. Shadow passes on
+    /// the same light keep it up to date, and it lights without shadows until its first one
+    pub fn set_light(&self, light: Option<&DirectionalLightSource>) {
+        self.active_light
+            .set(light.map(DirectionalLightSource::active));
     }
 }

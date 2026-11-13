@@ -535,10 +535,13 @@ impl RenderContext {
                     .set_vec3(&light.light_dir);
                 self.uniform(program, "light_mvp")
                     .set_mat4(&light.light_proj_view);
-                self.uniform(program, "u_shadows").set_i32(1);
+                self.uniform(program, "u_shadows")
+                    .set_i32(light.shadows as i32);
                 self.uniform(program, "u_shadow_texel")
                     .set_f32(light.texel_size);
-                opengl::bind_texture_id(1, light.depth_map);
+                if light.shadows {
+                    opengl::bind_texture_id(1, light.depth_map);
+                }
             }
             None => {
                 self.uniform(program, "u_sun_dir").set_vec3(&Vec3::zeros());

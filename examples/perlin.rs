@@ -92,6 +92,7 @@ impl Terrain {
 
         let mut light = DirectionalLightSource::new(vec3(0.6, 0.8, 0.3), 2048).unwrap();
         light.shadow_distance = 120.0;
+        app.renderer.set_light(Some(&light));
 
         Self {
             fly,
@@ -235,7 +236,7 @@ fn height(x: f32, z: f32) -> f32 {
     let n = noise::perlin(x, z, 0.02, 6, SEED);
     // Most noise lands near the middle, so stretch it out, then flatten the low parts into lakes.
     // No cap on top, or the peaks get sliced flat
-    ((n - 0.35) / 0.3).max(WATER_LEVEL)
+    ((n - 0.35) / 0.8).max(WATER_LEVEL)
 }
 
 /// The ground's actual height in world units, what the meshes are built from

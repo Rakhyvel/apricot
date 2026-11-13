@@ -72,6 +72,7 @@ impl Erosion {
 
         let mut light = DirectionalLightSource::new(vec3(0.6, 0.8, 0.3), 2048).unwrap();
         light.shadow_distance = 150.0;
+        app.renderer.set_light(Some(&light));
 
         let seed = 1;
         let grid = island(seed);

@@ -542,6 +542,7 @@ impl RenderContext {
         self.deletion_queue.borrow_mut().queue_fbo(fbo);
     }
 
+    /// Free every GL object queued for deletion
     pub fn flush_deletion_queue(&self) {
         self.deletion_queue.borrow_mut().flush();
     }

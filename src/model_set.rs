@@ -7,6 +7,7 @@ use nalgebra_glm::{vec4, Mat4, Vec4};
 use crate::{
     aabb::AABB,
     bvh::{BVHNodeId, BVH},
+    opengl::{DrawOptions, Stencil},
     ray::Ray,
     render_core::{MeshId, RenderContext, TextureId},
     shadow_map::ShadowPass,
@@ -167,22 +168,24 @@ impl<K: Copy + Eq + Hash> ModelSet<K> {
 
     /// Draw every model the camera can see, lit by the last shadow pass's light
     pub fn draw(&self, renderer: &RenderContext) {
-        unsafe {
-            // Outlined models mark the stencil buffer for draw_outlines
-            gl::Enable(gl::STENCIL_TEST);
-            gl::StencilFunc(gl::ALWAYS, 1, 0xFF);
-            gl::StencilOp(gl::KEEP, gl::REPLACE, gl::REPLACE);
-        }
-
         for key in self.bvh.iter_frustum(&renderer.camera_frustum(), false) {
             let model = &self.entries[&key].model;
-            unsafe { gl::StencilMask(if model.outlined { 0xFF } else { 0x00 }) };
-            renderer.draw_mesh_textured(model.mesh, model.texture, model.transform, model.tint);
-        }
-
-        unsafe {
-            gl::StencilMask(0xFF); // otherwise clear() can't clear the stencil
-            gl::Disable(gl::STENCIL_TEST);
+            // Outlined models mark the stencil buffer for draw_outlines
+            let options = DrawOptions {
+                stencil: if model.outlined {
+                    Stencil::Mark
+                } else {
+                    Stencil::Off
+                },
+                ..Default::default()
+            };
+            renderer.draw_mesh_textured_with(
+                model.mesh,
+                model.texture,
+                model.transform,
+                model.tint,
+                &options,
+            );
         }
     }
 
@@ -198,13 +201,13 @@ impl<K: Copy + Eq + Hash> ModelSet<K> {
 
     /// Draw a solid `color` outline around every outlined model. Call it after `draw`
     pub fn draw_outlines(&self, renderer: &RenderContext, color: Vec4) {
-        unsafe {
-            // Only draw where the model itself isn't
-            gl::Enable(gl::STENCIL_TEST);
-            gl::StencilFunc(gl::NOTEQUAL, 1, 0xFF);
-            gl::StencilMask(0x00);
-            gl::Disable(gl::DEPTH_TEST);
+        // Only draw where the model itself isn't
+        let before = DrawOptions {
+            stencil: Stencil::OutsideMarks,
+            depth_test: false,
+            ..Default::default()
         }
+        .apply();
         renderer.set_program_from_id(renderer.builtins.program_3d_solid);
         renderer.get_program_uniform("u_color").set_vec4(&color);
         let (view, proj) = renderer.camera_view_proj();
@@ -222,10 +225,6 @@ impl<K: Copy + Eq + Hash> ModelSet<K> {
             renderer.draw(&mesh, bigger, view, proj);
         }
 
-        unsafe {
-            gl::StencilMask(0xFF);
-            gl::Disable(gl::STENCIL_TEST);
-            gl::Enable(gl::DEPTH_TEST);
-        }
+        before.restore();
     }
 }

@@ -1,6 +1,10 @@
 use nalgebra_glm::{vec2, vec3, Mat4, Vec2, Vec4};
 
-use crate::{mesh_data::MeshData, opengl::DrawOptions, render_core::MeshId};
+use crate::{
+    mesh_data::MeshData,
+    opengl::{self, DrawOptions},
+    render_core::MeshId,
+};
 
 use super::{
     rectangle::Rectangle,
@@ -46,7 +50,7 @@ impl RenderContext {
         let texture = self
             .get_texture_from_id(texture_id)
             .expect("invalid TextureId");
-        texture.activate(gl::TEXTURE0);
+        texture.activate(0);
         self.get_program_uniform("texture0").set_i32(0);
         self.get_program_uniform("u_sprite_offset")
             .set_vec2(&sprite_offset);
@@ -334,7 +338,7 @@ impl RenderContext {
 
         // Setup the GL context for drawing 2d stuff
         let res = self.int_screen_resolution;
-        unsafe { gl::Viewport(0, 0, res.x, res.y) };
+        opengl::set_viewport(res.x, res.y);
         let before = DrawOptions {
             depth_test: false,
             culling: false,
@@ -382,7 +386,7 @@ impl RenderContext {
         );
 
         // Put things back the way you found them
-        unsafe { gl::Disable(gl::SCISSOR_TEST) };
+        opengl::set_scissor(None, res.y);
         before.restore();
         self.current_draw_layer.set(0);
     }
@@ -405,21 +409,7 @@ impl RenderContext {
     }
 
     fn apply_scissor(&self, scissor: Option<Rectangle>) {
-        let res = self.int_screen_resolution;
-        match scissor {
-            Some(r) => unsafe {
-                gl::Enable(gl::SCISSOR_TEST);
-                gl::Scissor(
-                    r.pos.x as i32,
-                    res.y - (r.pos.y + r.size.y) as i32,
-                    r.size.x as i32,
-                    r.size.y as i32,
-                );
-            },
-            None => unsafe {
-                gl::Disable(gl::SCISSOR_TEST);
-            },
-        }
+        opengl::set_scissor(scissor, self.int_screen_resolution.y);
     }
 
     pub fn draw_rect(&self, rect: Rectangle, thickness: f32, color: Vec4) {

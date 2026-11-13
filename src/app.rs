@@ -17,6 +17,7 @@ use sdl2::Sdl;
 use crate::audio::Audio;
 use crate::error::Error;
 use crate::input::{Input, Scancode};
+use crate::opengl;
 use crate::rectangle::Rectangle;
 
 use super::render_core::RenderContext;
@@ -98,22 +99,12 @@ pub fn run<S: Scene + 'static>(cfg: AppConfig, init: impl FnOnce(&App) -> S) -> 
 
     let _gl_context = window.gl_create_context().map_err(Error::Sdl)?;
 
-    gl::load_with(|s| video_subsystem.gl_get_proc_address(s) as *const std::os::raw::c_void);
+    opengl::init(|s| video_subsystem.gl_get_proc_address(s) as *const std::ffi::c_void);
 
     window
         .subsystem()
         .gl_set_swap_interval(SwapInterval::VSync)
         .map_err(Error::Sdl)?;
-
-    unsafe {
-        gl::Enable(gl::DEPTH_TEST);
-        gl::DepthFunc(gl::LESS);
-        gl::Enable(gl::CULL_FACE);
-        gl::Enable(gl::MULTISAMPLE);
-        gl::Enable(gl::BLEND);
-        gl::BlendFunc(gl::SRC_ALPHA, gl::ONE_MINUS_SRC_ALPHA);
-        // gl::Enable(gl::FRAMEBUFFER_SRGB);
-    }
 
     let mut app = App {
         window_size: cfg.window_size,
@@ -249,7 +240,7 @@ impl App {
                 } => {
                     self.window_size = nalgebra_glm::I32Vec2::new(new_width, new_height);
                     self.renderer.int_screen_resolution = self.window_size;
-                    unsafe { gl::Viewport(0, 0, new_width, new_height) };
+                    opengl::set_viewport(new_width, new_height);
                 }
                 _ => self.input.handle_event(&event),
             }

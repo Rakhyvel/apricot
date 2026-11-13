@@ -13,7 +13,7 @@ use crate::{
     error::Error,
     frustum::Frustum,
     mesh_data::MeshData,
-    opengl::{create_program, DeletionQueue, DrawOptions, Fbo, Primitive, RawMesh},
+    opengl::{self, create_program, DeletionQueue, DrawOptions, Fbo, Primitive, RawMesh},
     registry::{Handle, Registry},
     shadow_map::ActiveLight,
     tri::Tri,
@@ -311,9 +311,7 @@ impl RenderContext {
             program.set();
         } else {
             *self.program.borrow_mut() = None;
-            unsafe {
-                gl::UseProgram(0);
-            }
+            Program::unbind();
         }
     }
 
@@ -549,10 +547,7 @@ impl RenderContext {
     }
 
     pub fn clear(&self, color: Vec4) {
-        unsafe {
-            gl::ClearColor(color.x, color.y, color.z, color.w);
-            gl::Clear(gl::COLOR_BUFFER_BIT | gl::DEPTH_BUFFER_BIT | gl::STENCIL_BUFFER_BIT);
-        }
+        opengl::clear(color);
     }
 
     pub fn draw(
@@ -585,7 +580,19 @@ impl RenderContext {
         model: Mat4,
         tint: Vec4,
     ) {
-        let before = DrawOptions::default().apply();
+        self.draw_mesh_textured_with(mesh_id, texture_id, model, tint, &DrawOptions::default());
+    }
+
+    /// Draw `mesh_id` with a texture and custom GL `options`
+    pub(crate) fn draw_mesh_textured_with(
+        &self,
+        mesh_id: MeshId,
+        texture_id: TextureId,
+        model: Mat4,
+        tint: Vec4,
+        options: &DrawOptions,
+    ) {
+        let before = options.apply();
         self.set_program_from_id(self.builtins.program_3d);
         self.get_program_uniform("u_color").set_vec4(&tint);
         self.get_program_uniform("shadow_map").set_i32(1);
@@ -599,11 +606,7 @@ impl RenderContext {
                 self.get_program_uniform("u_shadows").set_i32(1);
                 self.get_program_uniform("u_shadow_texel")
                     .set_f32(light.texel_size);
-                unsafe {
-                    gl::ActiveTexture(gl::TEXTURE1);
-                    gl::BindTexture(gl::TEXTURE_2D, light.depth_map);
-                    gl::ActiveTexture(gl::TEXTURE0);
-                }
+                opengl::bind_texture_id(1, light.depth_map);
             }
             None => {
                 self.get_program_uniform("u_sun_dir")
@@ -615,7 +618,7 @@ impl RenderContext {
         let texture = self
             .get_texture_from_id(texture_id)
             .expect("invalid TextureId");
-        texture.activate(gl::TEXTURE0);
+        texture.activate(0);
         self.get_program_uniform("texture0").set_i32(0);
 
         let (view, proj) = self.camera_view_proj();

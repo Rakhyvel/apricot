@@ -159,6 +159,13 @@ impl Program {
         }
     }
 
+    /// Stop using any program
+    pub fn unbind() {
+        unsafe {
+            gl::UseProgram(0);
+        }
+    }
+
     /// Retrieve the OpenGL ID of this program
     pub fn id(&self) -> GLuint {
         self.id
@@ -463,6 +470,17 @@ impl RawMesh {
     }
 }
 
+/// How a draw uses the stencil buffer, a hidden per-pixel mark
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Stencil {
+    /// Ignore the stencil buffer
+    Off,
+    /// Mark every pixel this draws
+    Mark,
+    /// Only draw on pixels that haven't been marked
+    OutsideMarks,
+}
+
 /// GL settings for a draw. Whatever they change gets put back afterward
 #[derive(Debug, Clone, Copy)]
 pub struct DrawOptions {
@@ -478,6 +496,10 @@ pub struct DrawOptions {
     pub shader_point_size: bool,
     /// How thick lines are, in pixels. Most drivers only support 1
     pub line_width: f32,
+    /// How this draw uses the stencil buffer
+    pub stencil: Stencil,
+    /// Pushes depths back by (slope factor, constant units), so surfaces drawn twice don't flicker
+    pub depth_bias: Option<(f32, f32)>,
 }
 
 impl Default for DrawOptions {
@@ -489,38 +511,29 @@ impl Default for DrawOptions {
             blending: true,
             shader_point_size: false,
             line_width: 1.0,
+            stencil: Stencil::Off,
+            depth_bias: None,
         }
     }
+}
+
+thread_local! {
+    // The options GL is set to right now, so restoring doesn't have to ask the driver
+    static CURRENT_OPTIONS: Cell<DrawOptions> = Cell::new(DrawOptions::default());
 }
 
 impl DrawOptions {
     /// Switch GL over to these options, giving back the settings to restore afterward
     pub(crate) fn apply(&self) -> DrawOptions {
-        let before = DrawOptions::current();
-        self.set();
+        let before = CURRENT_OPTIONS.with(Cell::get);
+        self.restore();
         before
     }
 
-    /// Put these options back, like after `apply`
+    /// Switch GL over to these options, without keeping what was there before
     pub(crate) fn restore(&self) {
         self.set();
-    }
-
-    fn current() -> DrawOptions {
-        let mut depth_write: gl::types::GLboolean = gl::TRUE;
-        let mut line_width: f32 = 1.0;
-        unsafe {
-            gl::GetBooleanv(gl::DEPTH_WRITEMASK, &mut depth_write);
-            gl::GetFloatv(gl::LINE_WIDTH, &mut line_width);
-            DrawOptions {
-                depth_test: gl::IsEnabled(gl::DEPTH_TEST) == gl::TRUE,
-                depth_write: depth_write == gl::TRUE,
-                culling: gl::IsEnabled(gl::CULL_FACE) == gl::TRUE,
-                blending: gl::IsEnabled(gl::BLEND) == gl::TRUE,
-                shader_point_size: gl::IsEnabled(gl::PROGRAM_POINT_SIZE) == gl::TRUE,
-                line_width,
-            }
-        }
+        CURRENT_OPTIONS.with(|current| current.set(*self));
     }
 
     fn set(&self) {
@@ -535,6 +548,8 @@ impl DrawOptions {
         toggle(gl::CULL_FACE, self.culling);
         toggle(gl::BLEND, self.blending);
         toggle(gl::PROGRAM_POINT_SIZE, self.shader_point_size);
+        toggle(gl::STENCIL_TEST, self.stencil != Stencil::Off);
+        toggle(gl::POLYGON_OFFSET_FILL, self.depth_bias.is_some());
         unsafe {
             gl::DepthMask(if self.depth_write {
                 gl::TRUE
@@ -542,9 +557,88 @@ impl DrawOptions {
                 gl::FALSE
             });
             gl::LineWidth(self.line_width);
+            if let Some((factor, units)) = self.depth_bias {
+                gl::PolygonOffset(factor, units);
+            }
+            match self.stencil {
+                // Writable, so clearing the screen clears the stencil too
+                Stencil::Off => gl::StencilMask(0xFF),
+                Stencil::Mark => {
+                    gl::StencilFunc(gl::ALWAYS, 1, 0xFF);
+                    gl::StencilOp(gl::KEEP, gl::REPLACE, gl::REPLACE);
+                    gl::StencilMask(0xFF);
+                }
+                Stencil::OutsideMarks => {
+                    gl::StencilFunc(gl::NOTEQUAL, 1, 0xFF);
+                    gl::StencilMask(0x00);
+                }
+            }
         }
         print_any_errors();
     }
+}
+
+/// Load OpenGL's functions with `loader` and set up apricot's default state
+pub(crate) fn init(loader: impl FnMut(&'static str) -> *const std::ffi::c_void) {
+    gl::load_with(loader);
+    unsafe {
+        gl::DepthFunc(gl::LESS);
+        gl::CullFace(gl::BACK);
+        gl::Enable(gl::MULTISAMPLE);
+        gl::BlendFunc(gl::SRC_ALPHA, gl::ONE_MINUS_SRC_ALPHA);
+    }
+    DrawOptions::default().restore();
+}
+
+/// Draw to the `width` by `height` pixels in the corner of whatever's being drawn to
+pub(crate) fn set_viewport(width: i32, height: i32) {
+    unsafe { gl::Viewport(0, 0, width, height) };
+    print_any_errors();
+}
+
+/// Only draw inside `rect`, measured from the top left of a window `window_height` pixels tall.
+/// `None` draws everywhere
+pub(crate) fn set_scissor(rect: Option<crate::rectangle::Rectangle>, window_height: i32) {
+    unsafe {
+        match rect {
+            Some(r) => {
+                gl::Enable(gl::SCISSOR_TEST);
+                gl::Scissor(
+                    r.pos.x as i32,
+                    window_height - (r.pos.y + r.size.y) as i32,
+                    r.size.x as i32,
+                    r.size.y as i32,
+                );
+            }
+            None => gl::Disable(gl::SCISSOR_TEST),
+        }
+    }
+    print_any_errors();
+}
+
+/// Fill the screen with `color`, and reset depth and stencil
+pub(crate) fn clear(color: Vec4) {
+    unsafe {
+        gl::ClearColor(color.x, color.y, color.z, color.w);
+        gl::Clear(gl::COLOR_BUFFER_BIT | gl::DEPTH_BUFFER_BIT | gl::STENCIL_BUFFER_BIT);
+    }
+    print_any_errors();
+}
+
+/// Reset depth only
+pub(crate) fn clear_depth() {
+    unsafe { gl::Clear(gl::DEPTH_BUFFER_BIT) };
+    print_any_errors();
+}
+
+/// Bind the texture with GL id `id` to texture unit `unit`, then go back to unit 0
+pub(crate) fn bind_texture_id(unit: u32, id: GLuint) {
+    unsafe {
+        gl::ActiveTexture(gl::TEXTURE0 + unit);
+        gl::BindTexture(gl::TEXTURE_2D, id);
+        gl::ActiveTexture(gl::TEXTURE0);
+    }
+    print_any_errors();
 }
 
 impl Drop for Vao {
@@ -917,9 +1011,9 @@ impl Texture {
     }
 
     /// Activate this texture
-    pub fn activate(&self, unit: GLuint) {
+    pub fn activate(&self, unit: u32) {
         unsafe {
-            gl::ActiveTexture(unit);
+            gl::ActiveTexture(gl::TEXTURE0 + unit);
             self.bind();
         }
         print_any_errors();

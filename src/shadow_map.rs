@@ -5,7 +5,7 @@ use crate::{camera::ProjectionKind, error::Error, render_core::MeshId};
 use super::{
     camera::Camera,
     frustum::Frustum,
-    opengl::{Fbo, Texture},
+    opengl::{self, DrawOptions, Fbo, Texture},
     render_core::RenderContext,
 };
 
@@ -26,7 +26,7 @@ pub struct DirectionalLightSource {
 pub(crate) struct ActiveLight {
     pub light_dir: Vec3,
     pub light_proj_view: Mat4,
-    pub depth_map: gl::types::GLuint,
+    pub depth_map: u32,
     pub texel_size: f32,
 }
 
@@ -118,7 +118,7 @@ impl DirectionalLightSource {
     }
 
     pub fn activate_framebuffer(&self, program_id: u32) {
-        self.depth_map.activate(gl::TEXTURE1);
+        self.depth_map.activate(1);
         self.depth_map
             .associate_uniform(program_id, 1, "shadow_map");
     }
@@ -169,15 +169,13 @@ impl RenderContext {
         light.fit_to_camera(&self.camera.borrow(), self.aspect_ratio());
 
         light.frame_buffer.bind();
-        unsafe {
-            gl::Viewport(0, 0, light.frame_buffer_size, light.frame_buffer_size);
-            gl::Enable(gl::DEPTH_TEST);
-            gl::Enable(gl::CULL_FACE);
-            gl::CullFace(gl::BACK);
-            gl::Enable(gl::POLYGON_OFFSET_FILL);
-            gl::PolygonOffset(1.0, 1.0);
-            gl::Clear(gl::DEPTH_BUFFER_BIT)
+        opengl::set_viewport(light.frame_buffer_size, light.frame_buffer_size);
+        let before = DrawOptions {
+            depth_bias: Some((1.0, 1.0)),
+            ..Default::default()
         }
+        .apply();
+        opengl::clear_depth();
         self.set_program_from_id(self.builtins.program_shadow);
 
         draw_casters(&ShadowPass {
@@ -187,16 +185,8 @@ impl RenderContext {
         });
 
         light.frame_buffer.unbind();
-        unsafe {
-            gl::Viewport(
-                0,
-                0,
-                self.int_screen_resolution.x,
-                self.int_screen_resolution.y,
-            );
-            gl::Disable(gl::POLYGON_OFFSET_FILL);
-            gl::CullFace(gl::BACK);
-        }
+        opengl::set_viewport(self.int_screen_resolution.x, self.int_screen_resolution.y);
+        before.restore();
         self.active_light.set(Some(light.active()));
     }
 

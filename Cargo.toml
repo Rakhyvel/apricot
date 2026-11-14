@@ -10,9 +10,8 @@ sdl2 = { version = "0.34.5", features = [
     "ttf",
     "mixer",
 ], default-features = false }
-gl = "*"
-nalgebra-glm = "*"
-karta = { git = "https://github.com/Rakhyvel/Karta.git" }
+gl = "0.14.0"
+nalgebra-glm = "0.19.0"
 
 # For reading in textures
 image = "0.25.1"
@@ -21,7 +20,7 @@ image = "0.25.1"
 rand = "0.8.4"
 
 # For reading .obj files into meshes
-obj-rs = "*"
+obj-rs = "0.7.4"
 
 # For time, lol
 chrono = "0.4"

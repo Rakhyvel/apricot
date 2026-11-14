@@ -9,7 +9,7 @@ use crate::{
     frustum::Frustum,
     ray::Ray,
     render_core::RenderContext,
-    shadow_map::{ActiveLight, DirectionalLightSource},
+    shadow_map::{ActiveLight, DirectionalLight},
 };
 
 #[derive(Default)]
@@ -96,10 +96,8 @@ impl RenderContext {
 
     /// Light everything drawn after this with `light`, or with nothing for `None`. Shadow passes on
     /// the same light keep it up to date, and it lights without shadows until its first one
-    pub fn set_light(&self, light: Option<&DirectionalLightSource>) {
-        self.view
-            .light
-            .set(light.map(DirectionalLightSource::active));
+    pub fn set_light(&self, light: Option<&DirectionalLight>) {
+        self.view.light.set(light.map(DirectionalLight::active));
     }
 
     pub(crate) fn light(&self) -> Option<ActiveLight> {

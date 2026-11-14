@@ -18,7 +18,6 @@ pub mod mesh_data;
 pub mod model_set;
 pub mod noise;
 pub mod opengl;
-pub mod physics;
 pub mod plane;
 pub mod ray;
 pub mod rectangle;

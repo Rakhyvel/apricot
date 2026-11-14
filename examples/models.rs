@@ -12,7 +12,7 @@ use apricot::{
     model_set::{Model, ModelSet},
     rectangle::Rectangle,
     render_core::{LinePath, LineStyle, MeshId, TextureId},
-    shadow_map::DirectionalLightSource,
+    shadow_map::DirectionalLight,
 };
 use nalgebra_glm::{vec2, vec3, vec4, Mat4};
 
@@ -40,7 +40,7 @@ enum Thing {
 
 struct Models {
     angle: f32,
-    light: DirectionalLightSource,
+    light: DirectionalLight,
     models: ModelSet<Thing>,
     hovered: Option<Thing>,
     ring: LinePath,
@@ -92,7 +92,7 @@ impl Models {
             models.insert(renderer, Thing::Shape(x, z), model);
         }
 
-        let light = DirectionalLightSource::new(vec3(0.5, 1.0, 0.3), 2048).unwrap();
+        let light = DirectionalLight::new(vec3(0.5, 1.0, 0.3), 2048).unwrap();
         app.renderer.set_light(Some(&light));
 
         Self {
@@ -246,7 +246,7 @@ fn circle(radius: f32, segments: u32) -> Vec<nalgebra_glm::Vec3> {
 fn checkerboard(n: u32) -> Vec<u8> {
     (0..n * n)
         .flat_map(|i| {
-            if (i % n + i / n) % 2 == 0 {
+            if (i % n + i / n).is_multiple_of(2) {
                 [235, 235, 235, 255]
             } else {
                 [190, 190, 200, 255]

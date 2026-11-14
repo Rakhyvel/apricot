@@ -20,7 +20,7 @@ use apricot::{
     fly_controller::FlyController,
     input::Scancode,
     render_core::TextureId,
-    shadow_map::DirectionalLightSource,
+    shadow_map::DirectionalLight,
 };
 use nalgebra_glm::{vec2, vec3, vec4};
 
@@ -40,7 +40,7 @@ struct SpinningCube {
     angle: f32,
     paused: bool,
     beep: SoundId,
-    light: DirectionalLightSource,
+    light: DirectionalLight,
     checker: TextureId,
 }
 
@@ -56,7 +56,7 @@ impl SpinningCube {
         };
         renderer.set_camera(fly.camera());
 
-        let light = DirectionalLightSource::new(vec3(0.5, 1.0, 0.3), 2048).unwrap();
+        let light = DirectionalLight::new(vec3(0.5, 1.0, 0.3), 2048).unwrap();
         app.renderer.set_light(Some(&light));
 
         Self {
@@ -130,7 +130,7 @@ impl Scene for SpinningCube {
 fn checkerboard(n: u32) -> Vec<u8> {
     (0..n * n)
         .flat_map(|i| {
-            if (i % n + i / n) % 2 == 0 {
+            if (i % n + i / n).is_multiple_of(2) {
                 [235, 235, 235, 255]
             } else {
                 [190, 190, 200, 255]

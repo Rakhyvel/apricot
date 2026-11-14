@@ -23,7 +23,8 @@ pub struct AABB {
 }
 
 impl AABB {
-    pub fn new() -> Self {
+    /// A box with nothing in it, inside out so any point grows it to fit
+    pub fn empty() -> Self {
         let min = nalgebra_glm::vec3(f32::MAX, f32::MAX, f32::MAX);
         let max = nalgebra_glm::vec3(f32::MIN, f32::MIN, f32::MIN);
         Self { min, max }
@@ -35,7 +36,7 @@ impl AABB {
 
     /// Create an AABB from an iterator of points. This is slow!
     pub fn from_points(points: impl IntoIterator<Item = nalgebra_glm::Vec3>) -> Self {
-        let mut retval = AABB::new();
+        let mut retval = AABB::empty();
         retval.expand_to_fit(points);
         retval
     }
@@ -49,7 +50,7 @@ impl AABB {
     }
 
     /// This function finds the _surface_ area of an AABB.
-    pub fn area(&self) -> f32 {
+    pub fn surface_area(&self) -> f32 {
         let d = self.max - self.min;
         2.0 * (d.x * d.y + d.y * d.z + d.z * d.x)
     }
@@ -243,7 +244,7 @@ impl AABB {
 
 impl Default for AABB {
     fn default() -> Self {
-        Self::new()
+        Self::empty()
     }
 }
 

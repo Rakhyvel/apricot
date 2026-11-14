@@ -22,7 +22,7 @@ use apricot::{
     input::Scancode,
     mesh_data::MeshData,
     render_core::{MeshId, TextureId},
-    shadow_map::DirectionalLightSource,
+    shadow_map::DirectionalLight,
 };
 use nalgebra_glm::{vec2, vec3, vec4, Mat4, Vec2};
 
@@ -48,7 +48,7 @@ fn main() -> Result<(), Error> {
 
 struct Erosion {
     fly: FlyController,
-    light: DirectionalLightSource,
+    light: DirectionalLight,
     grid: HeightGrid,
     mesh: MeshId,
     texture: TextureId,
@@ -70,7 +70,7 @@ impl Erosion {
         };
         renderer.set_camera(fly.camera());
 
-        let mut light = DirectionalLightSource::new(vec3(0.6, 0.8, 0.3), 2048).unwrap();
+        let mut light = DirectionalLight::new(vec3(0.6, 0.8, 0.3), 2048).unwrap();
         light.shadow_distance = 150.0;
         app.renderer.set_light(Some(&light));
 

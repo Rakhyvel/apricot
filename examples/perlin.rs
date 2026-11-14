@@ -23,7 +23,7 @@ use apricot::{
     noise,
     rectangle::Rectangle,
     render_core::{MeshId, RenderContext},
-    shadow_map::DirectionalLightSource,
+    shadow_map::DirectionalLight,
     terrain::{normal_at, scatter, surface_height},
 };
 use nalgebra_glm::{vec2, vec3, vec4};
@@ -69,7 +69,7 @@ fn main() -> Result<(), Error> {
 
 struct Terrain {
     fly: FlyController,
-    light: DirectionalLightSource,
+    light: DirectionalLight,
     grid: ChunkGrid,
     models: ModelSet<Thing>,
     trunk: MeshId,
@@ -90,7 +90,7 @@ impl Terrain {
         };
         app.renderer.set_camera(fly.camera());
 
-        let mut light = DirectionalLightSource::new(vec3(0.6, 0.8, 0.3), 2048).unwrap();
+        let mut light = DirectionalLight::new(vec3(0.6, 0.8, 0.3), 2048).unwrap();
         light.shadow_distance = 120.0;
         app.renderer.set_light(Some(&light));
 

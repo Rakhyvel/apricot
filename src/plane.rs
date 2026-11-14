@@ -8,7 +8,7 @@ use crate::ray::{Ray, RayHit};
 /// A plane data structure
 pub struct Plane {
     normal: nalgebra_glm::Vec3,
-    pub dist: f32,
+    dist: f32,
 }
 
 impl Plane {

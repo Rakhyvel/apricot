@@ -358,6 +358,20 @@ impl MeshData {
     }
 }
 
+/// The triangles made by `indices` into flat xyz `positions`
+pub(crate) fn triangles<'a>(
+    positions: &'a [f32],
+    indices: &'a [u32],
+) -> impl Iterator<Item = Tri> + 'a {
+    let corner = |i: u32| {
+        let i = i as usize * 3;
+        vec3(positions[i], positions[i + 1], positions[i + 2])
+    };
+    indices
+        .chunks_exact(3)
+        .map(move |t| Tri::new(corner(t[0]), corner(t[1]), corner(t[2])))
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -460,18 +474,4 @@ mod tests {
     fn plane_is_valid() {
         check(&MeshData::plane());
     }
-}
-
-/// The triangles made by `indices` into flat xyz `positions`
-pub(crate) fn triangles<'a>(
-    positions: &'a [f32],
-    indices: &'a [u32],
-) -> impl Iterator<Item = Tri> + 'a {
-    let corner = |i: u32| {
-        let i = i as usize * 3;
-        vec3(positions[i], positions[i + 1], positions[i + 2])
-    };
-    indices
-        .chunks_exact(3)
-        .map(move |t| Tri::new(corner(t[0]), corner(t[1]), corner(t[2])))
 }

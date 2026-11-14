@@ -13,7 +13,7 @@ use super::{
     render_core::RenderContext,
 };
 
-pub struct DirectionalLightSource {
+pub struct DirectionalLight {
     /// Direction towards the light
     pub light_dir: nalgebra_glm::Vec3,
     pub shadow_distance: f32,
@@ -37,7 +37,7 @@ pub(crate) struct ActiveLight {
     pub shadows: bool,
 }
 
-impl DirectionalLightSource {
+impl DirectionalLight {
     pub fn new(light_dir: Vec3, shadow_map_size: i32) -> Result<Self, Error> {
         let depth_map = Texture::new();
         depth_map.load_depth_buffer(shadow_map_size, shadow_map_size);
@@ -161,7 +161,7 @@ impl RenderContext {
     /// Render onto `light`'s shadow map, fitted to the current camera.
     pub fn shadow_pass(
         &self,
-        light: &mut DirectionalLightSource,
+        light: &mut DirectionalLight,
         draw_casters: impl FnOnce(&ShadowPass),
     ) {
         light.fit_to_camera(&self.camera(), self.aspect_ratio());

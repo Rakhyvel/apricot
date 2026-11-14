@@ -175,19 +175,19 @@ impl<Object: Copy> BVH<Object> {
         let aabb = self.node(leaf).volume;
         let mut index = root;
         while let (Some(left), Some(right)) = (self.node(index).left, self.node(index).right) {
-            let area = self.node(index).volume.area();
-            let combined_area = self.node(index).volume.union(aabb).area();
+            let area = self.node(index).volume.surface_area();
+            let combined_area = self.node(index).volume.union(aabb).surface_area();
 
             // Cost of a new parent for this node and the leaf, versus pushing the leaf further down
             let cost = 2.0 * combined_area;
             let inheritance_cost = 2.0 * (combined_area - area);
             let descend_cost = |child: NodeId| {
                 let child = self.node(child);
-                let grown = aabb.union(child.volume).area();
+                let grown = aabb.union(child.volume).surface_area();
                 let growth = if child.is_leaf() {
                     grown
                 } else {
-                    grown - child.volume.area()
+                    grown - child.volume.surface_area()
                 };
                 growth + inheritance_cost
             };
@@ -209,7 +209,7 @@ impl<Object: Copy> BVH<Object> {
             (leaf, sibling)
         };
         let new_parent = self.allocate(Node {
-            volume: AABB::new(),
+            volume: AABB::empty(),
             left: Some(left),
             right: Some(right),
             parent: old_parent,

@@ -73,11 +73,6 @@ impl Frustum {
         &self.planes
     }
 
-    /// Get a mutable reference to a frustum's planes
-    pub fn planes_mut(&mut self) -> &mut [Plane; 6] {
-        &mut self.planes
-    }
-
     /// Get the corners of a frustum
     pub fn corners(&self) -> [nalgebra_glm::Vec3; 8] {
         self.corners

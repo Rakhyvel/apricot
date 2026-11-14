@@ -119,7 +119,7 @@ pub fn run<S: Scene + 'static>(cfg: AppConfig, init: impl FnOnce(&App) -> S) -> 
         ticks: 0,
         fps: 0,
     };
-    app.renderer.int_screen_resolution = app.window_size; // so the aspect is right in `init`
+    app.renderer.set_screen_size(app.window_size); // so the aspect is right in `init`
 
     let mut scene_stack: Vec<Box<dyn Scene>> = vec![Box::new(init(&app))];
 
@@ -177,7 +177,7 @@ pub fn run<S: Scene + 'static>(cfg: AppConfig, init: impl FnOnce(&App) -> S) -> 
         }
 
         if !scene_stale {
-            app.renderer.int_screen_resolution = app.window_size;
+            app.renderer.set_screen_size(app.window_size);
             if let Some(scene) = scene_stack.last_mut() {
                 scene.render(&app);
                 frames += 1;
@@ -239,7 +239,7 @@ impl App {
                     ..
                 } => {
                     self.window_size = nalgebra_glm::I32Vec2::new(new_width, new_height);
-                    self.renderer.int_screen_resolution = self.window_size;
+                    self.renderer.set_screen_size(self.window_size);
                     opengl::set_viewport(new_width, new_height);
                 }
                 _ => self.input.handle_event(&event),

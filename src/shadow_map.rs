@@ -170,7 +170,7 @@ impl RenderContext {
         light: &mut DirectionalLightSource,
         draw_casters: impl FnOnce(&ShadowPass),
     ) {
-        light.fit_to_camera(&self.camera.borrow(), self.aspect_ratio());
+        light.fit_to_camera(&self.camera(), self.aspect_ratio());
 
         light.frame_buffer.bind();
         opengl::set_viewport(light.frame_buffer_size, light.frame_buffer_size);
@@ -189,24 +189,11 @@ impl RenderContext {
         });
 
         light.frame_buffer.unbind();
-        opengl::set_viewport(self.int_screen_resolution.x, self.int_screen_resolution.y);
+        let screen = self.screen_size();
+        opengl::set_viewport(screen.x, screen.y);
         before.restore();
 
         light.has_shadows = true;
-        // Keep the light being drawn with up to date, if it's this one
-        let lit_by_this = self
-            .active_light
-            .get()
-            .is_some_and(|active| active.depth_map == light.depth_map.id);
-        if lit_by_this {
-            self.active_light.set(Some(light.active()));
-        }
-    }
-
-    /// Light everything drawn after this with `light`, or with nothing for `None`. Shadow passes on
-    /// the same light keep it up to date, and it lights without shadows until its first one
-    pub fn set_light(&self, light: Option<&DirectionalLightSource>) {
-        self.active_light
-            .set(light.map(DirectionalLightSource::active));
+        self.refresh_light(light.active());
     }
 }

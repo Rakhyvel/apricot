@@ -1,52 +1,32 @@
 //! This file contains the core rendering functionality that is shared between 2D and 3D rendering.
 
-use std::{
-    cell::{Cell, RefCell},
-    fmt::Debug,
-    path::Path,
-};
+use std::fmt::Debug;
 
-use nalgebra_glm::{vec2, vec4, Mat4, Vec2, Vec3, Vec4};
+use nalgebra_glm::{Mat4, Vec3, Vec4};
 
 use crate::{
     error::Error,
-    frustum::Frustum,
     mesh_data::MeshData,
     opengl::{self, create_program, DrawOptions, Primitive, RawMesh},
     registry::{Handle, Registry},
-    shadow_map::ActiveLight,
     tri::Tri,
 };
 
 use super::{
     aabb::AABB,
-    camera::{Camera, ProjectionKind},
-    font::{Font, FontId, FontManager},
+    font::{FontId, FontManager},
     opengl::{Program, Texture, Uniform},
-    ray::Ray,
     render2d::Queue2d,
+    resources::Resources,
+    view::View,
 };
 
 const DEFAULT_FONT: &[u8] = include_bytes!("fonts/Not Jam Mono Clean 16.ttf");
 
 pub struct RenderContext {
-    // Updated by the user
-    pub camera: RefCell<Camera>,
-    pub font: Cell<FontId>,
-
-    // Managers
-    mesh_manager: RefCell<Registry<Mesh>>,
-    texture_manager: RefCell<Registry<Texture>>,
-    program_manager: RefCell<Registry<Program>>,
-    font_manager: RefCell<FontManager>,
-
-    // Queues
+    pub(crate) resources: Resources,
+    pub(crate) view: View,
     pub(crate) queue_2d: Queue2d,
-
-    // Updated by the app
-    pub(crate) active_light: Cell<Option<ActiveLight>>,
-    pub int_screen_resolution: nalgebra_glm::I32Vec2,
-    pub camera_2d: Camera,
     pub builtins: Builtins,
 }
 
@@ -110,7 +90,7 @@ pub struct Mesh {
     raw: RawMesh,
     positions: Vec<f32>,
     indices: Vec<u32>,
-    aabb: AABB,
+    pub(crate) aabb: AABB,
 }
 
 impl RenderContext {
@@ -171,31 +151,9 @@ impl RenderContext {
         };
 
         let mut renderer = Self {
-            camera: RefCell::new(Camera::default()),
-            font: Cell::new(FontId::placeholder(0)), // replaced by the default font below
-
-            mesh_manager: RefCell::new(meshes),
-            texture_manager: RefCell::new(textures),
-            program_manager: RefCell::new(programs),
-            font_manager: RefCell::new(FontManager::new()?),
-
+            resources: Resources::new(meshes, textures, programs, FontManager::new()?),
+            view: View::default(),
             queue_2d: Queue2d::default(),
-
-            active_light: Cell::new(None),
-            int_screen_resolution: nalgebra_glm::I32Vec2::new(0, 0),
-            camera_2d: Camera::new(
-                nalgebra_glm::vec3(0.0, 0.0, 0.0),
-                nalgebra_glm::vec3(0.0, 0.0, 1.0),
-                nalgebra_glm::vec3(0.0, 1.0, 0.0),
-                ProjectionKind::Orthographic {
-                    left: -1.0,
-                    right: 1.0,
-                    bottom: -1.0,
-                    top: 1.0,
-                    near: 0.1,
-                    far: 10.0,
-                },
-            ),
             builtins,
         };
 
@@ -209,259 +167,6 @@ impl RenderContext {
         Ok(renderer)
     }
 
-    pub fn set_camera(&self, camera: Camera) {
-        *self.camera.borrow_mut() = camera
-    }
-
-    /// The window's aspect ratio (width / height)
-    pub fn aspect_ratio(&self) -> f32 {
-        let res = self.int_screen_resolution;
-        if res.y == 0 {
-            1.0
-        } else {
-            res.x as f32 / res.y as f32
-        }
-    }
-
-    /// The current camera's view and projection matrices, fitted to the window
-    pub fn camera_view_proj(&self) -> (Mat4, Mat4) {
-        self.camera.borrow().view_proj_matrices(self.aspect_ratio())
-    }
-
-    /// The current camera's view frustum, fitted to the window
-    pub fn camera_frustum(&self) -> Frustum {
-        self.camera.borrow().frustum(self.aspect_ratio())
-    }
-
-    /// Roughly how many pixels across the radius of a sphere at `center` looks on screen
-    pub fn projected_radius_px(&self, center: Vec3, radius: f32) -> f32 {
-        let height = self.int_screen_resolution.y as f32;
-        self.camera
-            .borrow()
-            .projected_radius_px(center, radius, height)
-    }
-
-    /// Where a world-space point lands on screen, in pixels. `None` if it's behind the camera
-    pub fn world_to_screen(&self, p: Vec3) -> Option<Vec2> {
-        let (view, proj) = self.camera_view_proj();
-        let clip = proj * view * vec4(p.x, p.y, p.z, 1.0);
-        if clip.w <= 0.0 {
-            return None;
-        }
-        let ndc = clip.xyz() / clip.w;
-        let res = self.int_screen_resolution;
-        Some(vec2(
-            (ndc.x + 1.0) / 2.0 * res.x as f32,
-            (1.0 - ndc.y) / 2.0 * res.y as f32,
-        ))
-    }
-
-    /// A ray from the camera through a pixel on screen
-    pub fn screen_ray(&self, pos: Vec2) -> Ray {
-        let res = self.int_screen_resolution;
-        self.camera
-            .borrow()
-            .get_ray(pos.x, pos.y, res.x as f32, res.y as f32)
-    }
-
-    pub fn set_font(&self, font: FontId) {
-        self.font.set(font);
-    }
-
-    pub fn get_current_font_id(&self) -> FontId {
-        self.font.get()
-    }
-
-    pub fn get_current_font(&self) -> std::cell::Ref<'_, Font> {
-        self.get_font_from_id(self.font.get())
-            .expect("invalid FontId")
-    }
-
-    pub fn add_mesh(&self, mesh: Mesh, name: Option<&'static str>) -> MeshId {
-        self.mesh_manager.borrow_mut().add(mesh, name)
-    }
-
-    pub fn add_mesh_from_obj(
-        &self,
-        obj_file_data: &[u8],
-        name: Option<&'static str>,
-    ) -> Result<MeshId, Error> {
-        Ok(self.add_mesh(Mesh::from_obj(obj_file_data)?, name))
-    }
-
-    /// Upload `data` to the GPU and add it as a mesh
-    pub fn add_mesh_data(&self, data: MeshData, name: Option<&'static str>) -> MeshId {
-        self.add_mesh(Mesh::from_data(data), name)
-    }
-
-    /// Free a mesh. Its id stops working, so anything still drawing it will panic
-    pub fn unload_mesh(&self, id: MeshId) {
-        self.mesh_manager.borrow_mut().remove(id);
-    }
-
-    /// Free a texture. Its id stops working, so anything still drawing it will panic
-    pub fn unload_texture(&self, id: TextureId) {
-        self.texture_manager.borrow_mut().remove(id);
-    }
-
-    /// Free a font. If it was the current font, text goes back to the default font
-    pub fn unload_font(&self, id: FontId) {
-        let Some(font) = self.font_manager.borrow_mut().remove(id) else {
-            return;
-        };
-        self.unload_texture(font.cache_texture);
-        if self.font.get() == id {
-            self.font.set(self.builtins.font);
-        }
-    }
-
-    /// Swap the mesh behind `id` for new data, freeing the old one. Everything drawing `id` draws
-    /// the new mesh from then on
-    pub fn replace_mesh_data(&self, id: MeshId, data: MeshData) {
-        let mut meshes = self.mesh_manager.borrow_mut();
-        *meshes.get_mut(id).expect("invalid MeshId") = Mesh::from_data(data);
-    }
-
-    pub fn add_texture(&self, texture: Texture, name: Option<&'static str>) -> TextureId {
-        self.texture_manager.borrow_mut().add(texture, name)
-    }
-
-    /// Load a PNG into a texture
-    pub fn add_texture_from_png(
-        &self,
-        path: impl AsRef<Path>,
-        name: Option<&'static str>,
-    ) -> Result<TextureId, Error> {
-        Ok(self
-            .texture_manager
-            .borrow_mut()
-            .add(Texture::from_png(path)?, name))
-    }
-
-    pub fn add_program(&self, program: Program, name: Option<&'static str>) -> ProgramId {
-        let mut manager = self.program_manager.borrow_mut();
-        match name {
-            Some(name) => manager.add_or_replace(program, name),
-            None => manager.add(program, None),
-        }
-    }
-
-    /// Compile a vertex and fragment shader into a program, and name it
-    pub fn add_program_from_source(
-        &self,
-        vert: &'static str,
-        frag: &'static str,
-        name: Option<&'static str>,
-    ) -> Result<ProgramId, Error> {
-        Ok(self.add_program(create_program(vert, frag)?, name))
-    }
-
-    /// Load a .ttf or .otf font
-    pub fn add_font(
-        &self,
-        path: impl AsRef<Path>,
-        name: &'static str,
-        size: u16,
-        style: sdl2::ttf::FontStyle,
-    ) -> Result<FontId, Error> {
-        self.font_manager
-            .borrow_mut()
-            .add_font(path, name, size, style, self)
-    }
-
-    pub fn add_font_from_bytes(
-        &self,
-        bytes: &[u8],
-        name: &'static str,
-        size: u16,
-        style: sdl2::ttf::FontStyle,
-    ) -> Result<FontId, Error> {
-        self.font_manager
-            .borrow_mut()
-            .add_font_from_bytes(bytes, name, size, style, self)
-    }
-
-    pub fn get_mesh(&self, name: &'static str) -> Option<std::cell::Ref<'_, Mesh>> {
-        if let Some(id) = self.get_mesh_id_from_name(name) {
-            self.get_mesh_from_id(id)
-        } else {
-            None
-        }
-    }
-
-    pub fn get_texture(&self, name: &'static str) -> Option<std::cell::Ref<'_, Texture>> {
-        if let Some(id) = self.get_texture_id_from_name(name) {
-            self.get_texture_from_id(id)
-        } else {
-            None
-        }
-    }
-
-    pub fn get_program(&self, name: &'static str) -> Option<std::cell::Ref<'_, Program>> {
-        if let Some(id) = self.get_program_id_from_name(name) {
-            self.get_program_from_id(id)
-        } else {
-            None
-        }
-    }
-
-    pub fn get_mesh_from_id(&self, id: MeshId) -> Option<std::cell::Ref<'_, Mesh>> {
-        std::cell::Ref::filter_map(self.mesh_manager.borrow(), |m| m.get(id)).ok()
-    }
-
-    pub fn get_texture_from_id(&self, id: TextureId) -> Option<std::cell::Ref<'_, Texture>> {
-        std::cell::Ref::filter_map(self.texture_manager.borrow(), |m| m.get(id)).ok()
-    }
-
-    pub fn get_program_from_id(&self, id: ProgramId) -> Option<std::cell::Ref<'_, Program>> {
-        std::cell::Ref::filter_map(self.program_manager.borrow(), |m| m.get(id)).ok()
-    }
-
-    pub fn get_font_from_id(&self, id: FontId) -> Option<std::cell::Ref<'_, Font>> {
-        let manager = self.font_manager.borrow();
-        std::cell::Ref::filter_map(manager, |m| m.get_font_from_id(id)).ok()
-    }
-
-    pub fn get_mesh_id_from_name(&self, name: &'static str) -> Option<MeshId> {
-        self.mesh_manager.borrow().lookup(name)
-    }
-
-    pub fn get_texture_id_from_name(&self, name: &'static str) -> Option<TextureId> {
-        self.texture_manager.borrow().lookup(name)
-    }
-
-    /// Make a texture from tightly packed RGBA bytes, `w * h * 4` of them
-    pub fn create_texture_rgba(&self, w: u32, h: u32, bytes: &[u8]) -> TextureId {
-        let texture = Texture::new();
-        texture.set_pixels(w as i32, h as i32, bytes);
-        self.add_texture(texture, None)
-    }
-
-    /// Replace a texture's pixels. Cheap to call every frame as long as the size stays the same
-    pub fn update_texture_rgba(&self, id: TextureId, w: u32, h: u32, bytes: &[u8]) {
-        self.get_texture_from_id(id)
-            .expect("invalid TextureId")
-            .set_pixels(w as i32, h as i32, bytes);
-    }
-
-    pub fn get_program_id_from_name(&self, name: &'static str) -> Option<ProgramId> {
-        self.program_manager.borrow().lookup(name)
-    }
-
-    pub fn get_font_id_from_name(&self, name: &'static str) -> Option<FontId> {
-        self.font_manager.borrow().get_id_from_name(name)
-    }
-
-    pub fn get_mesh_aabb(&self, mesh_id: MeshId) -> AABB {
-        self.mesh_manager
-            .borrow()
-            .get(mesh_id)
-            .expect("invalid MeshId")
-            .aabb
-    }
-
-    /// The uniform called `uniform_name` in the current program. Does nothing when set if there's
-    /// no current program, or it has no such uniform
     /// The uniform called `name` in `program`. Setting it works any time, whatever's being drawn
     pub fn uniform(&self, program: ProgramId, name: &str) -> Uniform {
         self.get_program_from_id(program)
@@ -529,7 +234,7 @@ impl RenderContext {
         self.uniform(program, "u_color").set_vec4(&tint);
         self.uniform(program, "shadow_map").set_i32(1);
 
-        match self.active_light.get() {
+        match self.light() {
             Some(light) => {
                 self.uniform(program, "u_sun_dir")
                     .set_vec3(&light.light_dir);

@@ -12,6 +12,8 @@ use crate::{
 };
 
 use super::{
+    camera::{Camera, ProjectionKind},
+    font::{Font, FontId},
     rectangle::Rectangle,
     render_core::{RenderContext, TextureId},
 };
@@ -21,12 +23,40 @@ const CIRCLE_SIDES: u32 = 64;
 
 /// What 2D drawing keeps between calls. The queued draws, the draw layer, the clip stack, and the
 /// polygon meshes it's made so far
-#[derive(Default)]
 pub(crate) struct Queue2d {
     draws: RefCell<Vec<Queued>>,
     layer: Cell<i32>,
     clips: RefCell<Vec<Rectangle>>,
     poly_meshes: RefCell<HashMap<(u32, u32), MeshId>>,
+    font: Cell<FontId>,
+    /// View and projection for 2D, which looks straight at the -1..1 square
+    view_proj: (Mat4, Mat4),
+}
+
+impl Default for Queue2d {
+    fn default() -> Self {
+        let camera = Camera::new(
+            vec3(0.0, 0.0, 0.0),
+            vec3(0.0, 0.0, 1.0),
+            vec3(0.0, 1.0, 0.0),
+            ProjectionKind::Orthographic {
+                left: -1.0,
+                right: 1.0,
+                bottom: -1.0,
+                top: 1.0,
+                near: 0.1,
+                far: 10.0,
+            },
+        );
+        Self {
+            draws: RefCell::default(),
+            layer: Cell::default(),
+            clips: RefCell::default(),
+            poly_meshes: RefCell::default(),
+            font: Cell::new(FontId::placeholder(0)), // the renderer sets the default font right after
+            view_proj: camera.view_proj_matrices(1.0),
+        }
+    }
 }
 
 /// A draw waiting for the end of the frame, with the layer and clip it was made under
@@ -111,7 +141,7 @@ impl RenderContext {
             .set_vec2(&sprite_size);
         self.uniform(program, "u_color").set_vec4(&color);
 
-        let (view, proj) = self.camera_2d.view_proj_matrices(1.0);
+        let (view, proj) = self.queue_2d.view_proj;
         let mesh = self.get_mesh_from_id(mesh_id).expect("invalid MeshId");
         self.draw(program, &mesh, model, view, proj);
     }
@@ -146,6 +176,19 @@ impl RenderContext {
         self.get_current_font().measure(text)
     }
 
+    pub fn set_font(&self, font: FontId) {
+        self.queue_2d.font.set(font);
+    }
+
+    pub fn get_current_font_id(&self) -> FontId {
+        self.queue_2d.font.get()
+    }
+
+    pub fn get_current_font(&self) -> std::cell::Ref<'_, Font> {
+        self.get_font_from_id(self.queue_2d.font.get())
+            .expect("invalid FontId")
+    }
+
     pub fn draw_text(&self, pos: Vec2, text: &str, color: Vec4) {
         self.get_current_font().draw(pos, text, self, color);
     }
@@ -174,7 +217,7 @@ impl RenderContext {
     /// Turns a rectangle in pixels into a model matrix for the built-in quad. Both edges get
     /// snapped to whole pixels, so rectangles that share an edge always meet exactly.
     fn rect_model_matrix(&self, rect: Rectangle) -> Mat4 {
-        let res = self.int_screen_resolution;
+        let res = self.screen_size();
         let (res_x, res_y) = (res.x as f32, res.y as f32);
         let (x0, y0) = (rect.pos.x.floor(), rect.pos.y.floor());
         let (x1, y1) = (
@@ -340,7 +383,7 @@ impl RenderContext {
         rotation: f32,
         color: Vec4,
     ) {
-        let res = self.int_screen_resolution;
+        let res = self.screen_size();
 
         let mut model_matrix = nalgebra_glm::translate(
             &nalgebra_glm::one(),
@@ -373,7 +416,7 @@ impl RenderContext {
         draws.sort_by_key(|draw| draw.layer); // stable, so same-layer draws keep their order
 
         // Setup the GL context for drawing 2d stuff
-        let res = self.int_screen_resolution;
+        let res = self.screen_size();
         opengl::set_viewport(res.x, res.y);
         let before = DrawOptions {
             depth_test: false,

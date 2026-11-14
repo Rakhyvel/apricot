@@ -7,7 +7,6 @@ use std::path::Path;
 use crate::error::Error;
 
 use super::{
-    opengl::Texture,
     rectangle::Rectangle,
     registry::{Handle, Registry},
     render_core::{RenderContext, TextureId},
@@ -29,8 +28,6 @@ pub struct Font {
     pub cache_texture: TextureId,
     glyphs: [Glyph; ASCII_NUM_PRINTABLE_CHARS], //< All 95 printable ASCII glyphs
     height: usize,
-    _ascender: usize,
-    _descender: usize,
     line_skip: usize, //< Used for newlines, the amount of pixels to increment Y cursor by
 }
 
@@ -44,23 +41,6 @@ pub struct FontManager {
 }
 
 impl Font {
-    /// Create a new font
-    pub fn new(font: &sdl2::ttf::Font, renderer: &RenderContext) -> Result<Self, Error> {
-        let height = font.height() as usize;
-        let _ascender = font.ascent() as usize;
-        let _descender = font.descent() as usize;
-        let line_skip = font.recommended_line_spacing() as usize;
-        let (cache_texture, glyphs) = pack_glyphs(font, height, renderer)?;
-        Ok(Self {
-            cache_texture,
-            glyphs,
-            height,
-            _ascender,
-            _descender,
-            line_skip,
-        })
-    }
-
     /// Measure how large the text would be if drawn
     pub fn measure(&self, text: &str) -> Vec2 {
         self.layout(text, |_, _| {})
@@ -108,12 +88,50 @@ impl Font {
     }
 }
 
-/// Render every printable ASCII glyph into one atlas texture
+/// A font drawn out into one image, with where each glyph landed. Rasterizing a font gives one of
+/// these, and the renderer turns its image into a texture
+pub(crate) struct Atlas {
+    image: Surface<'static>,
+    glyphs: [Glyph; ASCII_NUM_PRINTABLE_CHARS],
+    height: usize,
+    line_skip: usize,
+}
+
+impl Atlas {
+    fn new(font: &sdl2::ttf::Font) -> Result<Self, Error> {
+        let height = font.height() as usize;
+        let (image, glyphs) = pack_glyphs(font, height)?;
+        Ok(Self {
+            image,
+            glyphs,
+            height,
+            line_skip: font.recommended_line_spacing() as usize,
+        })
+    }
+
+    /// The finished font, once `upload` turns the atlas image into a texture
+    pub(crate) fn into_font(self, upload: impl FnOnce(Surface<'static>) -> TextureId) -> Font {
+        Font {
+            cache_texture: upload(self.image),
+            glyphs: self.glyphs,
+            height: self.height,
+            line_skip: self.line_skip,
+        }
+    }
+}
+
+fn font_error(name: &str, msg: String) -> Error {
+    Error::Font {
+        font: name.to_string(),
+        msg,
+    }
+}
+
+/// Every printable ASCII glyph drawn into one image, and where each one is
 fn pack_glyphs(
     font: &sdl2::ttf::Font,
     height: usize,
-    renderer: &RenderContext,
-) -> Result<(TextureId, [Glyph; ASCII_NUM_PRINTABLE_CHARS]), Error> {
+) -> Result<(Surface<'static>, [Glyph; ASCII_NUM_PRINTABLE_CHARS]), Error> {
     let mut glyphs = [Glyph::default(); ASCII_NUM_PRINTABLE_CHARS];
     let mut x_offset: usize = 0;
     let mut y_offset: usize = 0;
@@ -160,8 +178,7 @@ fn pack_glyphs(
         }
     }
 
-    let font_texture = Texture::from_surface(mega_surface);
-    Ok((renderer.add_texture(font_texture, None), glyphs))
+    Ok((mega_surface, glyphs))
 }
 
 fn glyph_idx_from_byte(char: u8) -> Option<usize> {
@@ -182,63 +199,47 @@ impl FontManager {
         })
     }
 
-    /// Add a new font from a .ttf/.otf to the manager and retrieve it's ID
-    pub fn add_font(
-        &mut self,
+    /// Rasterize a .ttf or .otf font file at `size`
+    pub(crate) fn rasterize_file(
+        &self,
         path: impl AsRef<Path>,
         name: &'static str,
         size: u16,
         style: sdl2::ttf::FontStyle,
-        renderer: &RenderContext,
-    ) -> Result<FontId, Error> {
-        let font = {
-            let mut ttf_font = self
-                .ttf_context
-                .load_font(path.as_ref(), size)
-                .map_err(|msg| Error::Font {
-                    font: format!("{name}"),
-                    msg,
-                })?;
-            ttf_font.set_style(style);
-            Font::new(&ttf_font, renderer)?
-        };
-        Ok(self.push(font, name))
+    ) -> Result<Atlas, Error> {
+        let mut ttf_font = self
+            .ttf_context
+            .load_font(path.as_ref(), size)
+            .map_err(|msg| font_error(name, msg))?;
+        ttf_font.set_style(style);
+        Atlas::new(&ttf_font)
     }
 
-    /// Add a font from .ttf/.otf bytes in memory
-    pub fn add_font_from_bytes(
-        &mut self,
+    /// Rasterize a .ttf or .otf font from its bytes at `size`
+    pub(crate) fn rasterize_bytes(
+        &self,
         bytes: &[u8],
         name: &'static str,
         size: u16,
         style: sdl2::ttf::FontStyle,
-        renderer: &RenderContext,
-    ) -> Result<FontId, Error> {
-        let font = {
-            let rwops = sdl2::rwops::RWops::from_bytes(bytes).map_err(|msg| Error::Font {
-                font: format!("{name}"),
-                msg,
-            })?;
-            let mut ttf_font =
-                self.ttf_context
-                    .load_font_from_rwops(rwops, size)
-                    .map_err(|msg| Error::Font {
-                        font: format!("{name}"),
-                        msg,
-                    })?;
-            ttf_font.set_style(style);
-            Font::new(&ttf_font, renderer)?
-        };
-        Ok(self.push(font, name))
+    ) -> Result<Atlas, Error> {
+        let rwops = sdl2::rwops::RWops::from_bytes(bytes).map_err(|msg| font_error(name, msg))?;
+        let mut ttf_font = self
+            .ttf_context
+            .load_font_from_rwops(rwops, size)
+            .map_err(|msg| font_error(name, msg))?;
+        ttf_font.set_style(style);
+        Atlas::new(&ttf_font)
+    }
+
+    /// Add a finished font under `name`
+    pub(crate) fn add(&mut self, font: Font, name: &'static str) -> FontId {
+        self.fonts.add(font, Some(name))
     }
 
     /// Take the font out of the manager, giving it back
     pub fn remove(&mut self, id: FontId) -> Option<Font> {
         self.fonts.remove(id)
-    }
-
-    fn push(&mut self, font: Font, name: &'static str) -> FontId {
-        self.fonts.add(font, Some(name))
     }
 
     /// Retrieve a font from it's ID

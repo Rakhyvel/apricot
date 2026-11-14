@@ -35,7 +35,6 @@ pub struct BVHFrustumIterator<'a, Object: Copy + Clone> {
     bvh: &'a BVH<Object>, // Reference to the tree
     frustum: &'a Frustum,
     stack: Vec<BVHNodeId>,
-    debug: bool,
 }
 
 /// Iterator returned when iterating over the items in a BVH that intersect with a sphere
@@ -260,11 +259,7 @@ impl<Object: Copy + Clone> BVH<Object> {
     }
 
     /// Iterate through all objects in the BVH that intersect with a given frustum
-    pub fn iter_frustum<'a>(
-        &'a self,
-        frustum: &'a Frustum,
-        debug: bool,
-    ) -> BVHFrustumIterator<'a, Object> {
+    pub fn iter_frustum<'a>(&'a self, frustum: &'a Frustum) -> BVHFrustumIterator<'a, Object> {
         let mut stack = Vec::new();
 
         if self.root_id != INVALID_BVH_NODE_ID {
@@ -275,7 +270,6 @@ impl<Object: Copy + Clone> BVH<Object> {
             bvh: self,
             frustum,
             stack,
-            debug,
         }
     }
 
@@ -305,25 +299,24 @@ impl<Object: Copy + Clone> BVH<Object> {
         BVHRayIterator::new(self, ray)
     }
 
-    /// Print a graphviz representation of the BVH at the current moment
-    pub fn walk_tree(&self) {
-        let mut stack = vec![];
-        stack.push(self.root_id);
-
+    /// The tree as a graphviz graph, for looking at how it's balanced
+    pub fn to_graphviz(&self) -> String {
+        let mut dot = String::from("digraph BVH {\n");
+        let mut stack = vec![self.root_id];
         while let Some(index) = stack.pop() {
-            let node = self.node_at(index);
-            println!("{} [label=\"{:?}\"]", index, node.volume);
-
-            if node.left != INVALID_BVH_NODE_ID {
-                println!("{} -> {}", index, node.left);
-                stack.push(node.left);
+            if index == INVALID_BVH_NODE_ID {
+                continue;
             }
-            if node.right != INVALID_BVH_NODE_ID {
-                println!("{} -> {}", index, node.right);
-                stack.push(node.right);
+            let node = self.node_at(index);
+            dot += &format!("  {index} [label=\"{:?}\"]\n", node.volume);
+            for child in [node.left, node.right] {
+                if child != INVALID_BVH_NODE_ID {
+                    dot += &format!("  {index} -> {child}\n");
+                    stack.push(child);
+                }
             }
         }
-        println!("\n");
+        dot + "}\n"
     }
 
     fn allocate_node(&mut self, object: Object, aabb: AABB) -> BVHNodeId {
@@ -439,7 +432,7 @@ impl<'a, Object: Copy + Clone> Iterator for BVHFrustumIterator<'a, Object> {
     fn next(&mut self) -> Option<Self::Item> {
         while let Some(current_id) = self.stack.pop() {
             let current_node = self.bvh.node_at(current_id);
-            if !current_node.volume.within_frustum(self.frustum, self.debug) {
+            if !current_node.volume.within_frustum(self.frustum) {
                 continue;
             }
 

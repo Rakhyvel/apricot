@@ -112,7 +112,7 @@ impl Camera {
 
     /// The camera's view frustum for a screen with the given aspect ratio
     pub fn frustum(&self, aspect: f32) -> Frustum {
-        Frustum::from_inv_proj_view(self.inv_proj_view(aspect), false)
+        Frustum::from_inv_proj_view(self.inv_proj_view(aspect))
     }
 
     /// Roughly how many pixels across the radius of a sphere at `center` looks on a screen

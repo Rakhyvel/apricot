@@ -13,6 +13,7 @@ pub mod font;
 pub mod frustum;
 pub mod height_grid;
 pub mod input;
+mod logging;
 pub mod mesh_data;
 pub mod model_set;
 pub mod noise;

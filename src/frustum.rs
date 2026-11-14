@@ -29,19 +29,19 @@ impl Frustum {
 
         Self::new(
             [
-                Self::construct_plane(near_top_left, near_bottom_left, far_bottom_left, false), // Left
-                Self::construct_plane(near_top_right, far_bottom_right, near_bottom_right, false), // Right
-                Self::construct_plane(near_top_left, far_top_left, near_top_right, false), // Top
-                Self::construct_plane(near_bottom_left, near_bottom_right, far_bottom_left, false), // Bottom
-                Self::construct_plane(near_top_left, near_top_right, near_bottom_left, false), // Near
-                Self::construct_plane(far_top_left, far_bottom_left, far_top_right, false), // Far
+                Self::construct_plane(near_top_left, near_bottom_left, far_bottom_left), // Left
+                Self::construct_plane(near_top_right, far_bottom_right, near_bottom_right), // Right
+                Self::construct_plane(near_top_left, far_top_left, near_top_right),      // Top
+                Self::construct_plane(near_bottom_left, near_bottom_right, far_bottom_left), // Bottom
+                Self::construct_plane(near_top_left, near_top_right, near_bottom_left),      // Near
+                Self::construct_plane(far_top_left, far_bottom_left, far_top_right),         // Far
             ],
             corners,
         )
     }
 
     /// Create a frustum from an inverse-proj-view matrix
-    pub fn from_inv_proj_view(inv_proj_view: nalgebra_glm::Mat4, _debug: bool) -> Self {
+    pub fn from_inv_proj_view(inv_proj_view: nalgebra_glm::Mat4) -> Self {
         let clip_space_corners: [nalgebra_glm::Vec4; 8] = [
             nalgebra_glm::vec4(-1.0, -1.0, -1.0, 1.0), // near-bottom-left
             nalgebra_glm::vec4(1.0, -1.0, -1.0, 1.0),  // near-bottom-right
@@ -87,13 +87,7 @@ impl Frustum {
         a: nalgebra_glm::Vec3,
         b: nalgebra_glm::Vec3,
         c: nalgebra_glm::Vec3,
-        debug: bool,
     ) -> Plane {
-        let plane_normal = (b - a).cross(&(c - a)).normalize();
-        let plane = Plane::from_center_normal(a, plane_normal);
-        if debug {
-            println!("{:?}", plane);
-        }
-        plane
+        Plane::from_center_normal(a, (b - a).cross(&(c - a)).normalize())
     }
 }

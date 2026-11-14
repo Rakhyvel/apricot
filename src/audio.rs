@@ -31,7 +31,7 @@ pub struct Audio {
 impl Audio {
     pub(crate) fn new() -> Self {
         let mixer = open_mixer()
-            .map_err(|e| eprintln!("no audio, playing silently: {e}"))
+            .map_err(|e| log::warn!("no audio, playing silently: {e}"))
             .ok();
         Self {
             mixer,

@@ -79,8 +79,7 @@ impl DirectionalLightSource {
             ProjectionKind::Orthographic { .. } => camera.proj_matrix(aspect),
         };
 
-        let corners =
-            Frustum::from_inv_proj_view(nalgebra_glm::inverse(&(proj * view)), false).corners();
+        let corners = Frustum::from_inv_proj_view(nalgebra_glm::inverse(&(proj * view))).corners();
 
         // Bounding sphere of the slice
         let center = corners.iter().fold(Vec3::zeros(), |sum, c| sum + c) / 8.0;
@@ -154,10 +153,7 @@ impl ShadowPass<'_> {
 
     /// Everything the light can see. Anything outside it can't cast a shadow
     pub fn frustum(&self) -> Frustum {
-        Frustum::from_inv_proj_view(
-            nalgebra_glm::inverse(&(self.light_proj * self.light_view)),
-            false,
-        )
+        Frustum::from_inv_proj_view(nalgebra_glm::inverse(&(self.light_proj * self.light_view)))
     }
 }
 

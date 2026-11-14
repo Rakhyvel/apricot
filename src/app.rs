@@ -17,6 +17,7 @@ use sdl2::Sdl;
 use crate::audio::Audio;
 use crate::error::Error;
 use crate::input::{Input, Scancode};
+use crate::logging;
 use crate::opengl;
 use crate::rectangle::Rectangle;
 
@@ -33,8 +34,7 @@ pub struct App {
     pub audio: Audio,
 
     // Main loop stuff
-    /// Whether or not the app is running
-    pub running: Cell<bool>,
+    running: Cell<bool>,
     cursor_captured: Cell<bool>,
     /// How many seconds the app has been up
     pub seconds: f64,
@@ -58,6 +58,9 @@ pub struct AppConfig {
     pub cursor_captured: bool,
     /// Whether pressing Escape quits the app
     pub escape_quits: bool,
+    /// The least important log messages that get printed. Ignored if the app already set up its
+    /// own logger
+    pub log_level: log::LevelFilter,
 }
 
 impl Default for AppConfig {
@@ -67,12 +70,14 @@ impl Default for AppConfig {
             window_size: nalgebra_glm::I32Vec2::new(800, 600),
             cursor_captured: false,
             escape_quits: true,
+            log_level: log::LevelFilter::Warn,
         }
     }
 }
 
 /// Starts a new app, with the scene produced by `init`s the first scene in the stack.
 pub fn run<S: Scene + 'static>(cfg: AppConfig, init: impl FnOnce(&App) -> S) -> Result<(), Error> {
+    logging::init(cfg.log_level);
     let sdl_context = sdl2::init().map_err(Error::Sdl)?;
     let video_subsystem = sdl_context.video().map_err(Error::Sdl)?;
     let _audio_subsystem = sdl_context.audio().map_err(Error::Sdl)?;
@@ -192,7 +197,7 @@ pub fn run<S: Scene + 'static>(cfg: AppConfig, init: impl FnOnce(&App) -> S) -> 
             app.fps = (frames as f64 / seconds_since_fps_report.as_secs_f64()).round() as u32;
         }
         if seconds_since_fps_report > Duration::from_secs(5) {
-            println!("5 seconds;  fps: {}", frames / 5);
+            log::debug!("{} fps over the last 5 seconds", frames / 5);
             start = current;
             frames = 0;
         }
@@ -252,7 +257,6 @@ impl App {
 
 /// A scene is a something that can be updated, and rendered
 pub trait Scene {
-    // TODO: Return a "command" enum so that scene's can affect App state
     fn update(&mut self, app: &App);
     fn render(&mut self, app: &App);
 }

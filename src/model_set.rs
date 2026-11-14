@@ -168,7 +168,7 @@ impl<K: Copy + Eq + Hash> ModelSet<K> {
 
     /// Draw every model the camera can see, lit by the last shadow pass's light
     pub fn draw(&self, renderer: &RenderContext) {
-        for key in self.bvh.iter_frustum(&renderer.camera_frustum(), false) {
+        for key in self.bvh.iter_frustum(&renderer.camera_frustum()) {
             let model = &self.entries[&key].model;
             // Outlined models mark the stencil buffer for draw_outlines
             let options = DrawOptions {
@@ -191,7 +191,7 @@ impl<K: Copy + Eq + Hash> ModelSet<K> {
 
     /// Draw every model the light can see that casts a shadow into a shadow pass
     pub fn draw_shadows(&self, pass: &ShadowPass) {
-        for key in self.bvh.iter_frustum(&pass.frustum(), false) {
+        for key in self.bvh.iter_frustum(&pass.frustum()) {
             let model = &self.entries[&key].model;
             if model.casts_shadow {
                 pass.draw(model.mesh, model.transform);
@@ -212,7 +212,7 @@ impl<K: Copy + Eq + Hash> ModelSet<K> {
         renderer.uniform(program, "u_color").set_vec4(&color);
         let (view, proj) = renderer.camera_view_proj();
 
-        for key in self.bvh.iter_frustum(&renderer.camera_frustum(), false) {
+        for key in self.bvh.iter_frustum(&renderer.camera_frustum()) {
             let model = &self.entries[&key].model;
             if !model.outlined {
                 continue;

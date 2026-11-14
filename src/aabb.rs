@@ -12,7 +12,6 @@ use super::{
 };
 
 #[derive(Debug, Copy, Clone)]
-#[allow(unused)]
 /// # Axis Aligned Bounding Box.
 /// An axis aligned bounding box is defined by two vertices: the `min`, which contains the smallest bounds on each axis,
 /// and the `max`, which contains the maximum values for each axis.
@@ -23,7 +22,6 @@ pub struct AABB {
     pub max: nalgebra_glm::Vec3,
 }
 
-#[allow(unused)]
 impl AABB {
     pub fn new() -> Self {
         let min = nalgebra_glm::vec3(f32::MAX, f32::MAX, f32::MAX);
@@ -72,30 +70,10 @@ impl AABB {
         true
     }
 
-    /// Determines whether or not an AABB intersects with a sphere
+    /// Whether the box and `sphere` overlap
     pub fn within_sphere(&self, sphere: &Sphere) -> bool {
-        let mut radius_squared = sphere.radius.powf(2.0);
-
-        if (sphere.center.x < self.min.x) {
-            radius_squared -= (sphere.center.x - self.min.x).powf(2.0);
-        }
-        if (sphere.center.x > self.max.x) {
-            radius_squared -= (sphere.center.x - self.max.x).powf(2.0);
-        }
-        if (sphere.center.y < self.min.y) {
-            radius_squared -= (sphere.center.y - self.min.y).powf(2.0);
-        }
-        if (sphere.center.y > self.max.y) {
-            radius_squared -= (sphere.center.y - self.max.y).powf(2.0);
-        }
-        if (sphere.center.z < self.min.z) {
-            radius_squared -= (sphere.center.z - self.min.z).powf(2.0);
-        }
-        if (sphere.center.z > self.max.z) {
-            radius_squared -= (sphere.center.z - self.max.z).powf(2.0);
-        }
-
-        radius_squared > 0.0
+        let closest = nalgebra_glm::clamp_vec(&sphere.center, &self.min, &self.max);
+        nalgebra_glm::distance2(&closest, &sphere.center) < sphere.radius * sphere.radius
     }
 
     /// The first place `ray` hits the box's surface with `t` inside `t_range`. From inside the
@@ -316,6 +294,18 @@ mod tests {
             nalgebra_glm::vec3(1.0, 0.0, 0.0),
         );
         assert!(unit_box().raycast(&away, 0.0..f32::INFINITY).is_none());
+    }
+
+    #[test]
+    fn within_sphere_checks_the_closest_point() {
+        let b = unit_box();
+        let sphere = |x: f32, r: f32| Sphere::new(nalgebra_glm::vec3(x, 0.0, 0.0), r);
+        assert!(b.within_sphere(&sphere(0.0, 0.1))); // inside
+        assert!(b.within_sphere(&sphere(1.5, 0.6))); // poking in from the side
+        assert!(!b.within_sphere(&sphere(1.5, 0.4))); // just short
+                                                      // Off past a corner, the corner is what counts, not the face
+        let corner = Sphere::new(nalgebra_glm::vec3(1.5, 1.5, 0.0), 0.6);
+        assert!(!b.within_sphere(&corner));
     }
 
     #[test]

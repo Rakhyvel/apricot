@@ -6,7 +6,7 @@ use nalgebra_glm::{vec4, Mat4, Vec4};
 
 use crate::{
     aabb::AABB,
-    bvh::{BVHNodeId, BVH},
+    bvh::{NodeId, BVH},
     opengl::{DrawOptions, Stencil},
     ray::Ray,
     render_core::{MeshId, RenderContext, TextureId},
@@ -44,7 +44,7 @@ impl Model {
 
 struct Entry {
     model: Model,
-    node: BVHNodeId,
+    node: NodeId,
     aabb: AABB,
 }
 

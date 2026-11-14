@@ -42,9 +42,7 @@ impl DirectionalLightSource {
         let depth_map = Texture::new();
         depth_map.load_depth_buffer(shadow_map_size, shadow_map_size);
         let frame_buffer = Fbo::new();
-        frame_buffer.bind();
-        depth_map.post_bind()?;
-        frame_buffer.unbind();
+        frame_buffer.attach_depth(&depth_map)?;
         Ok(Self {
             light_dir: light_dir.normalize(),
             shadow_distance: 50.0,

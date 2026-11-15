@@ -16,21 +16,24 @@ static HASH: [u8; 256] = [
     250, 1, 8, 198, 250, 209, 92, 222, 173, 21, 88, 102, 219,
 ];
 
-/// Smooth 2D noise at (`x`, `y`), roughly between 0 and 1. Lower `frequency` makes bigger, gentler
+/// Smooth 2D noise at (`x`, `y`), between 0 and 1. Lower `frequency` makes bigger, gentler
 /// hills, and each extra octave adds finer detail on top.
 pub fn perlin(x: f32, y: f32, frequency: f32, octaves: i32, seed: i32) -> f32 {
+    if octaves <= 0 {
+        return 0.0;
+    }
     let mut xa = x * frequency;
     let mut ya = y * frequency;
     let mut amp: f32 = 1.0;
     let mut fin: f32 = 0.0;
-    let mut div: f32 = 256.0;
+    let mut div: f32 = 0.0;
 
     for _ in 0..octaves {
         fin += octave(xa, ya, seed) * amp;
+        div += 256.0 * amp; // the most this octave can add
         xa *= 2.0;
         ya *= 2.0;
         amp *= 0.5;
-        div += 256.0 * amp;
     }
 
     fin / div
@@ -80,6 +83,24 @@ mod tests {
     }
 
     #[test]
+    fn perlin_uses_most_of_the_range() {
+        for octaves in [1, 3] {
+            let samples: Vec<f32> = (0..2000)
+                .map(|i| perlin(i as f32 * 0.37, i as f32 * 0.11, 1.0, octaves, 2))
+                .collect();
+            let max = samples.iter().copied().fold(0.0, f32::max);
+            let min = samples.iter().copied().fold(1.0, f32::min);
+            assert!((0.85..1.0).contains(&max), "{octaves} octaves, max {max}");
+            assert!((0.0..0.15).contains(&min), "{octaves} octaves, min {min}");
+        }
+    }
+
+    #[test]
+    fn no_octaves_is_flat() {
+        assert_eq!(perlin(3.0, 4.0, 1.0, 0, 1), 0.0);
+    }
+
+    #[test]
     fn frequency_scales_the_coordinates() {
         for (x, y) in [(1.3, -2.7), (40.0, 12.5), (-8.2, -0.4)] {
             let scaled = perlin(x * 0.3, y * 0.3, 1.0, 4, 9);
@@ -92,8 +113,8 @@ mod tests {
         let (x, y) = (5.3, -1.7);
         let layers = octave(x, y, 4) + 0.5 * octave(2.0 * x, 2.0 * y, 4)
             + 0.25 * octave(4.0 * x, 4.0 * y, 4);
-        // It divides by one octave too many, so 480 and not 448
-        let expected = layers / (256.0 + 128.0 + 64.0 + 32.0);
+        // Each layer's corners go up to 255, so this keeps the total under 1
+        let expected = layers / (256.0 + 128.0 + 64.0);
         assert!((perlin(x, y, 1.0, 3, 4) - expected).abs() < 1e-6);
     }
 

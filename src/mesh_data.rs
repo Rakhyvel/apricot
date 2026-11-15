@@ -14,13 +14,13 @@ pub struct MeshData {
 impl MeshData {
     /// Read a mesh out of the bytes of a Wavefront .obj file
     pub fn from_obj(bytes: &[u8]) -> Result<Self, Error> {
-        let obj: Obj<TexturedVertex> = load_obj(bytes)?;
+        let obj: Obj<TexturedVertex, u32> = load_obj(bytes)?;
         let flat = |f: fn(&TexturedVertex) -> [f32; 3]| obj.vertices.iter().flat_map(f).collect();
         Ok(Self {
             positions: flat(|v| v.position),
             normals: flat(|v| v.normal),
             uvs: flat(|v| v.texture),
-            indices: obj.indices.iter().map(|&i| i as u32).collect(),
+            indices: obj.indices,
         })
     }
 
@@ -446,6 +446,25 @@ mod tests {
         check(&data);
         assert_eq!(data.vertex_count(), 3);
         assert_eq!(data.triangles().count(), 1);
+    }
+
+    #[test]
+    fn from_obj_reads_more_vertices_than_fit_in_a_u16() {
+        // Separate triangles, so every vertex is its own
+        let triangles = 22_000;
+        let mut obj = String::from("vt 0 0\nvn 0 0 1\n");
+        for i in 0..triangles {
+            let x = i as f32;
+            obj += &format!("v {x} 0 0\nv {x} 1 0\nv {} 0 0\n", x + 1.0);
+        }
+        for i in 0..triangles {
+            let first = 3 * i + 1;
+            obj += &format!("f {}/1/1 {}/1/1 {}/1/1\n", first, first + 1, first + 2);
+        }
+        let data = MeshData::from_obj(obj.as_bytes()).unwrap();
+        assert_eq!(data.vertex_count(), 3 * triangles);
+        assert_eq!(data.triangles().count(), triangles);
+        assert_eq!(*data.indices.last().unwrap() as usize, 3 * triangles - 1);
     }
 
     #[test]

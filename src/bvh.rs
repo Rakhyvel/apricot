@@ -378,13 +378,22 @@ mod tests {
             }
         }
 
-        let ray = Ray::new(vec3(-30.0, 0.5, 0.0), vec3(1.0, 0.05, 0.02));
-        let found: HashSet<usize> = bvh.iter_ray(&ray).collect();
-        for (i, aabb) in live {
-            if aabb.raycast(&ray, 0.0..f32::INFINITY).is_some() {
-                assert!(found.contains(i), "ray query missed box {i}");
+        // Aimed at a few boxes' centers, from off past the -x side, so each ray hits something
+        for (target, aabb) in live.iter().step_by(17) {
+            let start = vec3(-30.0, 0.0, 3.0);
+            let ray = Ray::new(start, aabb.center() - start);
+            let found: HashSet<usize> = bvh.iter_ray(&ray).collect();
+            assert!(found.contains(target), "ray at box {target} missed it");
+            for (i, aabb) in live {
+                if aabb.raycast(&ray, 0.0..f32::INFINITY).is_some() {
+                    assert!(found.contains(i), "ray at box {target} missed box {i}");
+                }
             }
         }
+
+        // Starts above everything and goes up
+        let away = Ray::new(vec3(0.0, 50.0, 0.0), vec3(0.1, 1.0, 0.2));
+        assert_eq!(bvh.iter_ray(&away).count(), 0);
 
         let camera = crate::camera::Camera::new(
             vec3(0.0, 5.0, 40.0),

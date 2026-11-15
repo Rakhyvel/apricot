@@ -138,20 +138,17 @@ pub fn run<S: Scene + 'static>(cfg: AppConfig, init: impl FnOnce(&App) -> S) -> 
     let mut start = time.elapsed();
     let mut current;
     let mut previous = Duration::ZERO;
-    let mut lag = Duration::ZERO;
-    let mut elapsed: Duration;
+    let mut timestep = FixedTimestep::new(app.dt);
     let mut frames = 0;
     let mut cursor_applied = false;
     while app.running.get() {
         app.seconds = time.elapsed().as_secs_f64();
         current = time.elapsed();
-        elapsed = current - previous;
-
+        let steps = timestep.advance(current - previous);
         previous = current;
-        lag += elapsed;
 
         let scene_stale = false;
-        while lag >= app.dt {
+        for _ in 0..steps {
             let captured = app.cursor_captured();
             if captured != cursor_applied {
                 let mouse = sdl_context.mouse();
@@ -178,13 +175,6 @@ pub fn run<S: Scene + 'static>(cfg: AppConfig, init: impl FnOnce(&App) -> S) -> 
                 scene.update(&app);
                 app.ticks += 1;
             }
-
-            if !scene_stale {
-                // if scene isn't stale, purge the scene
-                lag -= app.dt;
-            } else {
-                break;
-            }
         }
 
         if !scene_stale {
@@ -210,6 +200,37 @@ pub fn run<S: Scene + 'static>(cfg: AppConfig, init: impl FnOnce(&App) -> S) -> 
     }
 
     Ok(())
+}
+
+/// The most update steps one frame runs to catch up. Time past that is dropped
+const MAX_CATCH_UP_STEPS: u32 = 5;
+
+/// Turns real time into a whole number of fixed-length update steps
+struct FixedTimestep {
+    dt: Duration,
+    lag: Duration,
+}
+
+impl FixedTimestep {
+    fn new(dt: Duration) -> Self {
+        Self {
+            dt,
+            lag: Duration::ZERO,
+        }
+    }
+
+    /// How many steps to run for `elapsed` more real time
+    fn advance(&mut self, elapsed: Duration) -> u32 {
+        self.lag += elapsed;
+        let max_lag = self.dt * MAX_CATCH_UP_STEPS;
+        if self.lag > max_lag {
+            log::debug!("running behind, skipping {:?}", self.lag - max_lag);
+            self.lag = max_lag;
+        }
+        let steps = (self.lag.as_nanos() / self.dt.as_nanos()) as u32;
+        self.lag -= self.dt * steps;
+        steps
+    }
 }
 
 impl App {
@@ -287,4 +308,40 @@ impl App {
 pub trait Scene {
     fn update(&mut self, app: &App);
     fn render(&mut self, app: &App);
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    const DT: Duration = Duration::from_micros(16_667);
+
+    #[test]
+    fn one_step_per_dt_and_leftovers_carry_over() {
+        let mut timestep = FixedTimestep::new(DT);
+        assert_eq!(timestep.advance(DT), 1);
+        assert_eq!(timestep.advance(DT / 2), 0);
+        assert_eq!(timestep.advance(DT / 2), 1);
+        assert_eq!(timestep.advance(DT * 5 / 2), 2);
+        assert_eq!(timestep.advance(DT / 2), 1);
+    }
+
+    #[test]
+    fn a_long_frame_only_catches_up_so_far() {
+        let mut timestep = FixedTimestep::new(DT);
+        assert_eq!(timestep.advance(Duration::from_secs(10)), MAX_CATCH_UP_STEPS);
+        // The rest of the 10 seconds is gone, so things go back to normal right away
+        assert_eq!(timestep.advance(DT), 1);
+    }
+
+    #[test]
+    fn slow_updates_dont_snowball() {
+        // Every step takes twice as long as the time it covers
+        let mut timestep = FixedTimestep::new(DT);
+        let mut steps = 1;
+        for _ in 0..20 {
+            steps = timestep.advance(DT * 2 * steps);
+            assert!(steps <= MAX_CATCH_UP_STEPS, "{steps} steps in one frame");
+        }
+    }
 }

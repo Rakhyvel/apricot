@@ -47,7 +47,8 @@ impl HeightGrid {
                     octaves,
                     seed,
                 );
-                grid.cells[x + z * width].height = n * amplitude;
+                let i = grid.point_index(x, z);
+                grid.cells[i].height = n * amplitude;
             }
         }
         grid
@@ -138,7 +139,12 @@ impl HeightGrid {
         if p.x < 0.0 || p.y < 0.0 || p.x >= w || p.y >= w {
             return None;
         }
-        Some(p.x as usize + p.y as usize * self.width)
+        Some(self.point_index(p.x as usize, p.y as usize))
+    }
+
+    /// Where point (`x`, `z`) is in `cells`. Rows of x run one after another along z
+    fn point_index(&self, x: usize, z: usize) -> usize {
+        x + z * self.width
     }
 }
 
@@ -146,6 +152,39 @@ impl HeightGrid {
 mod tests {
     use super::*;
     use nalgebra_glm::vec2;
+
+    #[test]
+    fn points_are_stored_row_by_row() {
+        let mut grid = HeightGrid::new(4);
+        for z in 0..4 {
+            for x in 0..4 {
+                grid.set_height(vec2(x as f32, z as f32), (10 * z + x) as f32);
+            }
+        }
+        for (i, cell) in grid.cells.iter().enumerate() {
+            assert_eq!(cell.height, (10 * (i / 4) + i % 4) as f32, "cell {i}");
+        }
+
+        // Fractions round down to the point below
+        grid.add_height(vec2(3.9, 2.2), 0.5);
+        grid.add_flow(vec2(3.0, 2.99), 2.0);
+        assert_eq!(grid.cells[11].height, 23.5);
+        assert_eq!(grid.cells[11].flow, 2.0);
+        assert_eq!(grid.flow(vec2(3.5, 2.5)), 2.0);
+    }
+
+    #[test]
+    fn the_last_point_on_each_side_is_on_the_grid() {
+        let mut grid = HeightGrid::new(4);
+        for p in [vec2(3.0, 0.0), vec2(0.0, 3.0), vec2(3.0, 3.0), vec2(3.99, 3.99)] {
+            assert!(grid.contains(p), "{p:?}");
+            grid.set_height(p, 1.0);
+            assert_eq!(grid.height(p), 1.0, "{p:?}");
+        }
+        for p in [vec2(4.0, 0.0), vec2(0.0, 4.0), vec2(-0.01, 2.0), vec2(2.0, -0.01)] {
+            assert!(!grid.contains(p), "{p:?}");
+        }
+    }
 
     #[test]
     fn off_the_grid_reads_as_zero() {

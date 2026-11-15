@@ -23,12 +23,19 @@ const ASCII_LAST_PRINTABLE_CHAR: u8 = 127;
 const ASCII_NUM_PRINTABLE_CHARS: usize =
     (ASCII_LAST_PRINTABLE_CHAR - ASCII_FIRST_PRINTABLE_CHAR) as usize;
 
+/// Where each printable ASCII glyph is in a font's image, and how text lays out with them
+struct GlyphTable {
+    /// All 95 printable ASCII glyphs
+    glyphs: [Glyph; ASCII_NUM_PRINTABLE_CHARS],
+    height: usize,
+    /// How many pixels a newline moves down
+    line_skip: usize,
+}
+
 /// A cached font
 pub struct Font {
     pub cache_texture: TextureId,
-    glyphs: [Glyph; ASCII_NUM_PRINTABLE_CHARS], //< All 95 printable ASCII glyphs
-    height: usize,
-    line_skip: usize, //< Used for newlines, the amount of pixels to increment Y cursor by
+    table: GlyphTable,
 }
 
 /// Refers to a font added to the renderer
@@ -43,18 +50,25 @@ pub struct FontManager {
 impl Font {
     /// Measure how large the text would be if drawn
     pub fn measure(&self, text: &str) -> Vec2 {
-        self.layout(text, |_, _| {})
+        self.table.measure(text)
     }
 
     /// Draw text in a font to the screen
     pub fn draw(&self, pos: Vec2, text: &str, renderer: &RenderContext, color: Vec4) {
-        self.layout(text, |offset, glyph| {
+        self.table.layout(text, |offset, glyph| {
             let dest = Rectangle {
                 pos: pos + offset,
                 size: glyph.rect.size,
             };
             renderer.copy_texture(dest, self.cache_texture, glyph.rect, &color);
         });
+    }
+}
+
+impl GlyphTable {
+    /// Measure how large the text would be if drawn
+    fn measure(&self, text: &str) -> Vec2 {
+        self.layout(text, |_, _| {})
     }
 
     /// Lays out `text` starting at the origin, calling `place` with each glyph and where it goes.
@@ -92,9 +106,7 @@ impl Font {
 /// these, and the renderer turns its image into a texture
 pub(crate) struct Atlas {
     image: Surface<'static>,
-    glyphs: [Glyph; ASCII_NUM_PRINTABLE_CHARS],
-    height: usize,
-    line_skip: usize,
+    table: GlyphTable,
 }
 
 impl Atlas {
@@ -103,9 +115,11 @@ impl Atlas {
         let (image, glyphs) = pack_glyphs(font, height)?;
         Ok(Self {
             image,
-            glyphs,
-            height,
-            line_skip: font.recommended_line_spacing() as usize,
+            table: GlyphTable {
+                glyphs,
+                height,
+                line_skip: font.recommended_line_spacing() as usize,
+            },
         })
     }
 
@@ -113,9 +127,7 @@ impl Atlas {
     pub(crate) fn into_font(self, upload: impl FnOnce(Surface<'static>) -> TextureId) -> Font {
         Font {
             cache_texture: upload(self.image),
-            glyphs: self.glyphs,
-            height: self.height,
-            line_skip: self.line_skip,
+            table: self.table,
         }
     }
 }
@@ -268,5 +280,90 @@ impl Glyph {
             },
             advance: advance as usize,
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// Glyphs 8 wide and 16 tall that each advance 10, except `i` which advances 4. A newline
+    /// moves down 20
+    fn table() -> GlyphTable {
+        let mut glyphs = [Glyph::default(); ASCII_NUM_PRINTABLE_CHARS];
+        for (i, glyph) in glyphs.iter_mut().enumerate() {
+            glyph.rect = Rectangle::new(i as f32 * 8.0, 0.0, 8.0, 16.0);
+            glyph.advance = 10;
+        }
+        glyphs[(b'i' - ASCII_FIRST_PRINTABLE_CHAR) as usize].advance = 4;
+        GlyphTable {
+            glyphs,
+            height: 16,
+            line_skip: 20,
+        }
+    }
+
+    #[test]
+    fn measuring_adds_up_the_advances_and_one_line_height() {
+        assert_eq!(table().measure(""), vec2(0.0, 16.0));
+        assert_eq!(table().measure("abc"), vec2(30.0, 16.0));
+        assert_eq!(table().measure("ii"), vec2(8.0, 16.0));
+    }
+
+    #[test]
+    fn each_newline_goes_down_a_line_skip_and_the_widest_line_sets_the_width() {
+        assert_eq!(table().measure("a\nbc"), vec2(20.0, 36.0));
+        assert_eq!(table().measure("abc\nd"), vec2(30.0, 36.0));
+        assert_eq!(table().measure("a\n"), vec2(10.0, 36.0));
+        assert_eq!(table().measure("a\n\nb"), vec2(10.0, 56.0));
+    }
+
+    #[test]
+    fn characters_without_a_glyph_are_skipped() {
+        let plain = table().measure("ab");
+        assert_eq!(table().measure("a\t\u{e9}\u{20ac}b\u{7f}"), plain);
+    }
+
+    #[test]
+    fn layout_places_each_glyph_where_the_cursor_is() {
+        let mut placed = Vec::new();
+        let size = table().layout("ab\nc", |at, glyph| placed.push((at, glyph.rect.pos.x)));
+        // The glyph for byte b is the one at b - 32, and each is 8 wide
+        let glyph_x = |c: u8| (c - ASCII_FIRST_PRINTABLE_CHAR) as f32 * 8.0;
+        assert_eq!(
+            placed,
+            [
+                (vec2(0.0, 0.0), glyph_x(b'a')),
+                (vec2(10.0, 0.0), glyph_x(b'b')),
+                (vec2(0.0, 20.0), glyph_x(b'c')),
+            ]
+        );
+        assert_eq!(size, vec2(20.0, 36.0));
+    }
+
+    #[test]
+    fn a_font_measures_with_its_table() {
+        let font = Font {
+            cache_texture: Handle::for_tests(0),
+            table: table(),
+        };
+        assert_eq!(font.measure("a
+bc"), vec2(20.0, 36.0));
+    }
+
+    #[test]
+    fn only_printable_ascii_has_glyphs() {
+        let table = table();
+        for byte in [32, b'a', 126] {
+            assert!(table.get_glyph(byte).is_some(), "byte {byte}");
+        }
+        for byte in [0, 31, 127, 200] {
+            assert!(table.get_glyph(byte).is_none(), "byte {byte}");
+        }
+        let a = table.get_glyph(b'a').unwrap();
+        assert_eq!(
+            a.rect.pos.x,
+            (b'a' - ASCII_FIRST_PRINTABLE_CHAR) as f32 * 8.0
+        );
     }
 }

@@ -2,10 +2,10 @@
 
 use std::cell::{Cell, RefCell};
 
-use nalgebra_glm::{vec2, vec4, I32Vec2, Vec2, Vec3};
+use nalgebra_glm::{I32Vec2, Vec2, Vec3};
 
 use crate::{
-    camera::{Camera, ViewProj},
+    camera::{Camera, ViewProj, Viewport},
     geometry::frustum::Frustum,
     geometry::ray::Ray,
     render_core::RenderContext,
@@ -24,14 +24,15 @@ impl RenderContext {
         *self.view.camera.borrow_mut() = camera
     }
 
+    /// The window as a viewport, for converting between the world and the screen
+    pub fn viewport(&self) -> Viewport {
+        let res = self.view.screen.get();
+        Viewport::new(res.x as f32, res.y as f32)
+    }
+
     /// The window's aspect ratio (width / height)
     pub fn aspect_ratio(&self) -> f32 {
-        let res = self.view.screen.get();
-        if res.y == 0 {
-            1.0
-        } else {
-            res.x as f32 / res.y as f32
-        }
+        self.viewport().aspect_ratio()
     }
 
     /// The current camera's view and projection matrices, fitted to the window
@@ -49,34 +50,23 @@ impl RenderContext {
 
     /// Roughly how many pixels across the radius of a sphere at `center` looks on screen
     pub fn projected_radius_px(&self, center: Vec3, radius: f32) -> f32 {
-        let height = self.view.screen.get().y as f32;
         self.view
             .camera
             .borrow()
-            .projected_radius_px(center, radius, height)
+            .projected_radius_px(center, radius, self.viewport())
     }
 
     /// Where a world-space point lands on screen, in pixels. `None` if it's behind the camera
     pub fn world_to_screen(&self, p: Vec3) -> Option<Vec2> {
-        let clip = self.camera_view_proj().combined() * vec4(p.x, p.y, p.z, 1.0);
-        if clip.w <= 0.0 {
-            return None;
-        }
-        let ndc = clip.xyz() / clip.w;
-        let res = self.view.screen.get();
-        Some(vec2(
-            (ndc.x + 1.0) / 2.0 * res.x as f32,
-            (1.0 - ndc.y) / 2.0 * res.y as f32,
-        ))
-    }
-
-    /// A ray from the camera through a pixel on screen
-    pub fn screen_ray(&self, pos: Vec2) -> Ray {
-        let res = self.view.screen.get();
         self.view
             .camera
             .borrow()
-            .get_ray(pos.x, pos.y, res.x as f32, res.y as f32)
+            .world_to_screen(p, self.viewport())
+    }
+
+    /// The ray from the camera through `pos` on screen, in pixels from the top left
+    pub fn screen_ray(&self, pos: Vec2) -> Ray {
+        self.view.camera.borrow().screen_ray(pos, self.viewport())
     }
 
     /// A copy of the current camera

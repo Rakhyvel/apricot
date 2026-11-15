@@ -1,7 +1,7 @@
 //! This module implements the Camera structure. Cameras can either be perspective (typical for 3D) or orthographic
 //! (typical for 2D)
 
-use nalgebra_glm::{Mat4, Vec3};
+use nalgebra_glm::{vec2, vec4, Mat4, Vec2, Vec3};
 
 use crate::geometry::{frustum::Frustum, ray::Ray};
 
@@ -26,6 +26,29 @@ impl ViewProj {
     /// Everything these matrices can see
     pub fn frustum(&self) -> Frustum {
         Frustum::from_proj_view(self.combined())
+    }
+}
+
+/// The size of the image a camera draws into, in pixels
+#[derive(Debug, Copy, Clone, PartialEq)]
+pub struct Viewport {
+    pub width: f32,
+    pub height: f32,
+}
+
+impl Viewport {
+    /// A `width` by `height` image
+    pub fn new(width: f32, height: f32) -> Self {
+        Self { width, height }
+    }
+
+    /// Width over height. 1 for an image with no height
+    pub fn aspect_ratio(&self) -> f32 {
+        if self.height == 0.0 {
+            1.0
+        } else {
+            self.width / self.height
+        }
     }
 }
 
@@ -154,26 +177,39 @@ impl Camera {
         self.view_proj(aspect).frustum()
     }
 
-    /// Roughly how many pixels across the radius of a sphere at `center` looks on a screen
-    /// `viewport_height` pixels tall.
-    pub fn projected_radius_px(&self, center: Vec3, radius: f32, viewport_height: f32) -> f32 {
+    /// Roughly how many pixels across the radius of a sphere at `center` looks in `viewport`
+    pub fn projected_radius_px(&self, center: Vec3, radius: f32, viewport: Viewport) -> f32 {
         let half_view_height = match self.projection_kind {
             ProjectionKind::Perspective { fov_rad, .. } => {
                 (fov_rad / 2.0).tan() * nalgebra_glm::distance(&self.position, &center)
             }
             ProjectionKind::Orthographic { bottom, top, .. } => (top - bottom) / 2.0,
         };
-        radius / half_view_height * viewport_height / 2.0
+        radius / half_view_height * viewport.height / 2.0
     }
 
-    /// A ray through the middle of pixel (`x`, `y`) of a `width` by `height` image, starting on
-    /// the near plane
-    pub fn get_ray(&self, x: f32, y: f32, width: f32, height: f32) -> Ray {
-        let ndc_x = 2.0 * (x + 0.5) / width - 1.0;
-        let ndc_y = 1.0 - 2.0 * (y + 0.5) / height;
-        let inv = self.inv_proj_view(width / height);
+    /// Where `p` lands in `viewport`, in pixels from the top left. `None` if it's behind the
+    /// camera
+    pub fn world_to_screen(&self, p: Vec3, viewport: Viewport) -> Option<Vec2> {
+        let clip = self.view_proj(viewport.aspect_ratio()).combined() * vec4(p.x, p.y, p.z, 1.0);
+        if clip.w <= 0.0 {
+            return None;
+        }
+        let ndc = clip.xyz() / clip.w;
+        Some(vec2(
+            (ndc.x + 1.0) / 2.0 * viewport.width,
+            (1.0 - ndc.y) / 2.0 * viewport.height,
+        ))
+    }
+
+    /// The ray through `pos` in `viewport`, in pixels from the top left, starting on the near
+    /// plane. Everything on it lands at `pos` in `world_to_screen`
+    pub fn screen_ray(&self, pos: Vec2, viewport: Viewport) -> Ray {
+        let ndc_x = 2.0 * pos.x / viewport.width - 1.0;
+        let ndc_y = 1.0 - 2.0 * pos.y / viewport.height;
+        let inv = self.inv_proj_view(viewport.aspect_ratio());
         let unproject = |ndc_z: f32| {
-            let p = inv * nalgebra_glm::vec4(ndc_x, ndc_y, ndc_z, 1.0);
+            let p = inv * vec4(ndc_x, ndc_y, ndc_z, 1.0);
             p.xyz() / p.w
         };
         let near = unproject(-1.0);
@@ -216,10 +252,14 @@ impl Camera {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use nalgebra_glm::{vec2, vec3, vec4, Vec2};
+    use nalgebra_glm::vec3;
 
     const W: f32 = 800.0;
     const H: f32 = 600.0;
+    const VIEWPORT: Viewport = Viewport {
+        width: W,
+        height: H,
+    };
 
     fn looking_at_origin(projection_kind: ProjectionKind) -> Camera {
         Camera::new(vec3(0.0, 0.0, 5.0), Vec3::zeros(), vec3(0.0, 1.0, 0.0), projection_kind)
@@ -275,13 +315,6 @@ mod tests {
         }
     }
 
-    /// Where `p` lands on a `W` by `H` image, in pixels from the top left
-    fn to_screen(camera: &Camera, p: Vec3) -> Vec2 {
-        let clip = camera.view_proj(W / H).combined() * vec4(p.x, p.y, p.z, 1.0);
-        let ndc = clip.xyz() / clip.w;
-        vec2((ndc.x + 1.0) / 2.0 * W, (1.0 - ndc.y) / 2.0 * H)
-    }
-
     /// How far `p` is from the line along `ray`
     fn miss_distance(ray: &Ray, p: Vec3) -> f32 {
         let to_p = p - ray.origin();
@@ -295,9 +328,8 @@ mod tests {
             vec3(-2.0, 1.0, -3.0),
             vec3(0.5, 2.0, 1.5),
         ] {
-            // Pixel (x, y) is the one whose top left corner is at (x, y)
-            let px = to_screen(camera, p) - vec2(0.5, 0.5);
-            let ray = camera.get_ray(px.x, px.y, W, H);
+            let pos = camera.world_to_screen(p, VIEWPORT).unwrap();
+            let ray = camera.screen_ray(pos, VIEWPORT);
             let miss = miss_distance(&ray, p);
             assert!(
                 miss < 1e-3,
@@ -321,10 +353,40 @@ mod tests {
     #[test]
     fn orthographic_rays_all_point_where_the_camera_looks() {
         let camera = orthographic();
-        for (x, y) in [(W / 2.0 - 0.5, H / 2.0 - 0.5), (0.0, 0.0), (W - 1.0, 100.0)] {
-            let dir = camera.get_ray(x, y, W, H).dir();
-            assert!((dir - vec3(0.0, 0.0, -1.0)).norm() < 1e-5, "({x}, {y}) went {dir:?}");
+        for pos in [vec2(W / 2.0, H / 2.0), vec2(0.0, 0.0), vec2(W - 1.0, 100.0)] {
+            let dir = camera.screen_ray(pos, VIEWPORT).dir();
+            assert!((dir - vec3(0.0, 0.0, -1.0)).norm() < 1e-5, "{pos:?} went {dir:?}");
         }
+    }
+
+    #[test]
+    fn everything_on_a_screen_ray_lands_where_it_started() {
+        for camera in [perspective(), orthographic()] {
+            for pos in [vec2(W / 2.0, H / 2.0), vec2(30.0, 570.0), vec2(712.5, 41.25)] {
+                let ray = camera.screen_ray(pos, VIEWPORT);
+                for distance in [0.0, 1.0, 4.0, 20.0] {
+                    let back = camera.world_to_screen(ray.at(distance), VIEWPORT).unwrap();
+                    assert!((back - pos).norm() < 0.05, "{pos:?} came back as {back:?}");
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn world_to_screen_puts_the_middle_in_the_middle_and_skips_whats_behind() {
+        let camera = perspective();
+        let middle = camera.world_to_screen(Vec3::zeros(), VIEWPORT).unwrap();
+        assert!((middle - vec2(W / 2.0, H / 2.0)).norm() < 1e-3);
+        // Up in the world is up on screen, which is a smaller y
+        let above = camera.world_to_screen(vec3(0.0, 1.0, 0.0), VIEWPORT).unwrap();
+        assert!(above.y < middle.y && (above.x - middle.x).abs() < 1e-3);
+        assert_eq!(camera.world_to_screen(vec3(0.0, 0.0, 10.0), VIEWPORT), None);
+    }
+
+    #[test]
+    fn viewport_aspect_ratio_is_width_over_height() {
+        assert_eq!(VIEWPORT.aspect_ratio(), W / H);
+        assert_eq!(Viewport::new(640.0, 0.0).aspect_ratio(), 1.0);
     }
 
     #[test]
@@ -340,8 +402,18 @@ mod tests {
             },
         );
         // With a 90 degree view, a radius-10 sphere 10 away spans the whole screen height
-        let px = camera.projected_radius_px(nalgebra_glm::vec3(0.0, 0.0, -10.0), 10.0, 600.0);
+        let px = camera.projected_radius_px(vec3(0.0, 0.0, -10.0), 10.0, VIEWPORT);
         assert!((px - 300.0).abs() < 1e-3);
+    }
+
+    #[test]
+    fn orthographic_projected_radius_doesnt_care_how_far_away() {
+        // The view is 6 units tall, so half that is 300 pixels
+        let camera = orthographic();
+        for z in [0.0, -20.0] {
+            let px = camera.projected_radius_px(vec3(0.0, 0.0, z), 1.5, VIEWPORT);
+            assert!((px - 150.0).abs() < 1e-3, "at z {z}: {px}");
+        }
     }
 
 }

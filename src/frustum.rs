@@ -117,7 +117,7 @@ mod tests {
     const NEAR: usize = 4;
     const FAR: usize = 5;
 
-    /// A camera with a 90 degree view and a 2:1 aspect, so mixing up x and y shows
+    /// A camera with a 90 degree view and a 2 to 1 aspect, so mixing up x and y shows
     struct View {
         position: Vec3,
         forward: Vec3,

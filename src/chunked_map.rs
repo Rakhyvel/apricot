@@ -90,7 +90,7 @@ mod tests {
         assert!(near.contains(&(cx + 3, cz)) && near.contains(&(cx - 2, cz + 2)));
         assert!(
             !near.contains(&(cx + 2, cz + 3)),
-            "2² + 3² is past the edge"
+            "2^2 + 3^2 is past the edge"
         );
         let dist_sq = |&(x, z): &ChunkCoord| (x - cx).pow(2) + (z - cz).pow(2);
         assert!(near.windows(2).all(|w| dist_sq(&w[0]) <= dist_sq(&w[1])));

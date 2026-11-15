@@ -1,12 +1,33 @@
 //! This module implements the Camera structure. Cameras can either be perspective (typical for 3D) or orthographic
 //! (typical for 2D)
 
-use nalgebra_glm::Vec3;
+use nalgebra_glm::{Mat4, Vec3};
 
 use crate::geometry::{frustum::Frustum, ray::Ray};
 
 pub mod floating_origin;
 pub mod fly;
+
+/// A view matrix and a projection matrix, kept together so they can't get swapped
+#[derive(Debug, Copy, Clone, PartialEq)]
+pub struct ViewProj {
+    /// From world space into the camera's space
+    pub view: Mat4,
+    /// From the camera's space into clip space
+    pub proj: Mat4,
+}
+
+impl ViewProj {
+    /// Straight from world space into clip space
+    pub fn combined(&self) -> Mat4 {
+        self.proj * self.view
+    }
+
+    /// Everything these matrices can see
+    pub fn frustum(&self) -> Frustum {
+        Frustum::from_proj_view(self.combined())
+    }
+}
 
 #[derive(Debug, Copy, Clone)]
 /// Which kind of projection the camera uses.
@@ -94,8 +115,11 @@ impl Camera {
     }
 
     /// The camera's view and projection matrices for a screen with the given aspect ratio
-    pub fn view_proj_matrices(&self, aspect: f32) -> (nalgebra_glm::Mat4, nalgebra_glm::Mat4) {
-        (self.view_matrix, self.proj_matrix(aspect))
+    pub fn view_proj(&self, aspect: f32) -> ViewProj {
+        ViewProj {
+            view: self.view_matrix,
+            proj: self.proj_matrix(aspect),
+        }
     }
 
     /// The inverse of the projection and view matrices multiplied together
@@ -103,17 +127,9 @@ impl Camera {
         nalgebra_glm::inverse(&(self.proj_matrix(aspect) * self.view_matrix))
     }
 
-    /// The inverse of the projection matrix and the inverse of the view matrix
-    pub fn inv_proj_and_view(&self, aspect: f32) -> (nalgebra_glm::Mat4, nalgebra_glm::Mat4) {
-        (
-            nalgebra_glm::inverse(&self.proj_matrix(aspect)),
-            nalgebra_glm::inverse(&self.view_matrix),
-        )
-    }
-
     /// The camera's view frustum for a screen with the given aspect ratio
     pub fn frustum(&self, aspect: f32) -> Frustum {
-        Frustum::from_inv_proj_view(self.inv_proj_view(aspect))
+        self.view_proj(aspect).frustum()
     }
 
     /// Roughly how many pixels across the radius of a sphere at `center` looks on a screen
@@ -208,8 +224,7 @@ mod tests {
 
     /// Where `p` lands on a `W` by `H` image, in pixels from the top left
     fn to_screen(camera: &Camera, p: Vec3) -> Vec2 {
-        let (view, proj) = camera.view_proj_matrices(W / H);
-        let clip = proj * view * vec4(p.x, p.y, p.z, 1.0);
+        let clip = camera.view_proj(W / H).combined() * vec4(p.x, p.y, p.z, 1.0);
         let ndc = clip.xyz() / clip.w;
         vec2((ndc.x + 1.0) / 2.0 * W, (1.0 - ndc.y) / 2.0 * H)
     }

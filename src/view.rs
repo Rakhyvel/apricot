@@ -2,10 +2,10 @@
 
 use std::cell::{Cell, RefCell};
 
-use nalgebra_glm::{vec2, vec4, I32Vec2, Mat4, Vec2, Vec3};
+use nalgebra_glm::{vec2, vec4, I32Vec2, Vec2, Vec3};
 
 use crate::{
-    camera::Camera,
+    camera::{Camera, ViewProj},
     geometry::frustum::Frustum,
     geometry::ray::Ray,
     render_core::RenderContext,
@@ -35,11 +35,11 @@ impl RenderContext {
     }
 
     /// The current camera's view and projection matrices, fitted to the window
-    pub fn camera_view_proj(&self) -> (Mat4, Mat4) {
+    pub fn camera_view_proj(&self) -> ViewProj {
         self.view
             .camera
             .borrow()
-            .view_proj_matrices(self.aspect_ratio())
+            .view_proj(self.aspect_ratio())
     }
 
     /// The current camera's view frustum, fitted to the window
@@ -58,8 +58,7 @@ impl RenderContext {
 
     /// Where a world-space point lands on screen, in pixels. `None` if it's behind the camera
     pub fn world_to_screen(&self, p: Vec3) -> Option<Vec2> {
-        let (view, proj) = self.camera_view_proj();
-        let clip = proj * view * vec4(p.x, p.y, p.z, 1.0);
+        let clip = self.camera_view_proj().combined() * vec4(p.x, p.y, p.z, 1.0);
         if clip.w <= 0.0 {
             return None;
         }

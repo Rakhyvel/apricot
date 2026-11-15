@@ -40,6 +40,11 @@ impl Frustum {
         )
     }
 
+    /// The frustum a projection times view matrix sees
+    pub fn from_proj_view(proj_view: nalgebra_glm::Mat4) -> Self {
+        Self::from_inv_proj_view(nalgebra_glm::inverse(&proj_view))
+    }
+
     /// Create a frustum from an inverse-proj-view matrix
     pub fn from_inv_proj_view(inv_proj_view: nalgebra_glm::Mat4) -> Self {
         let clip_space_corners: [nalgebra_glm::Vec4; 8] = [

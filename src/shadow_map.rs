@@ -1,7 +1,7 @@
 use nalgebra_glm::{vec3, vec4, Mat4, Vec3};
 
 use crate::{
-    camera::ProjectionKind,
+    camera::{ProjectionKind, ViewProj},
     error::Error,
     render_core::{MeshId, ProgramId},
 };
@@ -21,8 +21,7 @@ pub struct DirectionalLight {
     frame_buffer: Fbo,
     frame_buffer_size: i32,
     depth_map: Texture,
-    light_view: Mat4,
-    light_proj: Mat4,
+    view_proj: ViewProj,
     texel_size: f32,
     /// Whether it's had a shadow pass yet
     has_shadows: bool,
@@ -50,8 +49,10 @@ impl DirectionalLight {
             frame_buffer,
             frame_buffer_size: shadow_map_size,
             depth_map,
-            light_view: Mat4::identity(),
-            light_proj: Mat4::identity(),
+            view_proj: ViewProj {
+                view: Mat4::identity(),
+                proj: Mat4::identity(),
+            },
             texel_size: 0.0,
             has_shadows: false,
         })
@@ -79,7 +80,7 @@ impl DirectionalLight {
             ProjectionKind::Orthographic { .. } => camera.proj_matrix(aspect),
         };
 
-        let corners = Frustum::from_inv_proj_view(nalgebra_glm::inverse(&(proj * view))).corners();
+        let corners = Frustum::from_proj_view(proj * view).corners();
 
         // Bounding sphere of the slice
         let center = corners.iter().fold(Vec3::zeros(), |sum, c| sum + c) / 8.0;
@@ -107,19 +108,21 @@ impl DirectionalLight {
         let center = (nalgebra_glm::inverse(&light_rot) * vec4(c.x, c.y, c.z, 1.0)).xyz();
 
         let eye = center + dir * radius;
-        self.light_view = nalgebra_glm::look_at(&eye, &center, &up);
-        self.light_proj = nalgebra_glm::ortho(
-            -radius,
-            radius,
-            -radius,
-            radius,
-            -self.caster_distance,
-            2.0 * radius,
-        );
+        self.view_proj = ViewProj {
+            view: nalgebra_glm::look_at(&eye, &center, &up),
+            proj: nalgebra_glm::ortho(
+                -radius,
+                radius,
+                -radius,
+                radius,
+                -self.caster_distance,
+                2.0 * radius,
+            ),
+        };
     }
 
     pub fn light_proj_view(&self) -> Mat4 {
-        self.light_proj * self.light_view
+        self.view_proj.combined()
     }
 
     pub(crate) fn active(&self) -> ActiveLight {
@@ -137,8 +140,7 @@ impl DirectionalLight {
 pub struct ShadowPass<'a> {
     renderer: &'a RenderContext,
     program: ProgramId,
-    light_view: Mat4,
-    light_proj: Mat4,
+    view_proj: ViewProj,
 }
 
 impl ShadowPass<'_> {
@@ -148,12 +150,12 @@ impl ShadowPass<'_> {
             .get_mesh_from_id(mesh_id)
             .expect("invalid MeshId");
         self.renderer
-            .draw(self.program, &mesh, model, self.light_view, self.light_proj)
+            .draw(self.program, &mesh, model, &self.view_proj)
     }
 
     /// Everything the light can see. Anything outside it can't cast a shadow
     pub fn frustum(&self) -> Frustum {
-        Frustum::from_inv_proj_view(nalgebra_glm::inverse(&(self.light_proj * self.light_view)))
+        self.view_proj.frustum()
     }
 }
 
@@ -178,8 +180,7 @@ impl RenderContext {
         draw_casters(&ShadowPass {
             renderer: self,
             program: self.builtins.program_shadow,
-            light_view: light.light_view,
-            light_proj: light.light_proj,
+            view_proj: light.view_proj,
         });
 
         light.frame_buffer.unbind();

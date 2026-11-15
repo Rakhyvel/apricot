@@ -5,6 +5,7 @@ use std::fmt::Debug;
 use nalgebra_glm::{Mat4, Vec3, Vec4};
 
 use crate::{
+    camera::ViewProj,
     error::Error,
     mesh::MeshData,
     opengl::{self, create_program, DrawOptions, Primitive, RawMesh},
@@ -190,15 +191,14 @@ impl RenderContext {
         program: ProgramId,
         mesh: &Mesh,
         model_matrix: nalgebra_glm::Mat4,
-        view_matrix: nalgebra_glm::Mat4,
-        proj_matrix: nalgebra_glm::Mat4,
+        view_proj: &ViewProj,
     ) {
         self.uniform(program, "u_model_matrix")
             .set_mat4(&model_matrix);
         self.uniform(program, "u_view_matrix")
-            .set_mat4(&view_matrix);
+            .set_mat4(&view_proj.view);
         self.uniform(program, "u_proj_matrix")
-            .set_mat4(&proj_matrix);
+            .set_mat4(&view_proj.proj);
 
         self.bind(program);
         mesh.raw.draw();
@@ -260,9 +260,8 @@ impl RenderContext {
         texture.activate(0);
         self.uniform(program, "texture0").set_i32(0);
 
-        let (view, proj) = self.camera_view_proj();
         let mesh = self.get_mesh_from_id(mesh_id).expect("invalid MeshId");
-        self.draw(program, &mesh, model, view, proj);
+        self.draw(program, &mesh, model, &self.camera_view_proj());
         before.restore();
     }
 
@@ -271,10 +270,10 @@ impl RenderContext {
         let style = &path.style;
         let program = self.builtins.program_line;
 
-        let (view, proj) = self.camera_view_proj();
+        let view_proj = self.camera_view_proj();
         self.uniform(program, "u_model_matrix").set_mat4(&transform);
-        self.uniform(program, "u_view_matrix").set_mat4(&view);
-        self.uniform(program, "u_proj_matrix").set_mat4(&proj);
+        self.uniform(program, "u_view_matrix").set_mat4(&view_proj.view);
+        self.uniform(program, "u_proj_matrix").set_mat4(&view_proj.proj);
         self.uniform(program, "u_color").set_vec4(&style.color);
         self.uniform(program, "u_seam").set_f32(style.seam);
         self.uniform(program, "u_fade").set_i32(style.fade as i32);

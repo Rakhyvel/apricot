@@ -12,7 +12,7 @@ use crate::{
 };
 
 use super::{
-    camera::{Camera, ProjectionKind},
+    camera::{Camera, ProjectionKind, ViewProj},
     font::{Font, FontId},
     geometry::rectangle::Rectangle,
     render_core::{RenderContext, TextureId},
@@ -30,7 +30,7 @@ pub(crate) struct Queue2d {
     poly_meshes: RefCell<HashMap<(u32, u32), MeshId>>,
     font: Cell<FontId>,
     /// View and projection for 2D, which looks straight at the -1..1 square
-    view_proj: (Mat4, Mat4),
+    view_proj: ViewProj,
 }
 
 impl Default for Queue2d {
@@ -54,7 +54,7 @@ impl Default for Queue2d {
             clips: RefCell::default(),
             poly_meshes: RefCell::default(),
             font: Cell::new(FontId::placeholder(0)), // the renderer sets the default font right after
-            view_proj: camera.view_proj_matrices(1.0),
+            view_proj: camera.view_proj(1.0),
         }
     }
 }
@@ -141,9 +141,8 @@ impl RenderContext {
             .set_vec2(&sprite_size);
         self.uniform(program, "u_color").set_vec4(&color);
 
-        let (view, proj) = self.queue_2d.view_proj;
         let mesh = self.get_mesh_from_id(mesh_id).expect("invalid MeshId");
-        self.draw(program, &mesh, model, view, proj);
+        self.draw(program, &mesh, model, &self.queue_2d.view_proj);
     }
 
     /// Draws a nine-slice texture stretched over `dest`. The corners stay their real size, the

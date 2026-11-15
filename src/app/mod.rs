@@ -7,9 +7,8 @@
 use std::cell::Cell;
 use std::time::{Duration, Instant};
 
-use sdl2::event::{Event, EventType, WindowEvent};
-use sdl2::video::SwapInterval;
-use sdl2::Sdl;
+use sdl2::event::{Event, WindowEvent};
+use sdl2::EventPump;
 
 use crate::audio::Audio;
 use crate::error::Error;
@@ -20,8 +19,10 @@ use crate::opengl;
 use crate::render_core::RenderContext;
 
 mod logging;
+mod platform;
 mod timing;
 
+use platform::Platform;
 use timing::{FixedTimestep, FpsCounter};
 
 /// Struct that contains all information about an app, that is passed down to an active `Scene`.
@@ -82,44 +83,12 @@ impl Default for AppConfig {
 /// Start the app with the scene `init` makes as the only one on the stack, and run it until it quits
 pub fn run<S: Scene + 'static>(cfg: AppConfig, init: impl FnOnce(&App) -> S) -> Result<(), Error> {
     logging::init(cfg.log_level);
-    let sdl_context = sdl2::init().map_err(Error::Sdl)?;
-    let video_subsystem = sdl_context.video().map_err(Error::Sdl)?;
-    let audio_subsystem = sdl_context.audio().map_err(Error::Sdl)?;
-    let joystick_subsystem = sdl_context.joystick().map_err(Error::Sdl)?;
-
-    let gl_attr = video_subsystem.gl_attr();
-    gl_attr.set_context_profile(sdl2::video::GLProfile::Core);
-    gl_attr.set_context_version(3, 3);
-    gl_attr.set_double_buffer(true);
-    gl_attr.set_multisample_buffers(1);
-    gl_attr.set_multisample_samples(4);
-    gl_attr.set_depth_size(24);
-    gl_attr.set_stencil_size(8); // for model outlines
-
-    let window = video_subsystem
-        .window(
-            cfg.title,
-            cfg.window_size.x as u32,
-            cfg.window_size.y as u32,
-        )
-        .resizable()
-        .opengl()
-        .build()
-        .map_err(|e| Error::Sdl(format!("{e}")))?;
-
-    let _gl_context = window.gl_create_context().map_err(Error::Sdl)?;
-
-    opengl::init(|s| video_subsystem.gl_get_proc_address(s) as *const std::ffi::c_void);
-
-    window
-        .subsystem()
-        .gl_set_swap_interval(SwapInterval::VSync)
-        .map_err(Error::Sdl)?;
+    let mut platform = Platform::new(&cfg)?;
 
     let mut app = App {
         window_size: cfg.window_size,
         renderer: RenderContext::new()?,
-        audio: Audio::new(audio_subsystem),
+        audio: Audio::new(platform.audio()?),
         running: Cell::new(true),
         cursor_captured: Cell::new(cfg.cursor_captured),
         dt: Duration::from_secs_f64(1.0 / 60.0),
@@ -127,7 +96,7 @@ pub fn run<S: Scene + 'static>(cfg: AppConfig, init: impl FnOnce(&App) -> S) -> 
         seconds: 0.0,
         ticks: 0,
         fps: 0,
-        joystick_subsystem,
+        joystick_subsystem: platform.joysticks()?,
         open_joysticks: Vec::new(),
     };
     app.renderer.set_screen_size(app.window_size); // so the aspect is right in `init`
@@ -139,7 +108,6 @@ pub fn run<S: Scene + 'static>(cfg: AppConfig, init: impl FnOnce(&App) -> S) -> 
     let mut previous = Duration::ZERO;
     let mut timestep = FixedTimestep::new(app.dt);
     let mut fps = FpsCounter::new(time.elapsed());
-    let mut cursor_applied = false;
     while app.running.get() {
         app.seconds = time.elapsed().as_secs_f64();
         current = time.elapsed();
@@ -147,25 +115,10 @@ pub fn run<S: Scene + 'static>(cfg: AppConfig, init: impl FnOnce(&App) -> S) -> 
         previous = current;
 
         for _ in 0..steps {
-            let captured = app.cursor_captured();
-            if captured != cursor_applied {
-                let mouse = sdl_context.mouse();
-                mouse.set_relative_mouse_mode(captured);
-                if !captured {
-                    // Let go in the middle, not wherever it was while hidden
-                    let center = app.window_size / 2;
-                    mouse.warp_mouse_in_window(&window, center.x, center.y);
-                    app.input.mouse_pos = nalgebra_glm::vec2(center.x as f32, center.y as f32);
-                }
-                // Toss the jump the switch makes, so the camera doesn't lurch
-                sdl_context
-                    .event()
-                    .map_err(Error::Sdl)?
-                    .flush_event(EventType::MouseMotion);
-                cursor_applied = captured;
+            if let Some(pos) = platform.sync_cursor(app.cursor_captured(), app.window_size)? {
+                app.input.mouse_pos = pos;
             }
-
-            app.poll_events(&sdl_context)?;
+            app.poll_events(&mut platform.events);
             if cfg.escape_quits && app.input.key_pressed(Scancode::Escape) {
                 app.quit();
             }
@@ -186,7 +139,7 @@ pub fn run<S: Scene + 'static>(cfg: AppConfig, init: impl FnOnce(&App) -> S) -> 
             fps.frame_drawn();
         }
         app.renderer.flush_2d_queue();
-        window.gl_swap_window();
+        platform.swap();
 
         if let Some(rate) = fps.update(current) {
             app.fps = rate;
@@ -223,10 +176,9 @@ impl App {
                 .is_none_or(|c| c.contains_point(&pos))
     }
 
-    fn poll_events(&mut self, sdl_context: &Sdl) -> Result<(), Error> {
+    fn poll_events(&mut self, events: &mut EventPump) {
         self.input.begin_tick();
-        let mut event_queue = sdl_context.event_pump().map_err(Error::Sdl)?;
-        for event in event_queue.poll_iter() {
+        for event in events.poll_iter() {
             match event {
                 Event::Quit { .. } => self.quit(),
                 Event::Window {
@@ -263,7 +215,6 @@ impl App {
             }
         }
         self.input.end_tick();
-        Ok(())
     }
 }
 

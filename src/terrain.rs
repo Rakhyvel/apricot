@@ -133,6 +133,35 @@ mod tests {
     }
 
     #[test]
+    fn surface_normal_matches_the_mesh_you_see() {
+        let mesh = crate::mesh_data::MeshData::heightmap(4, 4, bumpy);
+        let tris: Vec<_> = mesh.triangles().collect();
+        for x0 in 0..4 {
+            for z0 in 0..4 {
+                // One point in each of the cell's two triangles
+                for (fx, fz) in [(0.25, 0.3), (0.7, 0.8)] {
+                    let (x, z) = (x0 as f32 + fx, z0 as f32 + fz);
+                    let ray = crate::ray::Ray::new(
+                        nalgebra_glm::vec3(x, 100.0, z),
+                        nalgebra_glm::vec3(0.0, -1.0, 0.0),
+                    );
+                    let hit = tris
+                        .iter()
+                        .filter_map(|tri| tri.raycast(&ray, 0.0..f32::INFINITY))
+                        .min_by(|a, b| a.t.total_cmp(&b.t))
+                        .unwrap();
+                    let ours = surface_normal(bumpy, x, z);
+                    assert!(
+                        (ours - hit.normal).norm() < 1e-4,
+                        "at ({x}, {z}) {ours:?} vs {:?}",
+                        hit.normal
+                    );
+                }
+            }
+        }
+    }
+
+    #[test]
     fn surface_height_hits_the_grid_points() {
         for (x, z) in [(0.0, 0.0), (2.0, 3.0), (-1.0, 5.0)] {
             assert!((surface_height(bumpy, x, z) - bumpy(x, z)).abs() < 1e-5);

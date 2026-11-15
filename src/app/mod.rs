@@ -22,7 +22,7 @@ use crate::render_core::RenderContext;
 mod logging;
 mod timing;
 
-use timing::FixedTimestep;
+use timing::{FixedTimestep, FpsCounter};
 
 /// Struct that contains all information about an app, that is passed down to an active `Scene`.
 pub struct App {
@@ -135,11 +135,10 @@ pub fn run<S: Scene + 'static>(cfg: AppConfig, init: impl FnOnce(&App) -> S) -> 
     let mut scenes = SceneStack::new(Box::new(init(&app)));
 
     let time = Instant::now();
-    let mut start = time.elapsed();
     let mut current;
     let mut previous = Duration::ZERO;
     let mut timestep = FixedTimestep::new(app.dt);
-    let mut frames = 0;
+    let mut fps = FpsCounter::new(time.elapsed());
     let mut cursor_applied = false;
     while app.running.get() {
         app.seconds = time.elapsed().as_secs_f64();
@@ -184,20 +183,13 @@ pub fn run<S: Scene + 'static>(cfg: AppConfig, init: impl FnOnce(&App) -> S) -> 
         app.renderer.set_screen_size(app.window_size);
         if let Some(scene) = scenes.top() {
             scene.render(&app);
-            frames += 1;
+            fps.frame_drawn();
         }
         app.renderer.flush_2d_queue();
         window.gl_swap_window();
 
-        let seconds_since_fps_report = current - start;
-
-        if seconds_since_fps_report >= Duration::from_secs(1) {
-            app.fps = (frames as f64 / seconds_since_fps_report.as_secs_f64()).round() as u32;
-        }
-        if seconds_since_fps_report > Duration::from_secs(5) {
-            log::debug!("{} fps over the last 5 seconds", frames / 5);
-            start = current;
-            frames = 0;
+        if let Some(rate) = fps.update(current) {
+            app.fps = rate;
         }
     }
 

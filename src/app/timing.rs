@@ -33,9 +33,70 @@ impl FixedTimestep {
     }
 }
 
+/// Counts frames drawn to work out the frame rate, over windows of about 5 seconds
+pub(super) struct FpsCounter {
+    window_start: Duration,
+    frames: u32,
+}
+
+impl FpsCounter {
+    /// Start counting at `now`, the time since the app started
+    pub(super) fn new(now: Duration) -> Self {
+        Self {
+            window_start: now,
+            frames: 0,
+        }
+    }
+
+    pub(super) fn frame_drawn(&mut self) {
+        self.frames += 1;
+    }
+
+    /// The frame rate so far at `now`, once there's been at least a second to measure
+    pub(super) fn update(&mut self, now: Duration) -> Option<u32> {
+        let elapsed = now - self.window_start;
+        let rate = (elapsed >= Duration::from_secs(1))
+            .then(|| (self.frames as f64 / elapsed.as_secs_f64()).round() as u32);
+        if elapsed > Duration::from_secs(5) {
+            log::debug!("{} fps over the last 5 seconds", self.frames / 5);
+            self.window_start = now;
+            self.frames = 0;
+        }
+        rate
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// Draw `frames` frames, then check the rate at `now`
+    fn after(fps: &mut FpsCounter, frames: u32, now: Duration) -> Option<u32> {
+        for _ in 0..frames {
+            fps.frame_drawn();
+        }
+        fps.update(now)
+    }
+
+    #[test]
+    fn fps_waits_for_a_second_then_counts_frames_per_second() {
+        let mut fps = FpsCounter::new(Duration::from_secs(2));
+        assert_eq!(after(&mut fps, 30, Duration::from_millis(2500)), None);
+        assert_eq!(after(&mut fps, 30, Duration::from_secs(3)), Some(60));
+        assert_eq!(after(&mut fps, 60, Duration::from_secs(4)), Some(60));
+        assert_eq!(after(&mut fps, 30, Duration::from_secs(5)), Some(50));
+    }
+
+    #[test]
+    fn fps_starts_a_fresh_window_after_five_seconds() {
+        let mut fps = FpsCounter::new(Duration::ZERO);
+        assert_eq!(after(&mut fps, 300, Duration::from_secs(5)), Some(60));
+        // Past 5 seconds it reports the whole window one last time, then starts a new one
+        assert_eq!(after(&mut fps, 1, Duration::from_millis(5100)), Some(59));
+        // So the next report needs another second
+        assert_eq!(after(&mut fps, 10, Duration::from_millis(5600)), None);
+        assert_eq!(after(&mut fps, 50, Duration::from_millis(6100)), Some(60));
+    }
 
     const DT: Duration = Duration::from_micros(16_667);
 

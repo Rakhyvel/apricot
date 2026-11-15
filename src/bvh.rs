@@ -377,7 +377,10 @@ mod tests {
         // At depth d the view spans -d to d on both x and y
         let frustum = crate::frustum::test_frustum(1.0);
         let at = |x: f32, y: f32, z: f32| {
-            AABB::from_min_max(vec3(x - 0.5, y - 0.5, z - 0.5), vec3(x + 0.5, y + 0.5, z + 0.5))
+            AABB::from_min_max(
+                vec3(x - 0.5, y - 0.5, z - 0.5),
+                vec3(x + 0.5, y + 0.5, z + 0.5),
+            )
         };
         let in_view = [
             at(0.0, 0.0, -5.0),
@@ -387,11 +390,11 @@ mod tests {
             at(0.0, 0.0, -100.0),  // across the far plane
         ];
         let out_of_view = [
-            at(0.0, 0.0, 5.0),    // behind
-            at(0.0, 0.0, 0.8),    // just behind
+            at(0.0, 0.0, 5.0),     // behind
+            at(0.0, 0.0, 0.8),     // just behind
             at(-14.0, 0.0, -10.0), // off to the left
-            at(0.0, 14.0, -10.0), // above
-            at(0.0, 0.0, -105.0), // past the far plane
+            at(0.0, 14.0, -10.0),  // above
+            at(0.0, 0.0, -105.0),  // past the far plane
         ];
 
         let mut bvh = BVH::new();
@@ -426,7 +429,10 @@ mod tests {
                     assert_eq!(r.parent, Some(id), "{right:?}'s parent");
                     assert_eq!(node.height, 1 + l.height.max(r.height), "{id:?}'s height");
                     let union = l.volume.union(r.volume);
-                    assert!(node.volume.min == union.min && node.volume.max == union.max, "{id:?}'s box");
+                    assert!(
+                        node.volume.min == union.min && node.volume.max == union.max,
+                        "{id:?}'s box"
+                    );
                     stack.extend([left, right]);
                 }
                 _ => panic!("{id:?} has one child"),
@@ -439,7 +445,13 @@ mod tests {
     fn depth(bvh: &BVH<usize>) -> usize {
         fn below(bvh: &BVH<usize>, id: NodeId) -> usize {
             let node = bvh.node(id);
-            1 + node.children().into_iter().flatten().map(|c| below(bvh, c)).max().unwrap_or(0)
+            1 + node
+                .children()
+                .into_iter()
+                .flatten()
+                .map(|c| below(bvh, c))
+                .max()
+                .unwrap_or(0)
         }
         bvh.root.map_or(0, |root| below(bvh, root))
     }
@@ -470,14 +482,46 @@ mod tests {
         let n = aabbs.len() as f32;
         let nodes = 2.0 * n - 1.0;
         let max_depth = (1.44 * (nodes + 2.0).log2()).floor() as usize + 1;
-        assert!(depth(bvh) <= max_depth, "{} deep, at most {max_depth}", depth(bvh));
+        assert!(
+            depth(bvh) <= max_depth,
+            "{} deep, at most {max_depth}",
+            depth(bvh)
+        );
         let max_visits = 4.0 * n.log2();
         let visits = average_visits(bvh, aabbs);
-        assert!(visits <= max_visits, "{visits} visits per query, at most {max_visits}");
+        assert!(
+            visits <= max_visits,
+            "{visits} visits per query, at most {max_visits}"
+        );
     }
 
     fn unit_box_at(x: f32, y: f32, z: f32) -> AABB {
         AABB::from_min_max(vec3(x, y, z), vec3(x + 1.0, y + 1.0, z + 1.0))
+    }
+
+    #[test]
+    fn moving_stretches_the_box_ahead_of_the_move() {
+        let mut bvh = BVH::new();
+        let start = unit_box_at(0.0, 0.0, 0.0);
+        let id = bvh.insert(0, start);
+
+        // Small enough to stay inside the padding, so nothing changes
+        let nudge = vec3(-0.05, 0.05, -0.05);
+        assert!(!bvh.move_obj(id, &start.translate(nudge), &nudge));
+
+        let shift = vec3(-3.0, 1.0, 0.0);
+        let moved = start.translate(shift);
+        assert!(bvh.move_obj(id, &moved, &shift));
+        let volume = bvh.node(id).volume;
+        let pad = BVH::<usize>::AABB_EXTENSION;
+        let ahead = BVH::<usize>::AABB_MULTIPLIER * shift;
+        // Toward -x and +y it reaches ahead by twice the move, z only gets the padding
+        assert!((volume.min.x - (moved.min.x - pad + ahead.x)).abs() < 1e-5);
+        assert!((volume.max.x - (moved.max.x + pad)).abs() < 1e-5);
+        assert!((volume.max.y - (moved.max.y + pad + ahead.y)).abs() < 1e-5);
+        assert!((volume.min.y - (moved.min.y - pad)).abs() < 1e-5);
+        assert!((volume.min.z - (moved.min.z - pad)).abs() < 1e-5);
+        assert!((volume.max.z - (moved.max.z + pad)).abs() < 1e-5);
     }
 
     #[test]
@@ -486,7 +530,11 @@ mod tests {
         let aabbs: Vec<AABB> = (0..64)
             .map(|i| {
                 let cluster_x = if i % 2 == 0 { 0.0 } else { 1000.0 };
-                unit_box_at(cluster_x + (i / 2 % 8) as f32 * 2.0, 0.0, (i / 16) as f32 * 2.0)
+                unit_box_at(
+                    cluster_x + (i / 2 % 8) as f32 * 2.0,
+                    0.0,
+                    (i / 16) as f32 * 2.0,
+                )
             })
             .collect();
         let mut bvh = BVH::new();
@@ -523,7 +571,9 @@ mod tests {
 
     #[test]
     fn inserting_in_a_line_stays_balanced() {
-        let aabbs: Vec<AABB> = (0..1000).map(|i| unit_box_at(i as f32 * 2.0, 0.0, 0.0)).collect();
+        let aabbs: Vec<AABB> = (0..1000)
+            .map(|i| unit_box_at(i as f32 * 2.0, 0.0, 0.0))
+            .collect();
         let mut bvh = BVH::new();
         for (i, aabb) in aabbs.iter().enumerate() {
             bvh.insert(i, *aabb);
@@ -547,9 +597,15 @@ mod tests {
 
     #[test]
     fn removing_from_a_line_stays_balanced() {
-        let aabbs: Vec<AABB> = (0..1000).map(|i| unit_box_at(i as f32 * 2.0, 0.0, 0.0)).collect();
+        let aabbs: Vec<AABB> = (0..1000)
+            .map(|i| unit_box_at(i as f32 * 2.0, 0.0, 0.0))
+            .collect();
         let mut bvh = BVH::new();
-        let ids: Vec<NodeId> = aabbs.iter().enumerate().map(|(i, a)| bvh.insert(i, *a)).collect();
+        let ids: Vec<NodeId> = aabbs
+            .iter()
+            .enumerate()
+            .map(|(i, a)| bvh.insert(i, *a))
+            .collect();
         // Take out the whole first half
         for id in &ids[..500] {
             bvh.remove(*id);

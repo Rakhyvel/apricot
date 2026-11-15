@@ -81,22 +81,49 @@ mod tests {
     }
 
     #[test]
+    fn chunks_near_is_every_chunk_inside_the_circle_closest_first() {
+        let grid = ChunkGrid::new(16);
+        let near = grid.chunks_near(vec3(-40.0, 0.0, 70.0), 3);
+        let (cx, cz) = (-3, 4);
+        assert_eq!(near[0], (cx, cz));
+        assert_eq!(near.len(), 29); // grid points with dx^2 + dz^2 <= 9
+        assert!(near.contains(&(cx + 3, cz)) && near.contains(&(cx - 2, cz + 2)));
+        assert!(
+            !near.contains(&(cx + 2, cz + 3)),
+            "2² + 3² is past the edge"
+        );
+        let dist_sq = |&(x, z): &ChunkCoord| (x - cx).pow(2) + (z - cz).pow(2);
+        assert!(near.windows(2).all(|w| dist_sq(&w[0]) <= dist_sq(&w[1])));
+    }
+
+    /// (position across the edge, height) of every vertex where local `axis` is `at`, rounded
+    /// so they compare cleanly
+    fn edge(mesh: &MeshData, axis: usize, at: f32) -> Vec<(i32, i32)> {
+        let across = 2 - axis; // x edges run along z, z edges along x
+        let mut points: Vec<(i32, i32)> = mesh
+            .positions
+            .chunks(3)
+            .filter(|p| p[axis] == at)
+            .map(|p| (p[across] as i32, (p[1] * 1000.0).round() as i32))
+            .collect();
+        points.sort();
+        points.dedup();
+        points
+    }
+
+    #[test]
     fn neighboring_chunks_share_their_edge() {
         let grid = ChunkGrid::new(4);
         let height = |x: f32, z: f32| (x * 0.3).sin() + (z * 0.2).cos();
-        let (left, right) = (grid.mesh((0, 0), height), grid.mesh((1, 0), height));
-        // (z, height) of every vertex along an edge, rounded so they compare cleanly
-        let edge = |mesh: &MeshData, local_x: f32| -> Vec<(i32, i32)> {
-            let mut points: Vec<(i32, i32)> = mesh
-                .positions
-                .chunks(3)
-                .filter(|p| p[0] == local_x)
-                .map(|p| (p[2] as i32, (p[1] * 1000.0).round() as i32))
-                .collect();
-            points.sort();
-            points.dedup();
-            points
-        };
-        assert_eq!(edge(&left, 4.0), edge(&right, 0.0));
+        // Away from the origin, so mixing up adding and multiplying the offset shows
+        let chunk = grid.mesh((2, -3), height);
+        let along_x = grid.mesh((3, -3), height);
+        let along_z = grid.mesh((2, -2), height);
+        let x_edge = edge(&chunk, 0, 4.0);
+        let z_edge = edge(&chunk, 2, 4.0);
+        assert_eq!(x_edge.len(), 5);
+        assert_eq!(z_edge.len(), 5);
+        assert_eq!(x_edge, edge(&along_x, 0, 0.0));
+        assert_eq!(z_edge, edge(&along_z, 2, 0.0));
     }
 }

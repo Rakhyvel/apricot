@@ -77,6 +77,15 @@ mod tests {
     }
 
     #[test]
+    fn hits_at_a_slant() {
+        // Coming down at 45 degrees from 4 above the floor, so it travels 4*sqrt(2)
+        let ray = Ray::new(vec3(0.0, 2.0, 0.0), vec3(1.0, -1.0, 0.0));
+        let hit = floor().raycast(&ray, 0.0..f32::INFINITY).unwrap();
+        assert!((hit.t - 4.0 * 2f32.sqrt()).abs() < 1e-5);
+        assert!((hit.point - vec3(4.0, -2.0, 0.0)).norm() < 1e-5);
+    }
+
+    #[test]
     fn misses_when_parallel_or_pointing_away() {
         let along = Ray::new(vec3(0.0, 0.0, 0.0), vec3(1.0, 0.0, 0.0));
         assert!(floor().raycast(&along, 0.0..f32::INFINITY).is_none());

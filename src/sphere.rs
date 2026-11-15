@@ -76,6 +76,20 @@ mod tests {
         }
     }
 
+    #[test]
+    fn raycast_works_for_spheres_bigger_than_one() {
+        let sphere = Sphere::new(vec3(1.0, 2.0, -5.0), 2.5);
+        let ray = Ray::new(vec3(1.0, 2.0, 0.0), vec3(0.0, 0.0, -1.0));
+        let hit = sphere.raycast(&ray, 0.0..f32::INFINITY).unwrap();
+        assert!((hit.t - 2.5).abs() < 1e-5);
+        assert!((hit.normal - vec3(0.0, 0.0, 1.0)).norm() < 1e-5);
+        // Grazes the side, touching at one point
+        let tangent = Ray::new(vec3(3.5, 2.0, 0.0), vec3(0.0, 0.0, -1.0));
+        let hit = sphere.raycast(&tangent, 0.0..f32::INFINITY).unwrap();
+        assert!((hit.t - 5.0).abs() < 1e-5);
+        assert!((hit.point - vec3(3.5, 2.0, -5.0)).norm() < 1e-5);
+    }
+
     fn unit() -> Sphere {
         Sphere::new(vec3(0.0, 0.0, -5.0), 1.0)
     }

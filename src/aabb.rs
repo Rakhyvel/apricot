@@ -256,6 +256,60 @@ mod tests {
         test_frustum(1.0)
     }
 
+    /// 2 by 2 by 2, centered on (4, 2, 0)
+    fn off_center_box() -> AABB {
+        AABB::from_min_max(vec3(3.0, 1.0, -1.0), vec3(5.0, 3.0, 1.0))
+    }
+
+    #[test]
+    fn center_is_halfway_between_the_corners() {
+        let aabb = AABB::from_min_max(vec3(1.0, -2.0, 3.0), vec3(3.0, 1.0, 7.0));
+        assert_eq!(aabb.center(), vec3(2.0, -0.5, 5.0));
+    }
+
+    #[test]
+    fn raycast_finds_each_face_of_an_off_center_box() {
+        // (start, direction, t, normal of the face it hits)
+        let cases = [
+            (vec3(4.0, -5.0, 0.0), vec3(0.0, 1.0, 0.0), 6.0, vec3(0.0, -1.0, 0.0)),
+            (vec3(4.0, 9.0, 0.5), vec3(0.0, -1.0, 0.0), 6.0, vec3(0.0, 1.0, 0.0)),
+            (vec3(4.5, 2.0, 10.0), vec3(0.0, 0.0, -1.0), 9.0, vec3(0.0, 0.0, 1.0)),
+            (vec3(-1.0, 2.0, 0.0), vec3(1.0, 0.0, 0.0), 4.0, vec3(-1.0, 0.0, 0.0)),
+            (vec3(8.0, 1.5, -0.5), vec3(-1.0, 0.0, 0.0), 3.0, vec3(1.0, 0.0, 0.0)),
+        ];
+        for (start, dir, t, normal) in cases {
+            let hit = off_center_box().raycast(&Ray::new(start, dir), 0.0..f32::INFINITY).unwrap();
+            assert!((hit.t - t).abs() < 1e-5, "from {start:?}: t {}", hit.t);
+            assert!((hit.normal - normal).norm() < 1e-5, "from {start:?}: normal {:?}", hit.normal);
+            assert!(hit.front_face);
+        }
+    }
+
+    #[test]
+    fn raycast_from_inside_an_off_center_box_faces_back_in() {
+        let ray = Ray::new(vec3(4.0, 2.0, 0.0), vec3(1.0, 0.0, 0.0));
+        let hit = off_center_box().raycast(&ray, 0.0..f32::INFINITY).unwrap();
+        assert!((hit.t - 1.0).abs() < 1e-5);
+        assert!(!hit.front_face);
+        assert!((hit.normal - vec3(-1.0, 0.0, 0.0)).norm() < 1e-5);
+    }
+
+    #[test]
+    fn contains_needs_every_side_inside() {
+        let outer = off_center_box();
+        let inner = AABB::from_min_max(vec3(3.5, 1.5, -0.5), vec3(4.5, 2.5, 0.5));
+        assert!(outer.contains(&inner));
+        assert!(outer.contains(&outer), "touching the sides still counts");
+        for axis in 0..3 {
+            let mut past_min = inner;
+            past_min.min[axis] = outer.min[axis] - 0.1;
+            assert!(!outer.contains(&past_min), "out past min on axis {axis}");
+            let mut past_max = inner;
+            past_max.max[axis] = outer.max[axis] + 0.1;
+            assert!(!outer.contains(&past_max), "out past max on axis {axis}");
+        }
+    }
+
     #[test]
     fn surface_area_adds_up_all_six_faces() {
         let aabb = AABB::from_min_max(vec3(1.0, -2.0, 3.0), vec3(3.0, 1.0, 7.0));

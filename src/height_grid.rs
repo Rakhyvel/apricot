@@ -159,6 +159,19 @@ mod tests {
     }
 
     #[test]
+    fn from_noise_samples_the_noise_at_the_offset() {
+        let offset = vec2(3.0, -5.0);
+        let grid = HeightGrid::from_noise(6, 0.2, 3, 7, 2.5, offset);
+        for z in 0..6 {
+            for x in 0..6 {
+                let (x, z) = (x as f32, z as f32);
+                let expected = noise::perlin(x + offset.x, z + offset.y, 0.2, 3, 7) * 2.5;
+                assert_eq!(grid.height(vec2(x, z)), expected, "at ({x}, {z})");
+            }
+        }
+    }
+
+    #[test]
     fn normalizing_a_flat_grid_puts_it_all_at_zero() {
         let mut fresh = HeightGrid::new(4);
         let mut raised = HeightGrid::new(4);

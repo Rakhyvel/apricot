@@ -1,6 +1,12 @@
 //! Images on the GPU
 
-use super::*;
+use std::{cell::Cell, path::Path};
+
+use gl::types::{GLenum, GLint, GLuint};
+use image::{EncodableLayout, ImageError};
+
+use super::check_gl;
+use crate::error::Error;
 
 /// An OpenGL Texture
 pub struct Texture {

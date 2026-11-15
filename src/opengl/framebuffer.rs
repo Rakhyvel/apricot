@@ -1,6 +1,9 @@
 //! Framebuffers, for drawing into a texture instead of the screen
 
-use super::*;
+use gl::types::GLuint;
+
+use super::{check_gl, Texture};
+use crate::error::Error;
 
 /// An OpenGL Frame Buffer Object
 pub struct Fbo {

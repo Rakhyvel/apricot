@@ -1,6 +1,10 @@
 //! Vertices with a custom layout, drawn however the shader wants
 
-use super::*;
+use std::ptr::null;
+
+use gl::types::GLenum;
+
+use super::{check_gl, Buffer, Vao};
 
 /// How a `RawMesh`'s vertices join up
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]

@@ -1,6 +1,10 @@
 //! GPU buffers and the vertex arrays that describe them
 
-use super::*;
+use std::marker::PhantomData;
+
+use gl::types::{GLenum, GLint, GLuint};
+
+use super::check_gl;
 
 /// OpenGL Vertex Buffer Object. Contains vertex data given as input to the vertex shader.
 pub struct Buffer<T> {

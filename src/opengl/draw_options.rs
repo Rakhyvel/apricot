@@ -1,6 +1,10 @@
 //! GL settings for a draw, and putting them back afterward
 
-use super::*;
+use std::cell::Cell;
+
+use gl::types::GLenum;
+
+use super::check_gl;
 
 /// How a draw uses the stencil buffer, a hidden per-pixel mark
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]

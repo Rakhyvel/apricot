@@ -1,6 +1,17 @@
 //! Shaders, programs, and their uniforms
 
-use super::*;
+use std::{
+    cell::{Cell, RefCell},
+    collections::HashMap,
+    ffi::{CStr, CString},
+    ptr::{null, null_mut},
+};
+
+use gl::types::{GLchar, GLenum, GLint, GLuint};
+use nalgebra_glm::{Mat4, Vec2, Vec3, Vec4};
+
+use super::check_gl;
+use crate::error::Error;
 
 /// An OpenGL Shader
 pub struct Shader {

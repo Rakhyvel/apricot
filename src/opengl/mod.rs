@@ -1,20 +1,7 @@
 //! The OpenGL layer. Everything that calls `gl::` lives in here
 
-use std::{
-    cell::{Cell, RefCell},
-    collections::HashMap,
-    ffi::{CStr, CString},
-    marker::PhantomData,
-    path::Path,
-    ptr::{null, null_mut},
-};
-
-use gl::types::{GLchar, GLenum, GLint, GLuint};
-
-use image::{EncodableLayout, ImageError};
-use nalgebra_glm::{Mat4, Vec2, Vec3, Vec4};
-
-use crate::error::Error;
+use gl::types::GLuint;
+use nalgebra_glm::Vec4;
 
 mod buffer;
 mod draw_options;

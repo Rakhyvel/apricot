@@ -255,19 +255,22 @@ impl Input {
 
     /// Start tracking a joystick that was just opened
     pub(crate) fn joystick_added(&mut self, js: &sdl2::joystick::Joystick) {
-        let id = js.instance_id();
-        if self.joysticks.iter().any(|j| j.id == id) {
-            return;
-        }
         let num_buttons = js.num_buttons() as usize;
-        self.joysticks.push(Joystick {
+        self.track_joystick(Joystick {
             name: js.name(),
-            id,
+            id: js.instance_id(),
             axes: vec![0.0; js.num_axes() as usize],
             buttons: vec![false; num_buttons],
             buttons_pressed: vec![false; num_buttons],
             hats: vec![HatState::Centered; js.num_hats() as usize],
         });
+    }
+
+    /// Start tracking `js`, unless a joystick with its id already is
+    fn track_joystick(&mut self, js: Joystick) {
+        if self.joysticks.iter().all(|j| j.id != js.id) {
+            self.joysticks.push(js);
+        }
     }
 
     /// Stop tracking a joystick that was unplugged
@@ -621,7 +624,7 @@ mod tests {
 
     /// A joystick with 3 axes, 4 buttons, and 1 hat, as if it was just plugged in
     fn plug_in(input: &mut Input, id: u32) {
-        input.joysticks.push(Joystick {
+        input.track_joystick(Joystick {
             name: format!("stick {id}"),
             id,
             axes: vec![0.0; 3],
@@ -712,8 +715,8 @@ mod tests {
                 axis(9, 1, 32767),
                 joy_button(9, 0, true),
                 axis(9, 10, 32767),
-                joy_button(9, 10, true),
-                joy_button(9, 10, false),
+                joy_button(9, 4, true), // one past the last button
+                joy_button(9, 4, false),
                 bad_hat,
                 axis(3, 0, 32767), // a stick nobody plugged in
             ],
@@ -726,6 +729,10 @@ mod tests {
         assert_eq!(second.axis(1), 1.0);
         assert!(second.button_down(0));
         assert_eq!(second.name, "stick 9");
+
+        // Plugging the same stick in again doesn't add a second one
+        plug_in(&mut input, 9);
+        assert_eq!(input.joysticks().len(), 2);
 
         input.joystick_removed(7);
         assert_eq!(input.joystick().unwrap().name, "stick 9");

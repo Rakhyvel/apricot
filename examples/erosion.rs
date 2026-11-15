@@ -13,7 +13,7 @@
 use std::f32::consts::FRAC_PI_4;
 
 use apricot::{
-    app::{run, App, AppConfig, Scene},
+    app::{run, App, AppConfig, Scene, SceneCommand},
     camera::ProjectionKind,
     erosion::ErosionSettings,
     error::Error,
@@ -98,7 +98,7 @@ impl Erosion {
 }
 
 impl Scene for Erosion {
-    fn update(&mut self, app: &App) {
+    fn update(&mut self, app: &App) -> SceneCommand {
         if app.input.key_pressed(Scancode::Tab) {
             app.set_cursor_captured(!app.cursor_captured());
         }
@@ -131,6 +131,7 @@ impl Scene for Erosion {
             self.drops += DROPS_PER_TICK;
             self.refresh(app);
         }
+        SceneCommand::None
     }
 
     fn render(&mut self, app: &App) {

@@ -547,6 +547,7 @@ mod tests {
                 assert!((n - middle).norm() < 1e-5, "face {t}");
                 // The uv points back at the same spot on the sphere
                 let (u, v) = uv(&ico, i);
+                assert!((0.0..=1.0).contains(&u) && (0.0..=1.0).contains(&v), "face {t}: uv ({u}, {v})");
                 let (angle, tilt) = ((u - 0.5) * std::f32::consts::TAU, v * std::f32::consts::PI);
                 let back = vec3(tilt.sin() * angle.cos(), tilt.cos(), tilt.sin() * angle.sin());
                 assert!((back - n).norm() < 1e-4, "face {t}: uv ({u}, {v})");

@@ -1,11 +1,8 @@
-//! This module defines an Apricot App.
+//! The app, its main loop, and the stack of scenes it runs.
 //!
-//! Apps are made up of a stack of `Scene`s. The `Scene` at the top of the stack is the one that is updated and rendered
-//! to the screen. Input information such as the keyboard state and mouse are passed along to the active scene, along
-//! with output contexts such as the renderer, which allow the scene to output to the screen.
-//!
-//! Scenes can either push new scenes onto the stack, or pop themselves off. This allows for fairly intuitive GUI
-//! management.
+//! Only the scene on top of the stack gets updated and rendered. Each update returns a `SceneCommand`
+//! that can push a new scene on top, like a pause menu, or pop scenes off to go back. Popping the last
+//! scene quits the app.
 
 use std::cell::Cell;
 use std::time::{Duration, Instant};
@@ -78,7 +75,7 @@ impl Default for AppConfig {
     }
 }
 
-/// Starts a new app, with the scene produced by `init`s the first scene in the stack.
+/// Start the app with the scene `init` makes as the only one on the stack, and run it until it quits
 pub fn run<S: Scene + 'static>(cfg: AppConfig, init: impl FnOnce(&App) -> S) -> Result<(), Error> {
     logging::init(cfg.log_level);
     let sdl_context = sdl2::init().map_err(Error::Sdl)?;
@@ -119,7 +116,6 @@ pub fn run<S: Scene + 'static>(cfg: AppConfig, init: impl FnOnce(&App) -> S) -> 
         window_size: cfg.window_size,
         renderer: RenderContext::new()?,
         audio: Audio::new(audio_subsystem),
-        // sdl_context,
         running: Cell::new(true),
         cursor_captured: Cell::new(cfg.cursor_captured),
         dt: Duration::from_secs_f64(1.0 / 60.0),
@@ -132,7 +128,7 @@ pub fn run<S: Scene + 'static>(cfg: AppConfig, init: impl FnOnce(&App) -> S) -> 
     };
     app.renderer.set_screen_size(app.window_size); // so the aspect is right in `init`
 
-    let mut scene_stack: Vec<Box<dyn Scene>> = vec![Box::new(init(&app))];
+    let mut scenes = SceneStack::new(Box::new(init(&app)));
 
     let time = Instant::now();
     let mut start = time.elapsed();
@@ -147,7 +143,6 @@ pub fn run<S: Scene + 'static>(cfg: AppConfig, init: impl FnOnce(&App) -> S) -> 
         let steps = timestep.advance(current - previous);
         previous = current;
 
-        let scene_stale = false;
         for _ in 0..steps {
             let captured = app.cursor_captured();
             if captured != cursor_applied {
@@ -171,21 +166,24 @@ pub fn run<S: Scene + 'static>(cfg: AppConfig, init: impl FnOnce(&App) -> S) -> 
             if cfg.escape_quits && app.input.key_pressed(Scancode::Escape) {
                 app.quit();
             }
-            if let Some(scene) = scene_stack.last_mut() {
-                scene.update(&app);
+            if let Some(scene) = scenes.top() {
+                let command = scene.update(&app);
                 app.ticks += 1;
+                scenes.apply(command);
+            }
+            if scenes.is_empty() {
+                app.quit();
+                break;
             }
         }
 
-        if !scene_stale {
-            app.renderer.set_screen_size(app.window_size);
-            if let Some(scene) = scene_stack.last_mut() {
-                scene.render(&app);
-                frames += 1;
-            }
-            app.renderer.flush_2d_queue();
-            window.gl_swap_window();
+        app.renderer.set_screen_size(app.window_size);
+        if let Some(scene) = scenes.top() {
+            scene.render(&app);
+            frames += 1;
         }
+        app.renderer.flush_2d_queue();
+        window.gl_swap_window();
 
         let seconds_since_fps_report = current - start;
 
@@ -304,15 +302,126 @@ impl App {
     }
 }
 
-/// A scene is a something that can be updated, and rendered
+/// Something the app updates and renders. Only the scene on top of the stack runs
 pub trait Scene {
-    fn update(&mut self, app: &App);
+    /// Step forward one tick, and say what should happen to the scene stack
+    fn update(&mut self, app: &App) -> SceneCommand;
+    /// Draw the scene
     fn render(&mut self, app: &App);
+}
+
+/// What a scene wants done to the scene stack after its update
+pub enum SceneCommand {
+    /// Carry on with the same scene
+    None,
+    /// Put a new scene on top. It's the one that runs until it's popped
+    Push(Box<dyn Scene>),
+    /// Take this many scenes off the top. The app quits once there are none left
+    Pop(usize),
+}
+
+impl SceneCommand {
+    /// Push `scene`, without having to box it
+    pub fn push(scene: impl Scene + 'static) -> Self {
+        Self::Push(Box::new(scene))
+    }
+}
+
+/// The scenes the app is running, with the one that runs on top
+struct SceneStack(Vec<Box<dyn Scene>>);
+
+impl SceneStack {
+    fn new(first: Box<dyn Scene>) -> Self {
+        Self(vec![first])
+    }
+
+    fn top(&mut self) -> Option<&mut dyn Scene> {
+        self.0
+            .last_mut()
+            .map(|scene| scene.as_mut() as &mut dyn Scene)
+    }
+
+    fn apply(&mut self, command: SceneCommand) {
+        match command {
+            SceneCommand::None => {}
+            SceneCommand::Push(scene) => self.0.push(scene),
+            SceneCommand::Pop(n) => self.0.truncate(self.0.len().saturating_sub(n)),
+        }
+    }
+
+    fn is_empty(&self) -> bool {
+        self.0.is_empty()
+    }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// A scene that does nothing, for checking the stack
+    struct Blank(#[allow(dead_code)] u8); // boxes of nothing all share one address
+
+    impl Scene for Blank {
+        fn update(&mut self, _app: &App) -> SceneCommand {
+            SceneCommand::None
+        }
+        fn render(&mut self, _app: &App) {}
+    }
+
+    /// Where a scene lives, so tests can tell which one is on top
+    fn addr(scene: &dyn Scene) -> *const () {
+        scene as *const dyn Scene as *const ()
+    }
+
+    /// A boxed `Blank` and where it lives
+    fn blank() -> (Box<dyn Scene>, *const ()) {
+        let scene: Box<dyn Scene> = Box::new(Blank(0));
+        let at = addr(scene.as_ref());
+        (scene, at)
+    }
+
+    #[test]
+    fn pushing_puts_a_scene_on_top_and_popping_goes_back() {
+        let (first, first_at) = blank();
+        let (menu, menu_at) = blank();
+        let mut scenes = SceneStack::new(first);
+        scenes.apply(SceneCommand::None);
+        assert_eq!(addr(scenes.top().unwrap()), first_at);
+
+        scenes.apply(SceneCommand::Push(menu));
+        assert_eq!(addr(scenes.top().unwrap()), menu_at);
+
+        scenes.apply(SceneCommand::Pop(1));
+        assert_eq!(addr(scenes.top().unwrap()), first_at);
+        assert!(!scenes.is_empty());
+    }
+
+    #[test]
+    fn popping_several_goes_back_that_far() {
+        let (first, first_at) = blank();
+        let mut scenes = SceneStack::new(first);
+        for _ in 0..3 {
+            scenes.apply(SceneCommand::push(Blank(0)));
+        }
+        scenes.apply(SceneCommand::Pop(0));
+        assert_ne!(
+            addr(scenes.top().unwrap()),
+            first_at,
+            "popping 0 does nothing"
+        );
+        scenes.apply(SceneCommand::Pop(3));
+        assert_eq!(addr(scenes.top().unwrap()), first_at);
+    }
+
+    #[test]
+    fn popping_everything_empties_the_stack() {
+        let (first, _) = blank();
+        let mut scenes = SceneStack::new(first);
+        scenes.apply(SceneCommand::push(Blank(0)));
+        scenes.apply(SceneCommand::Pop(5));
+        assert!(scenes.is_empty());
+        assert!(scenes.top().is_none());
+    }
 
     const DT: Duration = Duration::from_micros(16_667);
 
@@ -329,7 +438,10 @@ mod tests {
     #[test]
     fn a_long_frame_only_catches_up_so_far() {
         let mut timestep = FixedTimestep::new(DT);
-        assert_eq!(timestep.advance(Duration::from_secs(10)), MAX_CATCH_UP_STEPS);
+        assert_eq!(
+            timestep.advance(Duration::from_secs(10)),
+            MAX_CATCH_UP_STEPS
+        );
         // The rest of the 10 seconds is gone, so things go back to normal right away
         assert_eq!(timestep.advance(DT), 1);
     }

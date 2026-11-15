@@ -5,7 +5,7 @@
 use std::f32::consts::{FRAC_PI_4, TAU};
 
 use apricot::{
-    app::{run, App, AppConfig, Scene},
+    app::{run, App, AppConfig, Scene, SceneCommand},
     camera::{Camera, ProjectionKind},
     error::Error,
     mesh_data::MeshData,
@@ -122,7 +122,7 @@ impl Models {
 }
 
 impl Scene for Models {
-    fn update(&mut self, app: &App) {
+    fn update(&mut self, app: &App) -> SceneCommand {
         self.angle += app.dt.as_secs_f32();
         self.hovered = self.hovered_shape(app);
 
@@ -134,6 +134,7 @@ impl Scene for Models {
                 shape.outlined = self.hovered == Some(key);
             }
         }
+        SceneCommand::None
     }
 
     fn render(&mut self, app: &App) {

@@ -5,7 +5,7 @@
 use std::f32::consts::TAU;
 
 use apricot::{
-    app::{run, App, AppConfig, Scene},
+    app::{run, App, AppConfig, Scene, SceneCommand},
     error::Error,
     mesh_data::MeshData,
     rectangle::Rectangle,
@@ -57,7 +57,9 @@ impl Shapes {
 type Cell<'a> = (&'static str, Option<Box<dyn Fn(Vec2) + 'a>>);
 
 impl Scene for Shapes {
-    fn update(&mut self, _app: &App) {}
+    fn update(&mut self, _app: &App) -> SceneCommand {
+        SceneCommand::None
+    }
 
     fn render(&mut self, app: &App) {
         let r = &app.renderer;

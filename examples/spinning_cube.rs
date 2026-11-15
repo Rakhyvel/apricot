@@ -13,7 +13,7 @@
 use std::f32::consts::FRAC_PI_4;
 
 use apricot::{
-    app::{run, App, AppConfig, Scene},
+    app::{run, App, AppConfig, Scene, SceneCommand},
     audio::SoundId,
     camera::ProjectionKind,
     error::Error,
@@ -71,7 +71,7 @@ impl SpinningCube {
 }
 
 impl Scene for SpinningCube {
-    fn update(&mut self, app: &App) {
+    fn update(&mut self, app: &App) -> SceneCommand {
         if app.input.key_pressed(Scancode::Tab) {
             app.set_cursor_captured(!app.cursor_captured());
         }
@@ -89,6 +89,7 @@ impl Scene for SpinningCube {
         if !self.paused {
             self.angle += app.dt.as_secs_f32();
         }
+        SceneCommand::None
     }
 
     fn render(&mut self, app: &App) {

@@ -12,7 +12,7 @@
 use std::{collections::HashSet, f32::consts::FRAC_PI_4};
 
 use apricot::{
-    app::{run, App, AppConfig, Scene},
+    app::{run, App, AppConfig, Scene, SceneCommand},
     camera::ProjectionKind,
     chunked_map::{ChunkCoord, ChunkGrid},
     error::Error,
@@ -181,7 +181,7 @@ impl Terrain {
 }
 
 impl Scene for Terrain {
-    fn update(&mut self, app: &App) {
+    fn update(&mut self, app: &App) -> SceneCommand {
         if app.input.key_pressed(Scancode::Tab) {
             app.set_cursor_captured(!app.cursor_captured());
         }
@@ -207,6 +207,7 @@ impl Scene for Terrain {
         for chunk in missing {
             self.build_chunk(&app.renderer, chunk);
         }
+        SceneCommand::None
     }
 
     fn render(&mut self, app: &App) {

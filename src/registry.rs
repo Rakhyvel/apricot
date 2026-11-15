@@ -244,4 +244,43 @@ mod tests {
         assert_eq!(reg.get(new), Some(&"new"));
         assert_eq!(reg.iter().count(), 1);
     }
+
+    #[test]
+    fn len_counts_whats_live() {
+        let mut reg = Registry::new();
+        assert_eq!(reg.len(), 0);
+        assert!(reg.is_empty());
+        let a = reg.add(1, None);
+        reg.add(2, None);
+        assert_eq!(reg.len(), 2);
+        assert!(!reg.is_empty());
+        reg.remove(a);
+        assert_eq!(reg.len(), 1);
+        assert!(!reg.is_empty());
+    }
+
+    #[test]
+    fn handles_work_as_map_keys() {
+        let mut reg = Registry::new();
+        let (a, b) = (reg.add("a", None), reg.add("b", None));
+        let mut notes = std::collections::HashMap::new();
+        notes.insert(a, "first");
+        notes.insert(b, "second");
+        // A handle rebuilt by the registry finds the same entry
+        let (a_again, _) = reg.iter().find(|(_, item)| **item == "a").unwrap();
+        assert_eq!(notes[&a_again], "first");
+        assert_eq!(notes[&b], "second");
+    }
+
+    struct Apple;
+
+    #[test]
+    fn debug_shows_the_type_spot_and_generation() {
+        let mut reg = Registry::new();
+        let first = reg.add(Apple, None);
+        assert_eq!(format!("{first:?}"), "Handle<Apple>(0)");
+        reg.remove(first);
+        let reused = reg.add(Apple, None);
+        assert_eq!(format!("{reused:?}"), "Handle<Apple>(0 v1)");
+    }
 }

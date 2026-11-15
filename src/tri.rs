@@ -103,6 +103,14 @@ mod tests {
     }
 
     #[test]
+    fn corners_come_back_in_order() {
+        let tri = flat();
+        assert_eq!(tri.v0(), vec3(0.0, 0.0, 0.0));
+        assert_eq!(tri.v1(), vec3(0.0, 0.0, 2.0));
+        assert_eq!(tri.v2(), vec3(2.0, 0.0, 0.0));
+    }
+
+    #[test]
     fn hits_inside_from_both_sides() {
         let down = Ray::new(vec3(0.5, 1.0, 0.5), vec3(0.0, -1.0, 0.0));
         let hit = flat().raycast(&down, 0.0..f32::INFINITY).unwrap();

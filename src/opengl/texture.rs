@@ -3,11 +3,16 @@
 use super::*;
 
 /// An OpenGL Texture
-#[derive(Default)]
 pub struct Texture {
     pub(crate) id: GLuint,
     width: Cell<i32>,
     height: Cell<i32>,
+}
+
+impl Default for Texture {
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 impl Texture {

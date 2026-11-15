@@ -3,9 +3,14 @@
 use super::*;
 
 /// An OpenGL Frame Buffer Object
-#[derive(Default)]
 pub struct Fbo {
     pub(crate) id: GLuint,
+}
+
+impl Default for Fbo {
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 impl Fbo {

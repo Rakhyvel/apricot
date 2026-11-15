@@ -86,14 +86,6 @@ impl HeightGrid {
         terrain::surface_normal(|x, z| self.height(nalgebra_glm::vec2(x, z)), p.x, p.y)
     }
 
-    /// Push the heights toward the extremes around 0.5, sharpening peaks and deepening valleys.
-    /// Expects heights from 0 to 1
-    pub fn create_bulge(&mut self) {
-        for cell in &mut self.cells {
-            cell.height = (cell.height - 0.5).powf(3.0) * 150.0 + 0.55;
-        }
-    }
-
     /// Drop everything between `shelf_depth` and `shelf_height` down to `shelf_depth`, making a
     /// sudden drop-off like a continental shelf. Anything lower or higher stays put
     pub fn create_shelf(&mut self, shelf_height: f32, shelf_depth: f32) {

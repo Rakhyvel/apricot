@@ -145,13 +145,6 @@ impl AABB {
         }
     }
 
-    /// Finds the midpoint of the positive z plane. Useful for shadow mapping.
-    pub fn pos_z_plane_midpoint(&self) -> nalgebra_glm::Vec4 {
-        let bottom_left = nalgebra_glm::vec4(self.min.x, self.min.y, self.max.z, 1.0);
-        let top_right = nalgebra_glm::vec4(self.max.x, self.max.y, self.max.z, 1.0);
-        0.5 * (bottom_left + top_right)
-    }
-
     /// The smallest AABB that fits this one after it's been moved, scaled, or rotated by `matrix`
     pub fn transformed(&self, matrix: &nalgebra_glm::Mat4) -> Self {
         AABB::from_points(

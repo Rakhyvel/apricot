@@ -91,7 +91,7 @@ impl Terrain {
         app.renderer.set_camera(fly.camera());
 
         let mut light = DirectionalLight::new(vec3(0.6, 0.8, 0.3), 2048).unwrap();
-        light.shadow_distance = 120.0;
+        light.frustum.shadow_distance = 120.0;
         app.renderer.set_light(Some(&light));
 
         Self {

@@ -61,11 +61,8 @@ impl AABB {
             let vmax = self.get_furthest_corner(plane);
             let value = plane.normal().dot(&vmax) + plane.dist();
             if value < 0.0 {
-                let in_sphere = self.bounding_sphere().within_frustum(frustum);
-                if !in_sphere {
-                    log::trace!("{self:?} is outside frustum plane {i}: {plane:?}");
-                }
-                return in_sphere;
+                log::trace!("{self:?} is outside frustum plane {i}: {plane:?}");
+                return false;
             }
         }
         true
@@ -251,6 +248,48 @@ impl Default for AABB {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::camera::{Camera, ProjectionKind};
+    use nalgebra_glm::vec3;
+
+    /// A camera at the origin looking down -z with a 90 degree view, so at depth `d` the view
+    /// spans -d to d on both x and y
+    fn camera_frustum() -> Frustum {
+        Camera::new(
+            nalgebra_glm::Vec3::zeros(),
+            vec3(0.0, 0.0, -1.0),
+            vec3(0.0, 1.0, 0.0),
+            ProjectionKind::Perspective {
+                fov_rad: std::f32::consts::FRAC_PI_2,
+                near: 0.1,
+                far: 100.0,
+            },
+        )
+        .frustum(1.0)
+    }
+
+    #[test]
+    fn boxes_in_view_or_touching_it_are_within_the_frustum() {
+        let frustum = camera_frustum();
+        let in_view = AABB::from_min_max(vec3(-0.5, -0.5, -10.5), vec3(0.5, 0.5, -9.5));
+        let across_left_edge = AABB::from_min_max(vec3(-10.5, -0.5, -10.5), vec3(-9.5, 0.5, -9.5));
+        let across_far_plane = AABB::from_min_max(vec3(-1.0, -1.0, -101.0), vec3(1.0, 1.0, -99.0));
+        for aabb in [in_view, across_left_edge, across_far_plane] {
+            assert!(aabb.within_frustum(&frustum), "{aabb:?}");
+        }
+    }
+
+    #[test]
+    fn boxes_outside_the_view_are_not_within_the_frustum() {
+        let frustum = camera_frustum();
+        // Its bounding sphere pokes past the near plane into the view, but the box doesn't
+        let just_behind = AABB::from_min_max(vec3(-0.5, -0.5, 0.05), vec3(0.5, 0.5, 1.05));
+        let far_behind = AABB::from_min_max(vec3(-0.5, -0.5, 5.0), vec3(0.5, 0.5, 6.0));
+        let off_to_the_left = AABB::from_min_max(vec3(-12.0, -0.5, -10.5), vec3(-11.0, 0.5, -9.5));
+        let past_far_plane = AABB::from_min_max(vec3(-1.0, -1.0, -110.0), vec3(1.0, 1.0, -105.0));
+        for aabb in [just_behind, far_behind, off_to_the_left, past_far_plane] {
+            assert!(!aabb.within_frustum(&frustum), "{aabb:?}");
+        }
+    }
 
     fn unit_box() -> AABB {
         AABB::from_min_max(

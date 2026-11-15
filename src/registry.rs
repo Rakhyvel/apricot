@@ -24,6 +24,18 @@ impl<T> Handle<T> {
         Self::new(index, 0)
     }
 
+    /// A handle to slot `index`, for tests that need one without a registry
+    #[cfg(test)]
+    pub(crate) fn for_tests(index: usize) -> Self {
+        Self::new(index, 0)
+    }
+
+    /// Which slot this handle points at, for tests
+    #[cfg(test)]
+    pub(crate) fn index_for_tests(self) -> usize {
+        self.index()
+    }
+
     fn index(self) -> usize {
         self.index as usize
     }

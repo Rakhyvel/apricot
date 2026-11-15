@@ -129,7 +129,7 @@ impl Scene for Models {
         for (x, z) in grid() {
             let key = Thing::Shape(x, z);
             self.models
-                .set_transform(&app.renderer, key, shape_transform(x, z, self.angle));
+                .set_transform(key, shape_transform(x, z, self.angle));
             if let Some(shape) = self.models.get_mut(key) {
                 shape.outlined = self.hovered == Some(key);
             }

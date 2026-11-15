@@ -26,7 +26,7 @@ const CIRCLE_SIDES: u32 = 64;
 pub(crate) struct Queue2d {
     draws: RefCell<Vec<Queued>>,
     layer: Cell<i32>,
-    clips: RefCell<Vec<Rectangle>>,
+    clips: RefCell<ClipStack>,
     poly_meshes: RefCell<HashMap<(u32, u32), MeshId>>,
     font: Cell<FontId>,
     /// View and projection for 2D, which looks straight at the -1..1 square
@@ -91,7 +91,7 @@ impl Queue2d {
     fn push(&self, command: DrawCommand) {
         self.draws.borrow_mut().push(Queued {
             layer: self.layer.get(),
-            clip: self.clips.borrow().last().copied(),
+            clip: self.clips.borrow().current(),
             command,
         });
     }
@@ -445,10 +445,11 @@ impl RenderContext {
             }
         }
 
-        debug_assert!(
-            self.queue_2d.clips.borrow().is_empty(),
-            "push_clip without a matching pop_clip"
-        );
+        let balanced = self.queue_2d.clips.borrow_mut().end_frame();
+        debug_assert!(balanced, "push_clip without a matching pop_clip");
+        if !balanced {
+            log::warn!("push_clip without a matching pop_clip this frame");
+        }
 
         // Put things back the way you found them
         opengl::set_scissor(None, res.y);
@@ -458,9 +459,7 @@ impl RenderContext {
 
     /// Push a rectangle to the clip stack
     pub fn push_clip(&self, r: Rectangle) {
-        let mut stack = self.queue_2d.clips.borrow_mut();
-        let r = stack.last().map_or(r, |outer| outer.intersect(&r));
-        stack.push(r);
+        self.queue_2d.clips.borrow_mut().push(r);
     }
 
     /// Pop most recently pushed rectangle from the clip stack
@@ -470,7 +469,7 @@ impl RenderContext {
 
     /// The rectangle at the top of the clip stack
     pub fn current_clip(&self) -> Option<Rectangle> {
-        self.queue_2d.clips.borrow().last().copied()
+        self.queue_2d.clips.borrow().current()
     }
 
     pub fn draw_rect(&self, rect: Rectangle, thickness: f32, color: Vec4) {
@@ -531,9 +530,61 @@ impl RenderContext {
     }
 }
 
+/// Nested clip rectangles, each already cut down to fit inside the ones under it
+#[derive(Default)]
+struct ClipStack(Vec<Rectangle>);
+
+impl ClipStack {
+    fn push(&mut self, r: Rectangle) {
+        let r = self.current().map_or(r, |outer| outer.intersect(&r));
+        self.0.push(r);
+    }
+
+    fn pop(&mut self) {
+        self.0.pop();
+    }
+
+    fn current(&self) -> Option<Rectangle> {
+        self.0.last().copied()
+    }
+
+    /// Empty the stack for the next frame. Returns whether every push this frame got popped
+    fn end_frame(&mut self) -> bool {
+        let balanced = self.0.is_empty();
+        self.0.clear();
+        balanced
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    fn same_rect(a: Rectangle, b: Rectangle) -> bool {
+        a.pos == b.pos && a.size == b.size
+    }
+
+    #[test]
+    fn clips_nest_inside_each_other() {
+        let mut clips = ClipStack::default();
+        clips.push(Rectangle::new(0.0, 0.0, 100.0, 100.0));
+        clips.push(Rectangle::new(50.0, 50.0, 100.0, 100.0));
+        assert!(same_rect(clips.current().unwrap(), Rectangle::new(50.0, 50.0, 50.0, 50.0)));
+        clips.pop();
+        assert!(same_rect(clips.current().unwrap(), Rectangle::new(0.0, 0.0, 100.0, 100.0)));
+        clips.pop();
+        assert!(clips.current().is_none());
+        assert!(clips.end_frame());
+    }
+
+    #[test]
+    fn a_missing_pop_only_spoils_its_own_frame() {
+        let mut clips = ClipStack::default();
+        clips.push(Rectangle::new(0.0, 0.0, 10.0, 10.0));
+        assert!(!clips.end_frame(), "the unpopped clip gets reported");
+        assert!(clips.current().is_none(), "the next frame starts unclipped");
+        assert!(clips.end_frame());
+    }
 
     #[test]
     fn nine_slice_rects_tile_the_outer_rect() {

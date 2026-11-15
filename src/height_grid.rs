@@ -103,12 +103,17 @@ impl HeightGrid {
         }
     }
 
-    /// Stretch the heights so the lowest is 0 and the highest is 1
+    /// Stretch the heights so the lowest is 0 and the highest is 1. A flat grid goes to 0
     pub fn normalize(&mut self) {
         let min = self.cells.iter().map(|c| c.height).fold(f32::MAX, f32::min);
         let max = self.cells.iter().map(|c| c.height).fold(f32::MIN, f32::max);
+        let range = max - min;
         for cell in &mut self.cells {
-            cell.height = (cell.height - min) / (max - min);
+            cell.height = if range > 0.0 {
+                (cell.height - min) / range
+            } else {
+                0.0
+            };
         }
     }
 
@@ -150,6 +155,19 @@ mod tests {
             let p = vec2(p.0, p.1);
             assert_eq!(grid.flow(p), 0.0);
             assert_eq!(grid.height(p), 0.0);
+        }
+    }
+
+    #[test]
+    fn normalizing_a_flat_grid_puts_it_all_at_zero() {
+        let mut fresh = HeightGrid::new(4);
+        let mut raised = HeightGrid::new(4);
+        for c in &mut raised.cells {
+            c.height = 3.0;
+        }
+        for grid in [&mut fresh, &mut raised] {
+            grid.normalize();
+            assert!(grid.cells.iter().all(|c| c.height == 0.0));
         }
     }
 

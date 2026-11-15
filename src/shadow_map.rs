@@ -1,7 +1,7 @@
 use nalgebra_glm::{vec3, vec4, Mat4, Vec3};
 
 use crate::{
-    camera::{ProjectionKind, ViewProj},
+    camera::ViewProj,
     error::Error,
     render_core::{MeshId, ProgramId},
 };
@@ -61,26 +61,15 @@ impl DirectionalLight {
     /// Fit the light's orthographic view box around everything `camera` can see on a screen with
     /// the given aspect ratio
     pub fn fit_to_camera(&mut self, camera: &Camera, aspect: f32) {
-        let near = match camera.projection_kind {
-            ProjectionKind::Perspective { near, .. } => near,
-            ProjectionKind::Orthographic { near, .. } => near,
-        };
+        let near = camera.projection_kind.near();
         self.fit_to_slice(camera, aspect, near, self.shadow_distance);
     }
 
     /// Fit the light's view box around the part of `camera`'s view between `near` and `far`
     pub fn fit_to_slice(&mut self, camera: &Camera, aspect: f32, near: f32, far: f32) {
-        let view = camera.view_matrix();
-        let proj = match camera.projection_kind {
-            ProjectionKind::Perspective {
-                fov_rad,
-                far: cam_far,
-                ..
-            } => nalgebra_glm::perspective(aspect, fov_rad, near, far.min(cam_far)),
-            ProjectionKind::Orthographic { .. } => camera.proj_matrix(aspect),
-        };
-
-        let corners = Frustum::from_proj_view(proj * view).corners();
+        let far = far.min(camera.projection_kind.far());
+        let proj = camera.proj_matrix_range(aspect, near, far);
+        let corners = Frustum::from_proj_view(proj * camera.view_matrix()).corners();
 
         // Bounding sphere of the slice
         let center = corners.iter().fold(Vec3::zeros(), |sum, c| sum + c) / 8.0;

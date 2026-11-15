@@ -51,6 +51,22 @@ pub enum ProjectionKind {
     },
 }
 
+impl ProjectionKind {
+    /// The closest distance that gets drawn
+    pub fn near(&self) -> f32 {
+        match *self {
+            Self::Perspective { near, .. } | Self::Orthographic { near, .. } => near,
+        }
+    }
+
+    /// The furthest distance that gets drawn
+    pub fn far(&self) -> f32 {
+        match *self {
+            Self::Perspective { far, .. } | Self::Orthographic { far, .. } => far,
+        }
+    }
+}
+
 impl Default for ProjectionKind {
     fn default() -> Self {
         Self::Perspective {
@@ -99,8 +115,15 @@ impl Camera {
     /// The camera's projection matrix for a screen with the given aspect ratio (width / height).
     /// Orthographic cameras ignore the aspect
     pub fn proj_matrix(&self, aspect: f32) -> nalgebra_glm::Mat4 {
+        let kind = self.projection_kind;
+        self.proj_matrix_range(aspect, kind.near(), kind.far())
+    }
+
+    /// The camera's projection matrix, but only drawing from `near` to `far` instead of its own
+    /// range. Orthographic cameras ignore the aspect
+    pub fn proj_matrix_range(&self, aspect: f32, near: f32, far: f32) -> nalgebra_glm::Mat4 {
         match self.projection_kind {
-            ProjectionKind::Perspective { fov_rad, near, far } => {
+            ProjectionKind::Perspective { fov_rad, .. } => {
                 nalgebra_glm::perspective(aspect, fov_rad, near, far)
             }
             ProjectionKind::Orthographic {
@@ -108,8 +131,7 @@ impl Camera {
                 right,
                 bottom,
                 top,
-                near,
-                far,
+                ..
             } => nalgebra_glm::ortho(left, right, bottom, top, near, far),
         }
     }
@@ -220,6 +242,37 @@ mod tests {
             near: 0.1,
             far: 100.0,
         })
+    }
+
+    #[test]
+    fn near_and_far_come_from_either_kind_of_projection() {
+        for camera in [perspective(), orthographic()] {
+            let kind = camera.projection_kind;
+            assert_eq!((kind.near(), kind.far()), (0.1, 100.0));
+        }
+    }
+
+    #[test]
+    fn proj_matrix_is_the_range_from_near_to_far() {
+        for camera in [perspective(), orthographic()] {
+            let own = camera.proj_matrix_range(W / H, 0.1, 100.0);
+            assert_eq!(camera.proj_matrix(W / H), own);
+        }
+    }
+
+    #[test]
+    fn a_shorter_range_only_sees_that_slice() {
+        // Both cameras sit at z = 5 looking down -z
+        for camera in [perspective(), orthographic()] {
+            let proj = camera.proj_matrix_range(W / H, 2.0, 10.0);
+            let corners = Frustum::from_proj_view(proj * camera.view_matrix()).corners();
+            for near_corner in &corners[..4] {
+                assert!((near_corner.z - 3.0).abs() < 1e-4, "{near_corner:?}");
+            }
+            for far_corner in &corners[4..] {
+                assert!((far_corner.z + 5.0).abs() < 1e-3, "{far_corner:?}");
+            }
+        }
     }
 
     /// Where `p` lands on a `W` by `H` image, in pixels from the top left

@@ -83,7 +83,7 @@ pub fn run<S: Scene + 'static>(cfg: AppConfig, init: impl FnOnce(&App) -> S) -> 
     logging::init(cfg.log_level);
     let sdl_context = sdl2::init().map_err(Error::Sdl)?;
     let video_subsystem = sdl_context.video().map_err(Error::Sdl)?;
-    let _audio_subsystem = sdl_context.audio().map_err(Error::Sdl)?;
+    let audio_subsystem = sdl_context.audio().map_err(Error::Sdl)?;
     let joystick_subsystem = sdl_context.joystick().map_err(Error::Sdl)?;
 
     let gl_attr = video_subsystem.gl_attr();
@@ -118,7 +118,7 @@ pub fn run<S: Scene + 'static>(cfg: AppConfig, init: impl FnOnce(&App) -> S) -> 
     let mut app = App {
         window_size: cfg.window_size,
         renderer: RenderContext::new()?,
-        audio: Audio::new(),
+        audio: Audio::new(audio_subsystem),
         // sdl_context,
         running: Cell::new(true),
         cursor_captured: Cell::new(cfg.cursor_captured),

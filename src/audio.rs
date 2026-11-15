@@ -3,6 +3,8 @@
 
 use std::{cell::RefCell, path::Path};
 
+use sdl2::audio::{AudioCallback, AudioDevice, AudioSpecDesired};
+use sdl2::AudioSubsystem;
 use sdl2::{
     mixer::{self, Chunk, LoaderRWops, Sdl2MixerContext},
     rwops::RWops,
@@ -26,16 +28,18 @@ pub type SoundId = Handle<Sound>;
 pub struct Audio {
     mixer: Option<Sdl2MixerContext>,
     sounds: RefCell<Registry<Sound>>,
+    subsystem: AudioSubsystem,
 }
 
 impl Audio {
-    pub(crate) fn new() -> Self {
+    pub(crate) fn new(subsystem: AudioSubsystem) -> Self {
         let mixer = open_mixer()
             .map_err(|e| log::warn!("no audio, playing silently: {e}"))
             .ok();
         Self {
             mixer,
             sounds: RefCell::new(Registry::new()),
+            subsystem,
         }
     }
 
@@ -79,6 +83,58 @@ impl Audio {
         if let Ok(channel) = mixer::Channel::all().play(chunk, 0) {
             channel.set_volume((volume.clamp(0.0, 1.0) * mixer::MAX_VOLUME as f32) as i32);
         }
+    }
+}
+
+/// Something that makes sound one sample at a time. Runs on the audio thread
+pub trait Synth: Send + 'static {
+    /// The next mono sample, roughly -1 to 1. `dt` is 1 / sample rate
+    fn next_sample(&mut self, dt: f32) -> f32;
+}
+
+struct SynthCallback<S> {
+    synth: S,
+    dt: f32,
+}
+
+impl<S: Synth> AudioCallback for SynthCallback<S> {
+    type Channel = f32;
+
+    fn callback(&mut self, out: &mut [f32]) {
+        for sample in out.iter_mut() {
+            *sample = self.synth.next_sample(self.dt);
+        }
+    }
+}
+
+/// A synth playing on its own audio stream. Goes quiet when dropped
+pub struct SynthStream<S: Synth>(AudioDevice<SynthCallback<S>>);
+
+impl<S: Synth> SynthStream<S> {
+    /// Change the synth's settings. Briefly pauses the audio thread, so keep `f` quick
+    pub fn with<R>(&mut self, f: impl FnOnce(&mut S) -> R) -> R {
+        f(&mut self.0.lock().synth)
+    }
+}
+
+impl Audio {
+    /// Start `synth` playing. `None` if there's no audio device
+    pub fn start_synth<S: Synth>(&self, synth: S) -> Option<SynthStream<S>> {
+        let desired = AudioSpecDesired {
+            freq: Some(44_100),
+            channels: Some(1),
+            samples: Some(512), // about 12 ms per buffer, so changes respond quickly
+        };
+        let device = self
+            .subsystem
+            .open_playback(None, &desired, |spec| SynthCallback {
+                synth,
+                dt: 1.0 / spec.freq as f32,
+            })
+            .map_err(|e| log::warn!("couldn't start synth: {e}"))
+            .ok()?;
+        device.resume();
+        Some(SynthStream(device))
     }
 }
 

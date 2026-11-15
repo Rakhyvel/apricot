@@ -80,6 +80,43 @@ mod tests {
     }
 
     #[test]
+    fn frequency_scales_the_coordinates() {
+        for (x, y) in [(1.3, -2.7), (40.0, 12.5), (-8.2, -0.4)] {
+            let scaled = perlin(x * 0.3, y * 0.3, 1.0, 4, 9);
+            assert_eq!(perlin(x, y, 0.3, 4, 9), scaled, "at ({x}, {y})");
+        }
+    }
+
+    #[test]
+    fn each_octave_is_twice_as_fine_and_half_as_strong() {
+        let (x, y) = (5.3, -1.7);
+        let layers = octave(x, y, 4) + 0.5 * octave(2.0 * x, 2.0 * y, 4)
+            + 0.25 * octave(4.0 * x, 4.0 * y, 4);
+        // It divides by one octave too many, so 480 and not 448
+        let expected = layers / (256.0 + 128.0 + 64.0 + 32.0);
+        assert!((perlin(x, y, 1.0, 3, 4) - expected).abs() < 1e-6);
+    }
+
+    #[test]
+    fn corners_come_from_the_hash_and_the_seed_moves_along_y() {
+        assert_eq!(corner(0, 0, 0), 42.0);
+        assert_eq!(corner(3, 5, 2), 77.0);
+        assert_eq!(corner(-4, 7, 11), 250.0);
+        assert_eq!(corner(200, -30, 5), 8.0);
+        for (x, y, seed) in [(3, 5, 2), (-4, 7, 11), (17, 0, 100)] {
+            assert_eq!(corner(x, y, seed), corner(x, y + seed, 0));
+        }
+    }
+
+    #[test]
+    fn smooth_lerp_eases_in_and_out() {
+        assert_eq!(smooth_lerp(10.0, 20.0, 0.0), 10.0);
+        assert_eq!(smooth_lerp(10.0, 20.0, 0.25), 11.5625);
+        assert_eq!(smooth_lerp(10.0, 20.0, 0.5), 15.0);
+        assert_eq!(smooth_lerp(10.0, 20.0, 1.0), 20.0);
+    }
+
+    #[test]
     fn perlin_is_smooth_across_zero() {
         // Neighbors on either side of the origin should be close, not mirrored jumps
         let step = 0.01;

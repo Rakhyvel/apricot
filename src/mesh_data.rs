@@ -378,6 +378,7 @@ mod tests {
 
     fn check(data: &MeshData) {
         let n = data.vertex_count();
+        assert!(n > 0 && !data.indices.is_empty(), "empty mesh");
         assert_eq!(data.normals.len(), n * 3);
         assert_eq!(data.uvs.len(), n * 3);
         assert_eq!(data.indices.len() % 3, 0);
@@ -398,6 +399,174 @@ mod tests {
                 face_normal.dot(&data.normal(tri[0])) > 0.0,
                 "triangle {tri:?} winds backwards"
             );
+        }
+    }
+
+    fn uv(data: &MeshData, i: u32) -> (f32, f32) {
+        let i = i as usize * 3;
+        (data.uvs[i], data.uvs[i + 1])
+    }
+
+    /// The total area of every triangle
+    fn area(data: &MeshData) -> f32 {
+        data.triangles()
+            .map(|t| (t.v1() - t.v0()).cross(&(t.v2() - t.v0())).norm() / 2.0)
+            .sum()
+    }
+
+    /// The volume a closed mesh holds. Negative if its triangles face inward
+    fn volume(data: &MeshData) -> f32 {
+        data.triangles()
+            .map(|t| t.v0().dot(&t.v1().cross(&t.v2())) / 6.0)
+            .sum()
+    }
+
+    /// How much area a regular polygon with radius 1 covers
+    fn ngon_area(sides: u32) -> f32 {
+        sides as f32 / 2.0 * (std::f32::consts::TAU / sides as f32).sin()
+    }
+
+    #[test]
+    fn cube_is_a_closed_unit_cube_with_a_whole_texture_per_face() {
+        let cube = MeshData::cube();
+        assert_eq!(cube.vertex_count(), 24);
+        assert_eq!(cube.indices.len(), 36);
+        assert!((area(&cube) - 6.0).abs() < 1e-5);
+        assert!((volume(&cube) - 1.0).abs() < 1e-5);
+        for face in 0..6 {
+            let mut corners: Vec<(f32, f32)> = (face * 4..face * 4 + 4).map(|i| uv(&cube, i)).collect();
+            corners.sort_by(|a, b| a.partial_cmp(b).unwrap());
+            assert_eq!(corners, [(0.0, 0.0), (0.0, 1.0), (1.0, 0.0), (1.0, 1.0)], "face {face}");
+            for i in face * 4..face * 4 + 4 {
+                // Every corner of a face sits half a unit out along its normal
+                assert_eq!(cube.position(i).dot(&cube.normal(i)), 0.5, "vertex {i}");
+            }
+        }
+    }
+
+    #[test]
+    fn plane_is_a_unit_square_facing_up() {
+        let plane = MeshData::plane();
+        check(&plane);
+        assert!((area(&plane) - 1.0).abs() < 1e-6);
+        for i in 0..4 {
+            let p = plane.position(i);
+            assert_eq!((p.x.abs(), p.y, p.z.abs()), (0.5, 0.0, 0.5));
+            assert_eq!(plane.normal(i), vec3(0.0, 1.0, 0.0));
+            // The texture runs across x and up toward -z
+            assert_eq!(uv(&plane, i), (p.x + 0.5, 0.5 - p.z));
+        }
+    }
+
+    #[test]
+    fn ngon_fans_out_from_the_middle() {
+        for sides in [3, 5, 8] {
+            let ngon = MeshData::ngon(sides);
+            check(&ngon);
+            assert_eq!(ngon.vertex_count(), sides as usize + 1);
+            assert_eq!(ngon.indices.len(), sides as usize * 3);
+            assert_eq!(ngon.position(0), vec3(0.0, 0.0, 0.0));
+            for i in 0..sides {
+                let a = i as f32 / sides as f32 * std::f32::consts::TAU;
+                let rim = ngon.position(1 + i);
+                assert!((rim - vec3(a.cos(), a.sin(), 0.0)).norm() < 1e-5, "{sides} sides, corner {i}");
+            }
+            assert!((area(&ngon) - ngon_area(sides)).abs() < 1e-4, "{sides} sides");
+        }
+    }
+
+    #[test]
+    fn ngon_ring_is_the_band_between_two_polygons() {
+        for (sides, inner) in [(4, 0.5), (6, 0.25), (9, 0.8)] {
+            let ring = MeshData::ngon_ring(sides, inner);
+            check(&ring);
+            assert_eq!(ring.vertex_count(), 2 * sides as usize);
+            for i in 0..sides {
+                let a = i as f32 / sides as f32 * std::f32::consts::TAU;
+                let dir = vec3(a.cos(), a.sin(), 0.0);
+                assert!((ring.position(2 * i) - dir).norm() < 1e-5);
+                assert!((ring.position(2 * i + 1) - dir * inner).norm() < 1e-5);
+            }
+            let expected = ngon_area(sides) * (1.0 - inner * inner);
+            assert!((area(&ring) - expected).abs() < 1e-4, "{sides} sides");
+        }
+    }
+
+    #[test]
+    fn uv_sphere_is_a_closed_sphere_with_the_texture_wrapped_once() {
+        let (segments, rings) = (32, 16);
+        let sphere = MeshData::uv_sphere(segments, rings);
+        check(&sphere);
+        // A bit under a true sphere's, since the flat triangles cut inside it
+        let (true_area, true_volume) = (4.0 * std::f32::consts::PI, 4.0 / 3.0 * std::f32::consts::PI);
+        assert!(area(&sphere) < true_area && area(&sphere) > 0.98 * true_area);
+        assert!(volume(&sphere) < true_volume && volume(&sphere) > 0.96 * true_volume);
+        for r in 0..=rings {
+            for s in 0..=segments {
+                let i = r * (segments + 1) + s;
+                assert_eq!(sphere.normal(i), sphere.position(i));
+                assert_eq!(uv(&sphere, i), (s as f32 / segments as f32, r as f32 / rings as f32));
+            }
+        }
+        // The top of the texture is at the north pole
+        assert!((sphere.position(0) - vec3(0.0, 1.0, 0.0)).norm() < 1e-6);
+    }
+
+    #[test]
+    fn icosphere_starts_as_a_regular_icosahedron() {
+        let ico = MeshData::icosphere(0);
+        let lengths: Vec<f32> = ico
+            .triangles()
+            .flat_map(|t| [(t.v0() - t.v1()).norm(), (t.v1() - t.v2()).norm(), (t.v2() - t.v0()).norm()])
+            .collect();
+        assert!(lengths.iter().all(|l| (l - lengths[0]).abs() < 1e-5), "{lengths:?}");
+    }
+
+    #[test]
+    fn icosphere_closes_in_on_a_sphere_as_it_splits() {
+        let true_area = 4.0 * std::f32::consts::PI;
+        let mut last = 0.0;
+        for subdivisions in 0..4 {
+            let ico = MeshData::icosphere(subdivisions);
+            let a = area(&ico);
+            assert!(a > last && a < true_area, "{subdivisions} splits: area {a}");
+            assert!(volume(&ico) > 0.0, "faces point out");
+            last = a;
+        }
+        assert!(last > 0.98 * true_area);
+    }
+
+    #[test]
+    fn icosphere_faces_point_out_from_their_middle_and_sample_the_texture_there() {
+        let ico = MeshData::icosphere(1);
+        for t in 0..(ico.vertex_count() / 3) as u32 {
+            let corners = [ico.position(3 * t), ico.position(3 * t + 1), ico.position(3 * t + 2)];
+            let middle = (corners[0] + corners[1] + corners[2]).normalize();
+            for i in 3 * t..3 * t + 3 {
+                let n = ico.normal(i);
+                assert!((n - middle).norm() < 1e-5, "face {t}");
+                // The uv points back at the same spot on the sphere
+                let (u, v) = uv(&ico, i);
+                let (angle, tilt) = ((u - 0.5) * std::f32::consts::TAU, v * std::f32::consts::PI);
+                let back = vec3(tilt.sin() * angle.cos(), tilt.cos(), tilt.sin() * angle.sin());
+                assert!((back - n).norm() < 1e-4, "face {t}: uv ({u}, {v})");
+            }
+        }
+    }
+
+    #[test]
+    fn heightmap_faces_are_flat_and_the_texture_spans_the_grid() {
+        let terrain = MeshData::heightmap(4, 3, |x, z| (x * 0.7).sin() + z * 0.2);
+        for t in terrain.triangles().enumerate() {
+            let (i, tri) = t;
+            let n = terrain.normal(3 * i as u32);
+            for edge in [tri.v1() - tri.v0(), tri.v2() - tri.v0()] {
+                assert!(n.dot(&edge).abs() < 1e-5, "triangle {i}");
+            }
+        }
+        for i in 0..terrain.vertex_count() as u32 {
+            let p = terrain.position(i);
+            assert_eq!(uv(&terrain, i), (p.x / 4.0, p.z / 3.0));
         }
     }
 

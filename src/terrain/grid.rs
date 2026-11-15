@@ -2,18 +2,22 @@
 
 use nalgebra_glm::{Vec2, Vec3};
 
-use crate::{noise, terrain};
+use crate::terrain::{self, noise};
+
+mod erosion;
+
+pub use erosion::ErosionSettings;
 
 /// A square grid of heights, `width` points on a side, one unit apart. Points are addressed by
 /// (x, z), and anything off the edge reads as height 0.
 #[derive(Default)]
 pub struct HeightGrid {
-    pub(crate) cells: Vec<Cell>,
-    pub(crate) width: usize,
+    cells: Vec<Cell>,
+    width: usize,
 }
 
 #[derive(Default, Copy, Clone)]
-pub(crate) struct Cell {
+struct Cell {
     pub height: f32,
     pub flow: f32,
 }
@@ -110,19 +114,19 @@ impl HeightGrid {
         }
     }
 
-    pub(crate) fn add_height(&mut self, p: Vec2, amount: f32) {
+    fn add_height(&mut self, p: Vec2, amount: f32) {
         if let Some(i) = self.index(p) {
             self.cells[i].height += amount;
         }
     }
 
-    pub(crate) fn add_flow(&mut self, p: Vec2, amount: f32) {
+    fn add_flow(&mut self, p: Vec2, amount: f32) {
         if let Some(i) = self.index(p) {
             self.cells[i].flow += amount;
         }
     }
 
-    pub(crate) fn contains(&self, p: Vec2) -> bool {
+    fn contains(&self, p: Vec2) -> bool {
         self.index(p).is_some()
     }
 

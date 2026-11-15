@@ -1,9 +1,15 @@
 //! Helpers for working with terrain described by a height function
 
-use nalgebra_glm::{vec2, Vec2, Vec3};
-use rand::{Rng, SeedableRng};
+use nalgebra_glm::{vec3, Vec3};
 
-use crate::geometry::rectangle::Rectangle;
+use crate::mesh_data::MeshData;
+
+pub mod chunks;
+pub mod grid;
+pub mod noise;
+mod scatter;
+
+pub use scatter::scatter;
 
 /// The surface normal of `height` at (`x`, `z`), found using finite differencing
 pub fn normal_at(height: impl Fn(f32, f32) -> f32, x: f32, z: f32) -> Vec3 {
@@ -20,7 +26,7 @@ pub fn normal_at(height: impl Fn(f32, f32) -> f32, x: f32, z: f32) -> Vec3 {
 pub fn surface_height(height: impl Fn(f32, f32) -> f32, x: f32, z: f32) -> f32 {
     let (corners, fx, fz) = cell(&height, x, z);
     let [h00, h10, h01, h11] = corners;
-    // Each cell is split along the diagonal from (0, 1) to (1, 0), same as the heightmap
+    // Each cell is split along the diagonal from (0, 1) to (1, 0), same as `mesh`
     if fx + fz <= 1.0 {
         h00 + fx * (h10 - h00) + fz * (h01 - h00)
     } else {
@@ -54,36 +60,44 @@ fn cell(height: &impl Fn(f32, f32) -> f32, x: f32, z: f32) -> ([f32; 4], f32, f3
     (corners, x - x0, z - z0)
 }
 
-/// Up to `attempts` random points in `area`, at least `min_spacing` apart, keeping only the ones
-/// `keep` likes.
-pub fn scatter(
-    area: Rectangle,
-    attempts: u32,
-    min_spacing: f32,
-    seed: u64,
-    keep: impl Fn(Vec2) -> bool,
-) -> Vec<Vec2> {
-    let mut rng = rand::rngs::StdRng::seed_from_u64(seed);
-    let mut points: Vec<Vec2> = Vec::new();
-    for _ in 0..attempts {
-        let p = area.pos
-            + vec2(
-                rng.gen_range(0.0..area.size.x),
-                rng.gen_range(0.0..area.size.y),
-            );
-        let crowded = points
-            .iter()
-            .any(|other| nalgebra_glm::distance(&p, other) < min_spacing);
-        if !crowded && keep(p) {
-            points.push(p);
+/// Flat-shaded terrain on the XZ plane, `cells_x` by `cells_z` cells of size 1, with each
+/// corner raised to `height(x, z)`. The texture stretches over the whole grid once
+pub fn mesh(cells_x: u32, cells_z: u32, height: impl Fn(f32, f32) -> f32) -> MeshData {
+    let corner = |x: u32, z: u32| {
+        let (x, z) = (x as f32, z as f32);
+        vec3(x, height(x, z), z)
+    };
+    let mut data = MeshData::default();
+    for z in 0..cells_z {
+        for x in 0..cells_x {
+            let tris = [
+                [(x, z), (x, z + 1), (x + 1, z)],
+                [(x + 1, z), (x, z + 1), (x + 1, z + 1)],
+            ];
+            for tri in tris {
+                let p = tri.map(|(x, z)| corner(x, z));
+                let normal = (p[1] - p[0]).cross(&(p[2] - p[0])).normalize();
+                for (i, (cx, cz)) in tri.into_iter().enumerate() {
+                    data.indices.push(data.vertex_count() as u32);
+                    data.positions.extend_from_slice(&[p[i].x, p[i].y, p[i].z]);
+                    data.normals
+                        .extend_from_slice(&[normal.x, normal.y, normal.z]);
+                    data.uvs.extend_from_slice(&[
+                        cx as f32 / cells_x as f32,
+                        cz as f32 / cells_z as f32,
+                        0.0,
+                    ]);
+                }
+            }
         }
     }
-    points
+    data
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::mesh_data::tests::{check, uv};
 
     #[test]
     fn normal_points_up_on_flat_ground() {
@@ -106,7 +120,7 @@ mod tests {
 
     #[test]
     fn surface_height_matches_the_mesh_you_see() {
-        let mesh = crate::mesh_data::MeshData::heightmap(4, 4, bumpy);
+        let mesh = mesh(4, 4, bumpy);
         let tris: Vec<_> = mesh.triangles().collect();
         for i in 0..40 {
             // Stay off the very edges so the downward ray always lands on a triangle
@@ -134,7 +148,7 @@ mod tests {
 
     #[test]
     fn surface_normal_matches_the_mesh_you_see() {
-        let mesh = crate::mesh_data::MeshData::heightmap(4, 4, bumpy);
+        let mesh = mesh(4, 4, bumpy);
         let tris: Vec<_> = mesh.triangles().collect();
         for x0 in 0..4 {
             for z0 in 0..4 {
@@ -181,17 +195,26 @@ mod tests {
     }
 
     #[test]
-    fn scatter_stays_inside_spaced_out_and_repeatable() {
-        let area = Rectangle::new(-10.0, 5.0, 20.0, 20.0);
-        let keep = |p: Vec2| p.x > 0.0; // only the right half
-        let points = scatter(area, 500, 2.0, 7, keep);
-        assert!(!points.is_empty());
-        for (i, p) in points.iter().enumerate() {
-            assert!(area.contains_point(p) && keep(*p));
-            for q in &points[i + 1..] {
-                assert!(nalgebra_glm::distance(p, q) >= 2.0);
+    fn mesh_faces_are_flat_and_the_texture_spans_the_grid() {
+        let terrain = mesh(4, 3, |x, z| (x * 0.7).sin() + z * 0.2);
+        for t in terrain.triangles().enumerate() {
+            let (i, tri) = t;
+            let n = terrain.normal(3 * i as u32);
+            for edge in [tri.v1() - tri.v0(), tri.v2() - tri.v0()] {
+                assert!(n.dot(&edge).abs() < 1e-5, "triangle {i}");
             }
         }
-        assert_eq!(points, scatter(area, 500, 2.0, 7, keep));
+        for i in 0..terrain.vertex_count() as u32 {
+            let p = terrain.position(i);
+            assert_eq!(uv(&terrain, i), (p.x / 4.0, p.z / 3.0));
+        }
+    }
+
+    #[test]
+    fn mesh_is_valid() {
+        let terrain = mesh(4, 3, |x, z| (x * 0.7).sin() + z * 0.2);
+        check(&terrain);
+        assert_eq!(terrain.indices.len(), 4 * 3 * 2 * 3);
+        assert!(terrain.position(0).y.abs() < 1e-6); // corner (0, 0) sits at height(0, 0)
     }
 }

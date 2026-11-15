@@ -14,17 +14,18 @@ use std::{collections::HashSet, f32::consts::FRAC_PI_4};
 use apricot::{
     app::{run, App, AppConfig, Scene, SceneCommand},
     camera::ProjectionKind,
-    chunked_map::{ChunkCoord, ChunkGrid},
     error::Error,
     fly_controller::FlyController,
     input::Scancode,
     mesh_data::MeshData,
     model_set::{Model, ModelSet},
-    noise,
     geometry::rectangle::Rectangle,
     render_core::{MeshId, RenderContext},
     shadow_map::DirectionalLight,
-    terrain::{normal_at, scatter, surface_height},
+    terrain::{
+        chunks::{ChunkCoord, ChunkGrid},
+        noise, normal_at, scatter, surface_height,
+    },
 };
 use nalgebra_glm::{vec2, vec3, vec4};
 
@@ -245,7 +246,7 @@ fn ground(x: f32, z: f32) -> f32 {
     height(x, z) * HEIGHT
 }
 
-/// One color per cell of the chunk starting at (`x0`, `z0`), by how high it is. The heightmap
+/// One color per cell of the chunk starting at (`x0`, `z0`), by how high it is. The mesh
 /// stretches its texture over the whole chunk, so each texel lands on exactly one cell
 fn terrain_colors(x0: f32, z0: f32) -> Vec<u8> {
     (0..CHUNK_CELLS * CHUNK_CELLS)

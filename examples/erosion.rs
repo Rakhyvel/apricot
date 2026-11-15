@@ -15,10 +15,12 @@ use std::f32::consts::FRAC_PI_4;
 use apricot::{
     app::{run, App, AppConfig, Scene, SceneCommand},
     camera::ProjectionKind,
-    erosion::ErosionSettings,
     error::Error,
     fly_controller::FlyController,
-    height_grid::HeightGrid,
+    terrain::{
+        self,
+        grid::{ErosionSettings, HeightGrid},
+    },
     input::Scancode,
     mesh_data::MeshData,
     render_core::{MeshId, TextureId},
@@ -187,7 +189,7 @@ fn smoothstep(edge0: f32, edge1: f32, x: f32) -> f32 {
 }
 
 fn terrain_mesh(grid: &HeightGrid) -> MeshData {
-    MeshData::heightmap(CELLS, CELLS, |x, z| grid.height(vec2(x, z)) * HEIGHT)
+    terrain::mesh(CELLS, CELLS, |x, z| grid.height(vec2(x, z)) * HEIGHT)
 }
 
 /// One color per cell by height, turning blue where lots of water has run

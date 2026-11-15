@@ -6,7 +6,8 @@ use std::cmp::Ordering;
 use nalgebra_glm::{Vec2, Vec3};
 use rand::{Rng, SeedableRng};
 
-use crate::{height_grid::HeightGrid, terrain};
+use super::HeightGrid;
+use crate::terrain;
 
 /// How raindrops wear down the terrain while eroding
 #[derive(Debug, Clone, Copy)]

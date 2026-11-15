@@ -53,7 +53,7 @@ impl ChunkGrid {
     /// positions are relative to the chunk's corner
     pub fn mesh(&self, chunk: ChunkCoord, height: impl Fn(f32, f32) -> f32) -> MeshData {
         let origin = self.origin(chunk);
-        MeshData::heightmap(self.chunk_cells, self.chunk_cells, |x, z| {
+        super::mesh(self.chunk_cells, self.chunk_cells, |x, z| {
             height(origin.x + x, origin.z + z)
         })
     }

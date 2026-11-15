@@ -288,40 +288,6 @@ impl MeshData {
         data
     }
 
-    /// Flat-shaded terrain on the XZ plane, `cells_x` by `cells_z` cells of size 1, with each
-    /// corner raised to `height(x, z)`. The texture stretches over the whole grid once
-    pub fn heightmap(cells_x: u32, cells_z: u32, height: impl Fn(f32, f32) -> f32) -> Self {
-        let corner = |x: u32, z: u32| {
-            let (x, z) = (x as f32, z as f32);
-            vec3(x, height(x, z), z)
-        };
-        let mut data = Self::default();
-        for z in 0..cells_z {
-            for x in 0..cells_x {
-                let tris = [
-                    [(x, z), (x, z + 1), (x + 1, z)],
-                    [(x + 1, z), (x, z + 1), (x + 1, z + 1)],
-                ];
-                for tri in tris {
-                    let p = tri.map(|(x, z)| corner(x, z));
-                    let normal = (p[1] - p[0]).cross(&(p[2] - p[0])).normalize();
-                    for (i, (cx, cz)) in tri.into_iter().enumerate() {
-                        data.indices.push(data.vertex_count() as u32);
-                        data.positions.extend_from_slice(&[p[i].x, p[i].y, p[i].z]);
-                        data.normals
-                            .extend_from_slice(&[normal.x, normal.y, normal.z]);
-                        data.uvs.extend_from_slice(&[
-                            cx as f32 / cells_x as f32,
-                            cz as f32 / cells_z as f32,
-                            0.0,
-                        ]);
-                    }
-                }
-            }
-        }
-        data
-    }
-
     /// Every vertex's position, normal, and uv back to back, 9 floats per vertex
     pub(crate) fn interleaved(&self) -> Vec<f32> {
         (0..self.vertex_count())
@@ -342,7 +308,7 @@ impl MeshData {
     }
 
     #[cfg(test)]
-    fn position(&self, i: u32) -> Vec3 {
+    pub(crate) fn position(&self, i: u32) -> Vec3 {
         let i = i as usize * 3;
         vec3(
             self.positions[i],
@@ -352,7 +318,7 @@ impl MeshData {
     }
 
     #[cfg(test)]
-    fn normal(&self, i: u32) -> Vec3 {
+    pub(crate) fn normal(&self, i: u32) -> Vec3 {
         let i = i as usize * 3;
         vec3(self.normals[i], self.normals[i + 1], self.normals[i + 2])
     }
@@ -373,10 +339,10 @@ pub(crate) fn triangles<'a>(
 }
 
 #[cfg(test)]
-mod tests {
+pub(crate) mod tests {
     use super::*;
 
-    fn check(data: &MeshData) {
+    pub(crate) fn check(data: &MeshData) {
         let n = data.vertex_count();
         assert!(n > 0 && !data.indices.is_empty(), "empty mesh");
         assert_eq!(data.normals.len(), n * 3);
@@ -402,7 +368,7 @@ mod tests {
         }
     }
 
-    fn uv(data: &MeshData, i: u32) -> (f32, f32) {
+    pub(crate) fn uv(data: &MeshData, i: u32) -> (f32, f32) {
         let i = i as usize * 3;
         (data.uvs[i], data.uvs[i + 1])
     }
@@ -556,22 +522,6 @@ mod tests {
     }
 
     #[test]
-    fn heightmap_faces_are_flat_and_the_texture_spans_the_grid() {
-        let terrain = MeshData::heightmap(4, 3, |x, z| (x * 0.7).sin() + z * 0.2);
-        for t in terrain.triangles().enumerate() {
-            let (i, tri) = t;
-            let n = terrain.normal(3 * i as u32);
-            for edge in [tri.v1() - tri.v0(), tri.v2() - tri.v0()] {
-                assert!(n.dot(&edge).abs() < 1e-5, "triangle {i}");
-            }
-        }
-        for i in 0..terrain.vertex_count() as u32 {
-            let p = terrain.position(i);
-            assert_eq!(uv(&terrain, i), (p.x / 4.0, p.z / 3.0));
-        }
-    }
-
-    #[test]
     fn quad_is_valid() {
         check(&MeshData::quad());
     }
@@ -598,14 +548,6 @@ mod tests {
             check(&ico);
             assert_eq!(ico.indices.len(), faces * 3);
         }
-    }
-
-    #[test]
-    fn heightmap_is_valid() {
-        let terrain = MeshData::heightmap(4, 3, |x, z| (x * 0.7).sin() + z * 0.2);
-        check(&terrain);
-        assert_eq!(terrain.indices.len(), 4 * 3 * 2 * 3);
-        assert!(terrain.position(0).y.abs() < 1e-6); // corner (0, 0) sits at height(0, 0)
     }
 
     #[test]

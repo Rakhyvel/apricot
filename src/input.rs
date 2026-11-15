@@ -449,4 +449,287 @@ mod tests {
             assert!(!input.key_down(sc) && input.key_released(sc), "{sc:?} up");
         }
     }
+
+    #[test]
+    fn moving_exactly_the_slop_is_still_a_click() {
+        let mut b = ButtonState::default();
+        tick(&mut b, |b| b.press(vec2(0.0, 0.0)));
+        tick(&mut b, |b| b.release(vec2(CLICK_SLOP_PX, 0.0)));
+        assert!(b.clicked);
+    }
+
+    /// Fold `events` into `input` as one whole tick
+    fn run_tick(input: &mut Input, events: &[Event]) {
+        input.begin_tick();
+        for event in events {
+            input.handle_event(event);
+        }
+        input.end_tick();
+    }
+
+    fn key_down(scancode: Scancode, repeat: bool) -> Event {
+        Event::KeyDown {
+            timestamp: 0,
+            window_id: 0,
+            keycode: None,
+            scancode: Some(scancode),
+            keymod: sdl2::keyboard::Mod::NOMOD,
+            repeat,
+        }
+    }
+
+    fn key_up(scancode: Scancode) -> Event {
+        Event::KeyUp {
+            timestamp: 0,
+            window_id: 0,
+            keycode: None,
+            scancode: Some(scancode),
+            keymod: sdl2::keyboard::Mod::NOMOD,
+            repeat: false,
+        }
+    }
+
+    fn motion(x: i32, y: i32, xrel: i32, yrel: i32) -> Event {
+        Event::MouseMotion {
+            timestamp: 0,
+            window_id: 0,
+            which: 0,
+            mousestate: sdl2::mouse::MouseState::from_sdl_state(0),
+            x,
+            y,
+            xrel,
+            yrel,
+        }
+    }
+
+    fn mouse_down(button: sdl2::mouse::MouseButton, x: i32, y: i32) -> Event {
+        Event::MouseButtonDown {
+            timestamp: 0,
+            window_id: 0,
+            which: 0,
+            mouse_btn: button,
+            clicks: 1,
+            x,
+            y,
+        }
+    }
+
+    fn mouse_up(button: sdl2::mouse::MouseButton, x: i32, y: i32) -> Event {
+        Event::MouseButtonUp {
+            timestamp: 0,
+            window_id: 0,
+            which: 0,
+            mouse_btn: button,
+            clicks: 1,
+            x,
+            y,
+        }
+    }
+
+    fn wheel(y: i32) -> Event {
+        Event::MouseWheel {
+            timestamp: 0,
+            window_id: 0,
+            which: 0,
+            x: 0,
+            y,
+            direction: sdl2::mouse::MouseWheelDirection::Normal,
+        }
+    }
+
+    #[test]
+    fn held_keys_only_count_as_pressed_once() {
+        let mut input = Input::default();
+        run_tick(&mut input, &[key_down(Scancode::W, false)]);
+        assert!(input.key_down(Scancode::W) && input.key_pressed(Scancode::W));
+        assert!(!input.key_down(Scancode::S), "other keys stay up");
+
+        // Holding it down sends repeats
+        run_tick(&mut input, &[key_down(Scancode::W, true)]);
+        assert!(input.key_down(Scancode::W) && !input.key_pressed(Scancode::W));
+
+        run_tick(&mut input, &[key_up(Scancode::W)]);
+        assert!(!input.key_down(Scancode::W) && input.key_released(Scancode::W));
+
+        run_tick(&mut input, &[]);
+        assert!(!input.key_released(Scancode::W), "released only lasts one tick");
+    }
+
+    #[test]
+    fn mouse_motion_adds_up_over_a_tick() {
+        let mut input = Input::default();
+        run_tick(&mut input, &[motion(10, 20, 3, -1), motion(14, 18, 4, -2)]);
+        assert_eq!(input.mouse_pos, vec2(14.0, 18.0));
+        assert_eq!(input.mouse_vel, vec2(7.0, -3.0));
+
+        run_tick(&mut input, &[]);
+        assert_eq!(input.mouse_pos, vec2(14.0, 18.0), "the mouse stays where it was");
+        assert_eq!(input.mouse_vel, vec2(0.0, 0.0));
+    }
+
+    #[test]
+    fn wheel_notches_add_up_and_consuming_lasts_one_tick() {
+        let mut input = Input::default();
+        run_tick(&mut input, &[wheel(1), wheel(2)]);
+        assert_eq!(input.mouse_wheel, 3.0);
+        assert!(!input.is_wheel_consumed());
+        input.consume_wheel();
+        assert!(input.is_wheel_consumed());
+
+        run_tick(&mut input, &[wheel(-1)]);
+        assert_eq!(input.mouse_wheel, -1.0);
+        assert!(!input.is_wheel_consumed());
+    }
+
+    #[test]
+    fn clicks_come_through_the_events_and_can_only_be_taken_once() {
+        use sdl2::mouse::MouseButton::{Left, Middle, Right};
+        let mut input = Input::default();
+        run_tick(&mut input, &[mouse_down(Left, 50, 50)]);
+        assert!(input.mouse_down(MouseButton::Left));
+        assert!(!input.mouse_down(MouseButton::Right));
+        assert!(!input.take_click(), "not clicked until it's let go");
+
+        run_tick(&mut input, &[mouse_up(Left, 51, 50), mouse_down(Middle, 0, 0)]);
+        assert!(input.mouse_clicked(MouseButton::Left));
+        assert!(!input.mouse_clicked(MouseButton::Right));
+        assert!(!input.is_click_consumed());
+        assert!(input.take_click());
+        assert!(input.is_click_consumed());
+        assert!(!input.take_click(), "someone already took it");
+        assert!(input.mouse_clicked(MouseButton::Left), "taking it doesn't unclick it");
+
+        run_tick(&mut input, &[mouse_down(Right, 5, 5), mouse_up(Right, 5, 5)]);
+        assert!(input.mouse_clicked(MouseButton::Right));
+        assert!(!input.mouse_clicked(MouseButton::Left));
+        assert!(!input.is_click_consumed(), "consuming only lasts one tick");
+        assert!(!input.take_click(), "take_click only looks at the left button");
+    }
+
+    #[test]
+    fn dragging_comes_through_the_events() {
+        use sdl2::mouse::MouseButton::Left;
+        let mut input = Input::default();
+        run_tick(&mut input, &[mouse_down(Left, 0, 0), motion(30, 0, 30, 0)]);
+        assert!(input.mouse_dragging(MouseButton::Left));
+        assert!(!input.mouse_dragging(MouseButton::Right));
+
+        run_tick(&mut input, &[mouse_up(Left, 30, 0)]);
+        assert!(!input.mouse_dragging(MouseButton::Left));
+        assert!(!input.mouse_clicked(MouseButton::Left), "a drag isn't a click");
+    }
+
+    /// A joystick with 3 axes, 4 buttons, and 1 hat, as if it was just plugged in
+    fn plug_in(input: &mut Input, id: u32) {
+        input.joysticks.push(Joystick {
+            name: format!("stick {id}"),
+            id,
+            axes: vec![0.0; 3],
+            buttons: vec![false; 4],
+            buttons_pressed: vec![false; 4],
+            hats: vec![HatState::Centered; 1],
+        });
+    }
+
+    fn axis(which: u32, axis_idx: u8, value: i16) -> Event {
+        Event::JoyAxisMotion {
+            timestamp: 0,
+            which,
+            axis_idx,
+            value,
+        }
+    }
+
+    fn joy_button(which: u32, button_idx: u8, down: bool) -> Event {
+        if down {
+            Event::JoyButtonDown {
+                timestamp: 0,
+                which,
+                button_idx,
+            }
+        } else {
+            Event::JoyButtonUp {
+                timestamp: 0,
+                which,
+                button_idx,
+            }
+        }
+    }
+
+    #[test]
+    fn joystick_axes_run_from_minus_one_to_one() {
+        let mut input = Input::default();
+        plug_in(&mut input, 7);
+        run_tick(&mut input, &[axis(7, 0, 32767), axis(7, 1, -32768), axis(7, 2, 16384)]);
+        let js = input.joystick().unwrap();
+        assert_eq!(js.axis(0), 1.0);
+        assert_eq!(js.axis(1), -1.0, "the extra step at the bottom gets clamped");
+        assert!((js.axis(2) - 0.5).abs() < 1e-4);
+        assert_eq!(js.axis(3), 0.0, "missing axes read 0");
+        assert_eq!(js.num_axes(), 3);
+    }
+
+    #[test]
+    fn joystick_buttons_and_hats_come_through_the_events() {
+        let mut input = Input::default();
+        plug_in(&mut input, 7);
+        let hat = Event::JoyHatMotion {
+            timestamp: 0,
+            which: 7,
+            hat_idx: 0,
+            state: HatState::Up,
+        };
+        run_tick(&mut input, &[joy_button(7, 2, true), hat]);
+        let js = input.joystick().unwrap();
+        assert!(js.button_down(2) && js.button_pressed(2));
+        assert!(!js.button_down(1) && !js.button_pressed(1));
+        assert_eq!(js.hat(0), HatState::Up);
+        assert_eq!(js.hat(1), HatState::Centered, "missing hats read centered");
+        assert_eq!(js.num_buttons(), 4);
+
+        run_tick(&mut input, &[]);
+        let js = input.joystick().unwrap();
+        assert!(js.button_down(2) && !js.button_pressed(2), "pressed only lasts one tick");
+
+        run_tick(&mut input, &[joy_button(7, 2, false)]);
+        assert!(!input.joystick().unwrap().button_down(2));
+    }
+
+    #[test]
+    fn joystick_events_go_to_the_right_stick_and_ignore_bad_indices() {
+        let mut input = Input::default();
+        plug_in(&mut input, 7);
+        plug_in(&mut input, 9);
+        let bad_hat = Event::JoyHatMotion {
+            timestamp: 0,
+            which: 9,
+            hat_idx: 5,
+            state: HatState::Down,
+        };
+        run_tick(
+            &mut input,
+            &[
+                axis(9, 1, 32767),
+                joy_button(9, 0, true),
+                axis(9, 10, 32767),
+                joy_button(9, 10, true),
+                joy_button(9, 10, false),
+                bad_hat,
+                axis(3, 0, 32767), // a stick nobody plugged in
+            ],
+        );
+        let [first, second] = input.joysticks() else {
+            panic!("expected 2 sticks");
+        };
+        assert_eq!(first.axis(1), 0.0);
+        assert!(!first.button_down(0));
+        assert_eq!(second.axis(1), 1.0);
+        assert!(second.button_down(0));
+        assert_eq!(second.name, "stick 9");
+
+        input.joystick_removed(7);
+        assert_eq!(input.joystick().unwrap().name, "stick 9");
+        input.joystick_removed(9);
+        assert!(input.joystick().is_none());
+    }
 }

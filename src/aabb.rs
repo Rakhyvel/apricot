@@ -257,6 +257,13 @@ mod tests {
     }
 
     #[test]
+    fn surface_area_adds_up_all_six_faces() {
+        let aabb = AABB::from_min_max(vec3(1.0, -2.0, 3.0), vec3(3.0, 1.0, 7.0));
+        // 2 by 3 by 4, so two faces each of 6, 12, and 8
+        assert_eq!(aabb.surface_area(), 52.0);
+    }
+
+    #[test]
     fn boxes_in_view_or_touching_it_are_within_the_frustum() {
         let frustum = camera_frustum();
         let in_view = AABB::from_min_max(vec3(-0.5, -0.5, -10.5), vec3(0.5, 0.5, -9.5));

@@ -1,8 +1,6 @@
 //! A Bounding Volume Hierarchy. A tree of boxes for quickly finding which objects overlap a frustum,
 //! a sphere, a ray, or any other shape
 
-use rand::{rngs::StdRng, Rng, SeedableRng};
-
 use super::{aabb::AABB, frustum::Frustum, ray::Ray, sphere::Sphere};
 
 /// A tree of objects and their bounding boxes. For drawing models, `ModelSet` manages one for you
@@ -10,7 +8,6 @@ pub struct BVH<Object: Copy> {
     nodes: Vec<Node<Object>>,
     free: Vec<NodeId>,
     root: Option<NodeId>,
-    rng: StdRng,
 }
 
 /// Refers to an object's spot in a `BVH`, for moving or removing it
@@ -30,6 +27,7 @@ struct Node<Object> {
     parent: Option<NodeId>,
     /// Only leaves hold objects
     object: Option<Object>,
+    /// The longest path down to a leaf. Leaves are 0
     height: i32,
 }
 
@@ -55,7 +53,6 @@ impl<Object: Copy> BVH<Object> {
             nodes: vec![],
             free: vec![],
             root: None,
-            rng: StdRng::from_entropy(),
         }
     }
 
@@ -202,19 +199,13 @@ impl<Object: Copy> BVH<Object> {
 
         // Give the sibling and the leaf a new parent, in the sibling's old place
         let old_parent = self.node(sibling).parent;
-        let flip = self.rng.gen_bool(0.5);
-        let (left, right) = if flip {
-            (sibling, leaf)
-        } else {
-            (leaf, sibling)
-        };
         let new_parent = self.allocate(Node {
             volume: AABB::empty(),
-            left: Some(left),
-            right: Some(right),
+            left: Some(sibling),
+            right: Some(leaf),
             parent: old_parent,
             object: None,
-            height: self.node(sibling).height + 1,
+            height: 0, // refit below
         });
         match old_parent {
             Some(parent) => self.replace_child(parent, sibling, new_parent),
@@ -262,20 +253,79 @@ impl<Object: Copy> BVH<Object> {
         }
     }
 
-    /// Refit every box from `start` up to the root around its children
+    /// Rebalance and refit every node from `start` up to the root
     fn adjust_bounds(&mut self, start: Option<NodeId>) {
         let mut next = start;
         while let Some(id) = next {
-            let node = self.node(id);
-            let (left, right) = (
-                node.left.expect("internal nodes have two children"),
-                node.right.expect("internal nodes have two children"),
-            );
-            let volume = self.node(left).volume.union(self.node(right).volume);
-            let node = self.node_mut(id);
-            node.volume = volume;
-            next = node.parent;
+            let id = self.balance(id);
+            self.refit(id);
+            next = self.node(id).parent;
         }
+    }
+
+    /// Fit an internal node's box and height around its children
+    fn refit(&mut self, id: NodeId) {
+        let (left, right) = self.children_of(id);
+        let (left, right) = (self.node(left), self.node(right));
+        let volume = left.volume.union(right.volume);
+        let height = 1 + left.height.max(right.height);
+        let node = self.node_mut(id);
+        node.volume = volume;
+        node.height = height;
+    }
+
+    /// If one of `a`'s children is more than a level taller than the other, rotate it up into
+    /// `a`'s place. Gives back the node now in `a`'s place
+    fn balance(&mut self, a: NodeId) -> NodeId {
+        if self.node(a).is_leaf() {
+            return a;
+        }
+        let (left, right) = self.children_of(a);
+        let lean = self.node(right).height - self.node(left).height;
+        if lean > 1 {
+            self.rotate_up(a, right)
+        } else if lean < -1 {
+            self.rotate_up(a, left)
+        } else {
+            a
+        }
+    }
+
+    /// Lift `child` into its parent `a`'s place. `child` keeps its taller child and takes `a`
+    /// as its other one, and `a` takes `child`'s shorter child
+    fn rotate_up(&mut self, a: NodeId, child: NodeId) -> NodeId {
+        let (first, second) = self.children_of(child);
+        let (keep, give) = if self.node(first).height > self.node(second).height {
+            (first, second)
+        } else {
+            (second, first)
+        };
+
+        let parent = self.node(a).parent;
+        match parent {
+            Some(parent) => self.replace_child(parent, a, child),
+            None => self.root = Some(child),
+        }
+        let lifted = self.node_mut(child);
+        lifted.parent = parent;
+        lifted.left = Some(a);
+        lifted.right = Some(keep);
+
+        self.replace_child(a, child, give);
+        self.node_mut(a).parent = Some(child);
+        self.node_mut(give).parent = Some(a);
+
+        self.refit(a);
+        self.refit(child);
+        child
+    }
+
+    fn children_of(&self, id: NodeId) -> (NodeId, NodeId) {
+        let node = self.node(id);
+        (
+            node.left.expect("internal nodes have two children"),
+            node.right.expect("internal nodes have two children"),
+        )
     }
 
     fn allocate(&mut self, node: Node<Object>) -> NodeId {
@@ -319,6 +369,7 @@ impl<Object: Copy> Default for BVH<Object> {
 mod tests {
     use super::*;
     use nalgebra_glm::vec3;
+    use rand::{rngs::StdRng, Rng, SeedableRng};
     use std::collections::HashSet;
 
     #[test]
@@ -350,6 +401,161 @@ mod tests {
         let found: HashSet<usize> = bvh.iter_frustum(&frustum).collect();
         let expected: HashSet<usize> = (0..in_view.len()).collect();
         assert_eq!(found, expected);
+    }
+
+    /// Every parent link, height, and box agrees with the children, and there are `leaves` objects
+    fn assert_valid(bvh: &BVH<usize>, leaves: usize) {
+        let Some(root) = bvh.root else {
+            assert_eq!(leaves, 0);
+            return;
+        };
+        assert_eq!(bvh.node(root).parent, None);
+        let mut found = 0;
+        let mut stack = vec![root];
+        while let Some(id) = stack.pop() {
+            let node = bvh.node(id);
+            match (node.left, node.right) {
+                (None, None) => {
+                    assert!(node.object.is_some(), "leaf {id:?} has no object");
+                    assert_eq!(node.height, 0, "leaf {id:?}");
+                    found += 1;
+                }
+                (Some(left), Some(right)) => {
+                    let (l, r) = (bvh.node(left), bvh.node(right));
+                    assert_eq!(l.parent, Some(id), "{left:?}'s parent");
+                    assert_eq!(r.parent, Some(id), "{right:?}'s parent");
+                    assert_eq!(node.height, 1 + l.height.max(r.height), "{id:?}'s height");
+                    let union = l.volume.union(r.volume);
+                    assert!(node.volume.min == union.min && node.volume.max == union.max, "{id:?}'s box");
+                    stack.extend([left, right]);
+                }
+                _ => panic!("{id:?} has one child"),
+            }
+        }
+        assert_eq!(found, leaves);
+    }
+
+    /// The longest path from the root to a leaf, counting both ends
+    fn depth(bvh: &BVH<usize>) -> usize {
+        fn below(bvh: &BVH<usize>, id: NodeId) -> usize {
+            let node = bvh.node(id);
+            1 + node.children().into_iter().flatten().map(|c| below(bvh, c)).max().unwrap_or(0)
+        }
+        bvh.root.map_or(0, |root| below(bvh, root))
+    }
+
+    /// How many nodes a query for a half unit sphere around each box's center looks at, on average
+    fn average_visits(bvh: &BVH<usize>, aabbs: &[AABB]) -> f32 {
+        let total: usize = aabbs
+            .iter()
+            .map(|aabb| {
+                let sphere = Sphere::new(aabb.center(), 0.5);
+                let mut visits = 0;
+                let mut stack: Vec<NodeId> = bvh.root.into_iter().collect();
+                while let Some(id) = stack.pop() {
+                    visits += 1;
+                    let node = bvh.node(id);
+                    if node.volume.within_sphere(&sphere) {
+                        stack.extend(node.children().into_iter().flatten());
+                    }
+                }
+                visits
+            })
+            .sum();
+        total as f32 / aabbs.len() as f32
+    }
+
+    /// As deep as an AVL tree can get, and small queries only look at a few nodes per level
+    fn assert_balanced(bvh: &BVH<usize>, aabbs: &[AABB]) {
+        let n = aabbs.len() as f32;
+        let nodes = 2.0 * n - 1.0;
+        let max_depth = (1.44 * (nodes + 2.0).log2()).floor() as usize + 1;
+        assert!(depth(bvh) <= max_depth, "{} deep, at most {max_depth}", depth(bvh));
+        let max_visits = 4.0 * n.log2();
+        let visits = average_visits(bvh, aabbs);
+        assert!(visits <= max_visits, "{visits} visits per query, at most {max_visits}");
+    }
+
+    fn unit_box_at(x: f32, y: f32, z: f32) -> AABB {
+        AABB::from_min_max(vec3(x, y, z), vec3(x + 1.0, y + 1.0, z + 1.0))
+    }
+
+    #[test]
+    fn far_apart_clusters_end_up_on_their_own_sides() {
+        // Inserted taking turns, so the tree has to sort them out as it goes
+        let aabbs: Vec<AABB> = (0..64)
+            .map(|i| {
+                let cluster_x = if i % 2 == 0 { 0.0 } else { 1000.0 };
+                unit_box_at(cluster_x + (i / 2 % 8) as f32 * 2.0, 0.0, (i / 16) as f32 * 2.0)
+            })
+            .collect();
+        let mut bvh = BVH::new();
+        for (i, aabb) in aabbs.iter().enumerate() {
+            bvh.insert(i, *aabb);
+        }
+        assert_valid(&bvh, aabbs.len());
+
+        // Each side of the root holds one cluster, about 16 wide
+        let (left, right) = bvh.children_of(bvh.root.unwrap());
+        for side in [left, right] {
+            let volume = bvh.node(side).volume;
+            let width = volume.max.x - volume.min.x;
+            assert!(width < 50.0, "one side of the root spans {width} across x");
+        }
+    }
+
+    #[test]
+    fn random_inserts_stay_balanced() {
+        let mut rng = StdRng::seed_from_u64(5);
+        let aabbs: Vec<AABB> = (0..1000)
+            .map(|_| {
+                let x = rng.gen_range(-50.0..50.0);
+                unit_box_at(x, rng.gen_range(-50.0..50.0), rng.gen_range(-50.0..50.0))
+            })
+            .collect();
+        let mut bvh = BVH::new();
+        for (i, aabb) in aabbs.iter().enumerate() {
+            bvh.insert(i, *aabb);
+        }
+        assert_valid(&bvh, aabbs.len());
+        assert_balanced(&bvh, &aabbs);
+    }
+
+    #[test]
+    fn inserting_in_a_line_stays_balanced() {
+        let aabbs: Vec<AABB> = (0..1000).map(|i| unit_box_at(i as f32 * 2.0, 0.0, 0.0)).collect();
+        let mut bvh = BVH::new();
+        for (i, aabb) in aabbs.iter().enumerate() {
+            bvh.insert(i, *aabb);
+        }
+        assert_valid(&bvh, aabbs.len());
+        assert_balanced(&bvh, &aabbs);
+    }
+
+    #[test]
+    fn inserting_a_grid_row_by_row_stays_balanced() {
+        let aabbs: Vec<AABB> = (0..1024)
+            .map(|i| unit_box_at((i % 32) as f32 * 2.0, 0.0, (i / 32) as f32 * 2.0))
+            .collect();
+        let mut bvh = BVH::new();
+        for (i, aabb) in aabbs.iter().enumerate() {
+            bvh.insert(i, *aabb);
+        }
+        assert_valid(&bvh, aabbs.len());
+        assert_balanced(&bvh, &aabbs);
+    }
+
+    #[test]
+    fn removing_from_a_line_stays_balanced() {
+        let aabbs: Vec<AABB> = (0..1000).map(|i| unit_box_at(i as f32 * 2.0, 0.0, 0.0)).collect();
+        let mut bvh = BVH::new();
+        let ids: Vec<NodeId> = aabbs.iter().enumerate().map(|(i, a)| bvh.insert(i, *a)).collect();
+        // Take out the whole first half
+        for id in &ids[..500] {
+            bvh.remove(*id);
+        }
+        assert_valid(&bvh, 500);
+        assert_balanced(&bvh, &aabbs[500..]);
     }
 
     /// Little boxes scattered over a 40 unit cube, from a fixed seed
@@ -442,6 +648,7 @@ mod tests {
             *aabb = aabb.translate(shift);
             bvh.move_obj(ids[*i], aabb, &shift);
         }
+        assert_valid(&bvh, live.len());
         check(&bvh, &live);
     }
 

@@ -5,10 +5,10 @@ use std::{collections::HashMap, hash::Hash};
 use nalgebra_glm::{vec4, Mat4, Vec4};
 
 use crate::{
-    aabb::AABB,
-    bvh::{NodeId, BVH},
+    geometry::aabb::AABB,
+    geometry::bvh::{NodeId, BVH},
     opengl::{DrawOptions, Stencil},
-    ray::Ray,
+    geometry::ray::Ray,
     render_core::{MeshId, RenderContext, TextureId},
     shadow_map::ShadowPass,
 };

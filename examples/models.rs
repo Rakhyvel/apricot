@@ -10,7 +10,7 @@ use apricot::{
     error::Error,
     mesh_data::MeshData,
     model_set::{Model, ModelSet},
-    rectangle::Rectangle,
+    geometry::rectangle::Rectangle,
     render_core::{LinePath, LineStyle, MeshId, TextureId},
     shadow_map::DirectionalLight,
 };

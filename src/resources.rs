@@ -4,7 +4,7 @@
 use std::{cell::RefCell, path::Path};
 
 use crate::{
-    aabb::AABB,
+    geometry::aabb::AABB,
     error::Error,
     font::{Atlas, Font, FontId, FontManager},
     mesh_data::MeshData,

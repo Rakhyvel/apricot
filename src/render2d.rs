@@ -14,7 +14,7 @@ use crate::{
 use super::{
     camera::{Camera, ProjectionKind},
     font::{Font, FontId},
-    rectangle::Rectangle,
+    geometry::rectangle::Rectangle,
     render_core::{RenderContext, TextureId},
 };
 

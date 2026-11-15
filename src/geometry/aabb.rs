@@ -241,7 +241,7 @@ impl Default for AABB {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::frustum::test_frustum;
+    use crate::geometry::frustum::test_frustum;
     use nalgebra_glm::vec3;
 
     /// At depth `d` the view spans -d to d on both x and y

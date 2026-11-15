@@ -21,7 +21,7 @@ use apricot::{
     mesh_data::MeshData,
     model_set::{Model, ModelSet},
     noise,
-    rectangle::Rectangle,
+    geometry::rectangle::Rectangle,
     render_core::{MeshId, RenderContext},
     shadow_map::DirectionalLight,
     terrain::{normal_at, scatter, surface_height},

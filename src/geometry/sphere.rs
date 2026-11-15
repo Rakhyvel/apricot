@@ -1,6 +1,6 @@
 use std::ops::Range;
 
-use crate::ray::{Ray, RayHit};
+use crate::geometry::ray::{Ray, RayHit};
 
 use super::frustum::Frustum;
 
@@ -52,7 +52,7 @@ mod tests {
     #[test]
     fn spheres_in_view_or_touching_it_are_within_the_frustum() {
         // At depth d the view spans -d to d on both x and y
-        let frustum = crate::frustum::test_frustum(1.0);
+        let frustum = crate::geometry::frustum::test_frustum(1.0);
         for sphere in [
             Sphere::new(vec3(1.0, -2.0, -10.0), 2.5),
             Sphere::new(vec3(-11.5, 0.0, -10.0), 2.5), // across the left edge
@@ -65,7 +65,7 @@ mod tests {
 
     #[test]
     fn spheres_outside_the_view_are_not_within_the_frustum() {
-        let frustum = crate::frustum::test_frustum(1.0);
+        let frustum = crate::geometry::frustum::test_frustum(1.0);
         for sphere in [
             Sphere::new(vec3(-16.0, 0.0, -10.0), 2.5), // off to the left
             Sphere::new(vec3(0.0, 14.0, -10.0), 2.5),  // above

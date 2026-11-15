@@ -6,8 +6,8 @@ use nalgebra_glm::{vec2, vec4, I32Vec2, Mat4, Vec2, Vec3};
 
 use crate::{
     camera::Camera,
-    frustum::Frustum,
-    ray::Ray,
+    geometry::frustum::Frustum,
+    geometry::ray::Ray,
     render_core::RenderContext,
     shadow_map::{ActiveLight, DirectionalLight},
 };

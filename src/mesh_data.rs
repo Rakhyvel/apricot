@@ -1,7 +1,7 @@
 use nalgebra_glm::{vec3, Vec3};
 use obj::{load_obj, Obj, TexturedVertex};
 
-use crate::{error::Error, tri::Tri};
+use crate::{error::Error, geometry::tri::Tri};
 
 #[derive(Clone, Debug, Default)]
 pub struct MeshData {

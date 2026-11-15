@@ -3,7 +3,7 @@
 use nalgebra_glm::{vec2, Vec2, Vec3};
 use rand::{Rng, SeedableRng};
 
-use crate::rectangle::Rectangle;
+use crate::geometry::rectangle::Rectangle;
 
 /// The surface normal of `height` at (`x`, `z`), found using finite differencing
 pub fn normal_at(height: impl Fn(f32, f32) -> f32, x: f32, z: f32) -> Vec3 {
@@ -114,7 +114,7 @@ mod tests {
                 0.05 + (i as f32 * 0.37) % 3.9,
                 0.05 + (i as f32 * 0.71) % 3.9,
             );
-            let ray = crate::ray::Ray::new(
+            let ray = crate::geometry::ray::Ray::new(
                 nalgebra_glm::vec3(x, 100.0, z),
                 nalgebra_glm::vec3(0.0, -1.0, 0.0),
             );
@@ -141,7 +141,7 @@ mod tests {
                 // One point in each of the cell's two triangles
                 for (fx, fz) in [(0.25, 0.3), (0.7, 0.8)] {
                     let (x, z) = (x0 as f32 + fx, z0 as f32 + fz);
-                    let ray = crate::ray::Ray::new(
+                    let ray = crate::geometry::ray::Ray::new(
                         nalgebra_glm::vec3(x, 100.0, z),
                         nalgebra_glm::vec3(0.0, -1.0, 0.0),
                     );

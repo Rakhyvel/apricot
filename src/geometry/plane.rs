@@ -2,7 +2,7 @@
 
 use std::ops::Range;
 
-use crate::ray::{Ray, RayHit};
+use crate::geometry::ray::{Ray, RayHit};
 
 #[derive(Debug, Copy, Clone)]
 /// A plane data structure

@@ -50,7 +50,7 @@ pub(crate) fn set_viewport(width: i32, height: i32) {
 
 /// Only draw inside `rect`, measured from the top left of a window `window_height` pixels tall.
 /// `None` draws everywhere
-pub(crate) fn set_scissor(rect: Option<crate::rectangle::Rectangle>, window_height: i32) {
+pub(crate) fn set_scissor(rect: Option<crate::geometry::rectangle::Rectangle>, window_height: i32) {
     unsafe {
         match rect {
             Some(r) => {

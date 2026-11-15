@@ -375,7 +375,7 @@ mod tests {
     #[test]
     fn frustum_query_finds_just_the_boxes_in_view() {
         // At depth d the view spans -d to d on both x and y
-        let frustum = crate::frustum::test_frustum(1.0);
+        let frustum = crate::geometry::frustum::test_frustum(1.0);
         let at = |x: f32, y: f32, z: f32| {
             AABB::from_min_max(
                 vec3(x - 0.5, y - 0.5, z - 0.5),

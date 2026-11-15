@@ -3,9 +3,9 @@
 
 use nalgebra_glm::{DVec3, Mat4, Vec3};
 
-use crate::ray::Ray;
+use crate::geometry::ray::Ray;
 
-use super::frustum::Frustum;
+use crate::geometry::frustum::Frustum;
 
 #[derive(Debug, Copy, Clone)]
 /// Which kind of projection the camera uses.

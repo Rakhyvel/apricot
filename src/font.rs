@@ -7,7 +7,7 @@ use std::path::Path;
 use crate::error::Error;
 
 use super::{
-    rectangle::Rectangle,
+    geometry::rectangle::Rectangle,
     registry::{Handle, Registry},
     render_core::{RenderContext, TextureId},
 };

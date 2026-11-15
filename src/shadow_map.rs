@@ -8,7 +8,7 @@ use crate::{
 
 use super::{
     camera::Camera,
-    frustum::Frustum,
+    geometry::frustum::Frustum,
     opengl::{self, DrawOptions, Fbo, Texture},
     render_core::RenderContext,
 };

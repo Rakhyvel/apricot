@@ -1,6 +1,6 @@
 use std::ops::Range;
 
-use crate::ray::{Ray, RayHit};
+use crate::geometry::ray::{Ray, RayHit};
 
 #[derive(Clone, Copy)]
 pub struct Tri {

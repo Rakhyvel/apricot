@@ -13,10 +13,10 @@ use sdl2::Sdl;
 
 use crate::audio::Audio;
 use crate::error::Error;
+use crate::geometry::rectangle::Rectangle;
 use crate::input::{Input, Scancode};
 use crate::logging;
 use crate::opengl;
-use crate::rectangle::Rectangle;
 
 use super::render_core::RenderContext;
 

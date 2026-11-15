@@ -9,11 +9,11 @@ use crate::{
     mesh_data::MeshData,
     opengl::{self, create_program, DrawOptions, Primitive, RawMesh},
     registry::{Handle, Registry},
-    tri::Tri,
+    geometry::tri::Tri,
 };
 
 use super::{
-    aabb::AABB,
+    geometry::aabb::AABB,
     font::{FontId, FontManager},
     opengl::{Program, Texture, Uniform},
     render2d::Queue2d,

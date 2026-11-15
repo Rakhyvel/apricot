@@ -8,7 +8,7 @@ use apricot::{
     app::{run, App, AppConfig, Scene, SceneCommand},
     error::Error,
     mesh_data::MeshData,
-    rectangle::Rectangle,
+    geometry::rectangle::Rectangle,
     render2d::NineSlice,
     render_core::{MeshId, TextureId},
 };

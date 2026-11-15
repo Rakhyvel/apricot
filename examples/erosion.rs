@@ -104,7 +104,7 @@ impl Scene for Erosion {
             app.set_cursor_captured(!app.cursor_captured());
         }
         if app.cursor_captured() {
-            self.fly.update(app);
+            self.fly.update(&app.input, app.dt);
         }
         app.renderer.set_camera(self.fly.camera());
 

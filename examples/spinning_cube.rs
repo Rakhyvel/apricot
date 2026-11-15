@@ -15,9 +15,8 @@ use std::f32::consts::FRAC_PI_4;
 use apricot::{
     app::{run, App, AppConfig, Scene, SceneCommand},
     audio::SoundId,
-    camera::ProjectionKind,
+    camera::{fly::FlyController, ProjectionKind},
     error::Error,
-    fly_controller::FlyController,
     input::Scancode,
     render_core::TextureId,
     shadow_map::DirectionalLight,

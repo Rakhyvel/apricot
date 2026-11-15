@@ -14,9 +14,8 @@ use std::f32::consts::FRAC_PI_4;
 
 use apricot::{
     app::{run, App, AppConfig, Scene, SceneCommand},
-    camera::ProjectionKind,
+    camera::{fly::FlyController, ProjectionKind},
     error::Error,
-    fly_controller::FlyController,
     terrain::{
         self,
         grid::{ErosionSettings, HeightGrid},

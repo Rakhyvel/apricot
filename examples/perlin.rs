@@ -13,9 +13,8 @@ use std::{collections::HashSet, f32::consts::FRAC_PI_4};
 
 use apricot::{
     app::{run, App, AppConfig, Scene, SceneCommand},
-    camera::ProjectionKind,
+    camera::{fly::FlyController, ProjectionKind},
     error::Error,
-    fly_controller::FlyController,
     input::Scancode,
     mesh_data::MeshData,
     model_set::{Model, ModelSet},

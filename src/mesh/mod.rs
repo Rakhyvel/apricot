@@ -5,6 +5,10 @@ use obj::{load_obj, Obj, TexturedVertex};
 
 use crate::{error::Error, geometry::tri::Tri};
 
+mod shape;
+
+pub use shape::MeshShape;
+
 #[derive(Clone, Debug, Default)]
 pub struct MeshData {
     pub positions: Vec<f32>,
@@ -28,7 +32,10 @@ impl MeshData {
 
     /// Every triangle, in the mesh's own space
     pub fn triangles(&self) -> impl Iterator<Item = Tri> + '_ {
-        triangles(&self.positions, &self.indices)
+        let corner = |i: u32| self.position_at(i);
+        self.indices
+            .chunks_exact(3)
+            .map(move |t| Tri::new(corner(t[0]), corner(t[1]), corner(t[2])))
     }
 
     /// An XY quad spanning -1..1 that faces the -Z direction.
@@ -309,8 +316,7 @@ impl MeshData {
         self.positions.len() / 3
     }
 
-    #[cfg(test)]
-    pub(crate) fn position(&self, i: u32) -> Vec3 {
+    fn position_at(&self, i: u32) -> Vec3 {
         let i = i as usize * 3;
         vec3(
             self.positions[i],
@@ -320,24 +326,15 @@ impl MeshData {
     }
 
     #[cfg(test)]
+    pub(crate) fn position(&self, i: u32) -> Vec3 {
+        self.position_at(i)
+    }
+
+    #[cfg(test)]
     pub(crate) fn normal(&self, i: u32) -> Vec3 {
         let i = i as usize * 3;
         vec3(self.normals[i], self.normals[i + 1], self.normals[i + 2])
     }
-}
-
-/// The triangles made by `indices` into flat xyz `positions`
-pub(crate) fn triangles<'a>(
-    positions: &'a [f32],
-    indices: &'a [u32],
-) -> impl Iterator<Item = Tri> + 'a {
-    let corner = |i: u32| {
-        let i = i as usize * 3;
-        vec3(positions[i], positions[i + 1], positions[i + 2])
-    };
-    indices
-        .chunks_exact(3)
-        .map(move |t| Tri::new(corner(t[0]), corner(t[1]), corner(t[2])))
 }
 
 #[cfg(test)]

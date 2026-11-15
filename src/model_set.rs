@@ -2,7 +2,7 @@
 
 use std::{collections::HashMap, hash::Hash};
 
-use nalgebra_glm::{vec4, Mat4, Vec4};
+use nalgebra_glm::{Mat4, Vec4};
 
 use crate::{
     geometry::aabb::AABB,
@@ -139,29 +139,11 @@ impl<K: Copy + Eq + Hash> ModelSet<K> {
             .iter_ray(ray)
             .filter_map(|key| {
                 let model = &self.entries[&key].model;
-                let to_local = model.transform.try_inverse()?;
-
-                // Move the ray into the model's space instead of moving every triangle out
-                let o = ray.origin();
-                let d = ray.dir();
-                let local_ray = Ray::new(
-                    (to_local * vec4(o.x, o.y, o.z, 1.0)).xyz(),
-                    (to_local * vec4(d.x, d.y, d.z, 0.0)).xyz(),
-                );
-
                 let mesh = renderer
                     .get_mesh_from_id(model.mesh)
                     .expect("invalid MeshId");
-                let t = mesh
-                    .triangles()
-                    .filter_map(|tri| tri.raycast(&local_ray, 0.0..f32::INFINITY))
-                    .map(|hit| hit.t)
-                    .min_by(f32::total_cmp)?;
-
-                // Back to world space, so differently scaled models compare fairly
-                let p = local_ray.at(t);
-                let hit = (model.transform * vec4(p.x, p.y, p.z, 1.0)).xyz();
-                Some((key, nalgebra_glm::distance(&o, &hit)))
+                let distance = mesh.shape().raycast(ray, &model.transform)?;
+                Some((key, distance))
             })
             .min_by(|a, b| a.1.total_cmp(&b.1))
     }

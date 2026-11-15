@@ -225,7 +225,8 @@ impl RenderContext {
             .borrow()
             .get(mesh_id)
             .expect("invalid MeshId")
-            .aabb
+            .shape()
+            .aabb()
     }
 
     fn add_font_atlas(&self, atlas: Atlas, name: &'static str) -> FontId {

@@ -7,14 +7,12 @@ use nalgebra_glm::{Mat4, Vec3, Vec4};
 use crate::{
     camera::ViewProj,
     error::Error,
-    mesh::MeshData,
+    mesh::{MeshData, MeshShape},
     opengl::{self, create_program, DrawOptions, Primitive, RawMesh},
     registry::{Handle, Registry},
-    geometry::tri::Tri,
 };
 
 use super::{
-    geometry::aabb::AABB,
     font::{FontId, FontManager},
     opengl::{Program, Texture, Uniform},
     render2d::Queue2d,
@@ -85,13 +83,10 @@ pub struct LinePath {
     pub style: LineStyle,
 }
 
-/// Stores the geometry of a mesh. Meshes are registered in the mesh manager, and can be potentially shared across
-/// multiple models.
+/// A mesh uploaded to the GPU, with its shape kept on the CPU for picking and culling
 pub struct Mesh {
     raw: RawMesh,
-    positions: Vec<f32>,
-    indices: Vec<u32>,
-    pub(crate) aabb: AABB,
+    shape: MeshShape,
 }
 
 impl RenderContext {
@@ -314,8 +309,8 @@ impl LinePath {
 }
 
 impl Mesh {
-    /// Upload `data` to the GPU. Keeps the positions and indices on the CPU for bounding boxes and
-    /// raycasts, but the normals and UVs only live on the GPU
+    /// Upload `data` to the GPU. Keeps its shape on the CPU, but the normals and UVs only live on
+    /// the GPU
     pub fn from_data(data: MeshData) -> Self {
         // Slots match the shaders: 0 = position, 1 = normal, 2 = uv
         let raw = RawMesh::with_indices(
@@ -324,18 +319,9 @@ impl Mesh {
             &[3, 3, 3],
             Primitive::Triangles,
         );
-
-        let aabb = AABB::from_points(
-            data.positions
-                .chunks(3)
-                .map(|p| nalgebra_glm::vec3(p[0], p[1], p[2])),
-        );
-
         Mesh {
             raw,
-            positions: data.positions,
-            indices: data.indices,
-            aabb,
+            shape: MeshShape::from(data),
         }
     }
 
@@ -344,17 +330,9 @@ impl Mesh {
         Ok(Self::from_data(MeshData::from_obj(obj_file_data)?))
     }
 
-    /// Every triangle, in the mesh's own space
-    pub fn triangles(&self) -> impl Iterator<Item = Tri> + '_ {
-        crate::mesh::triangles(&self.positions, &self.indices)
-    }
-
-    pub fn positions(&self) -> &[f32] {
-        &self.positions
-    }
-
-    pub fn indices(&self) -> &Vec<u32> {
-        &self.indices
+    /// The mesh's positions and triangles, for picking and culling
+    pub fn shape(&self) -> &MeshShape {
+        &self.shape
     }
 }
 

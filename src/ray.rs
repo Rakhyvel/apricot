@@ -12,9 +12,10 @@ pub struct Ray {
 
 impl Ray {
     pub fn new(origin: nalgebra_glm::Vec3, dir: nalgebra_glm::Vec3) -> Self {
+        let dir = dir.normalize();
         Self {
             origin,
-            dir: dir.normalize(),
+            dir,
             inv_dir: nalgebra_glm::vec3(1.0 / dir.x, 1.0 / dir.y, 1.0 / dir.z),
         }
     }

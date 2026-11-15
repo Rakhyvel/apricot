@@ -272,6 +272,27 @@ mod tests {
     }
 
     #[test]
+    fn raycast_doesnt_care_how_long_the_direction_is() {
+        let aabb = AABB::from_min_max(
+            nalgebra_glm::vec3(3.0, 1.0, -1.0),
+            nalgebra_glm::vec3(5.0, 3.0, 1.0),
+        );
+        // Enters the x = 3 face at (3, 1.5, 0)
+        let expected = nalgebra_glm::vec3(3.0, 1.5, 0.0);
+        for length in [0.5, 1.0, 2.0, 10.0] {
+            let dir = nalgebra_glm::vec3(2.0, 1.0, 0.0).normalize() * length;
+            let ray = Ray::new(nalgebra_glm::Vec3::zeros(), dir);
+            let hit = aabb.raycast(&ray, 0.0..f32::INFINITY).unwrap();
+            assert!(
+                (hit.point - expected).norm() < 1e-5,
+                "length {length} hit {:?}",
+                hit.point
+            );
+            assert!((hit.t - expected.norm()).abs() < 1e-5, "length {length} t {}", hit.t);
+        }
+    }
+
+    #[test]
     fn raycast_from_inside_hits_where_it_comes_out() {
         let ray = Ray::new(
             nalgebra_glm::vec3(0.0, 0.0, 0.0),

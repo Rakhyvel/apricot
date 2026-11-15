@@ -89,6 +89,7 @@ impl Audio {
 /// Something that makes sound one sample at a time. Runs on the audio thread
 pub trait Synth: Send + 'static {
     /// The next mono sample, roughly -1 to 1. `dt` is 1 / sample rate
+    /// This bad boy rins at 44khz so make it fast!
     fn next_sample(&mut self, dt: f32) -> f32;
 }
 

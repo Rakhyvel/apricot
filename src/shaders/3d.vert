@@ -16,7 +16,8 @@ out vec4 v_light_space_pos;
 
 void main() {
     vec4 world_pos = u_model_matrix * vec4(a_position, 1.0);
-    vec3 n = normalize(mat3(u_model_matrix) * a_normal);
+    mat3 normal_matrix = transpose(inverse(mat3(u_model_matrix)));
+    vec3 n = normalize(normal_matrix * a_normal);
     vec3 l = dot(u_sun_dir, u_sun_dir) > 0.0 ? normalize(u_sun_dir) : normalize(vec3(0.4, 1.0, 0.6));
 
     // Look up the shadow from slightly above the surface, so it can never shadow itself.

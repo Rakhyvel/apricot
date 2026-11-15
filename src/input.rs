@@ -10,6 +10,9 @@ pub use sdl2::keyboard::Scancode;
 /// How far the mouse can wander while a button is down and still count as a click
 const CLICK_SLOP_PX: f32 = 4.0;
 
+/// One past the highest scancode SDL can send
+const NUM_KEYS: usize = Scancode::Num as usize;
+
 /// A mouse button
 #[derive(Debug, Copy, Clone, PartialEq, Eq)]
 pub enum MouseButton {
@@ -19,9 +22,9 @@ pub enum MouseButton {
 
 /// Keyboard and mouse state for the current tick
 pub struct Input {
-    keys: [bool; 256],
-    keys_pressed: [bool; 256],
-    keys_released: [bool; 256],
+    keys: [bool; NUM_KEYS],
+    keys_pressed: [bool; NUM_KEYS],
+    keys_released: [bool; NUM_KEYS],
     /// Where the mouse is, in pixels from the top left of the window
     pub mouse_pos: Vec2,
     /// How far the mouse moved this tick, in pixels
@@ -38,9 +41,9 @@ pub struct Input {
 impl Default for Input {
     fn default() -> Self {
         Self {
-            keys: [false; 256],
-            keys_pressed: [false; 256],
-            keys_released: [false; 256],
+            keys: [false; NUM_KEYS],
+            keys_pressed: [false; NUM_KEYS],
+            keys_released: [false; NUM_KEYS],
             mouse_pos: Vec2::zeros(),
             mouse_vel: Vec2::zeros(),
             mouse_wheel: 0.0,
@@ -115,8 +118,8 @@ impl Input {
 
     /// Clear everything that only lasts one tick
     pub(crate) fn begin_tick(&mut self) {
-        self.keys_pressed = [false; 256];
-        self.keys_released = [false; 256];
+        self.keys_pressed = [false; NUM_KEYS];
+        self.keys_released = [false; NUM_KEYS];
         self.mouse_vel = Vec2::zeros();
         self.mouse_wheel = 0.0;
         self.left.begin_tick();
@@ -407,5 +410,43 @@ mod tests {
         // Coming back to where it started doesn't turn it back into a click
         tick(&mut b, |b| b.release(vec2(0.0, 0.0)));
         assert!(!b.clicked && !b.dragging);
+    }
+
+    #[test]
+    fn keys_go_down_and_up_including_media_keys() {
+        let mut input = Input::default();
+        let keys = [
+            Scancode::A,
+            Scancode::Escape,
+            Scancode::RGui,
+            Scancode::Mode,
+            Scancode::AudioPlay,
+            Scancode::BrightnessUp,
+            Scancode::Sleep,
+            Scancode::App2,
+        ];
+        for sc in keys {
+            input.begin_tick();
+            input.handle_event(&Event::KeyDown {
+                timestamp: 0,
+                window_id: 0,
+                keycode: None,
+                scancode: Some(sc),
+                keymod: sdl2::keyboard::Mod::NOMOD,
+                repeat: false,
+            });
+            assert!(input.key_down(sc) && input.key_pressed(sc), "{sc:?} down");
+
+            input.begin_tick();
+            input.handle_event(&Event::KeyUp {
+                timestamp: 0,
+                window_id: 0,
+                keycode: None,
+                scancode: Some(sc),
+                keymod: sdl2::keyboard::Mod::NOMOD,
+                repeat: false,
+            });
+            assert!(!input.key_down(sc) && input.key_released(sc), "{sc:?} up");
+        }
     }
 }

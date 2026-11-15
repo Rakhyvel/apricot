@@ -86,3 +86,143 @@ impl Frustum {
         Plane::from_center_normal(a, (b - a).cross(&(c - a)).normalize())
     }
 }
+
+/// A camera's frustum for tests such that at depth `d` the view spans `-d..d` on y and
+/// `-d * aspect..d * aspect` on x.
+#[cfg(test)]
+pub(crate) fn test_frustum(aspect: f32) -> Frustum {
+    crate::camera::Camera::new(
+        nalgebra_glm::Vec3::zeros(),        // At the origin
+        nalgebra_glm::vec3(0.0, 0.0, -1.0), // Looking down -z
+        nalgebra_glm::vec3(0.0, 1.0, 0.0),
+        crate::camera::ProjectionKind::Perspective {
+            fov_rad: std::f32::consts::FRAC_PI_2, // 90 degree vertical view
+            near: 0.1,
+            far: 100.0,
+        },
+    )
+    .frustum(aspect)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::camera::{Camera, ProjectionKind};
+    use nalgebra_glm::{vec3, Vec3};
+
+    const LEFT: usize = 0;
+    const RIGHT: usize = 1;
+    const TOP: usize = 2;
+    const BOTTOM: usize = 3;
+    const NEAR: usize = 4;
+    const FAR: usize = 5;
+
+    /// A camera with a 90 degree view and a 2:1 aspect, so mixing up x and y shows
+    struct View {
+        position: Vec3,
+        forward: Vec3,
+        up: Vec3,
+    }
+
+    impl View {
+        fn right(&self) -> Vec3 {
+            self.forward.cross(&self.up)
+        }
+
+        /// The world point `right` across, `up` up, and `ahead` in front of the camera
+        fn point(&self, right: f32, up: f32, ahead: f32) -> Vec3 {
+            self.position + self.right() * right + self.up * up + self.forward * ahead
+        }
+
+        fn frustum(&self) -> Frustum {
+            Camera::new(
+                self.position,
+                self.position + self.forward,
+                self.up,
+                ProjectionKind::Perspective {
+                    fov_rad: std::f32::consts::FRAC_PI_2,
+                    near: 0.1,
+                    far: 100.0,
+                },
+            )
+            .frustum(2.0)
+        }
+    }
+
+    fn views() -> [View; 2] {
+        [
+            View {
+                position: Vec3::zeros(),
+                forward: vec3(0.0, 0.0, -1.0),
+                up: vec3(0.0, 1.0, 0.0),
+            },
+            // Moved off the origin and turned to look down +x
+            View {
+                position: vec3(3.0, -2.0, 5.0),
+                forward: vec3(1.0, 0.0, 0.0),
+                up: vec3(0.0, 1.0, 0.0),
+            },
+        ]
+    }
+
+    fn signed_distance(plane: &Plane, p: Vec3) -> f32 {
+        plane.normal().dot(&p) + plane.dist()
+    }
+
+    #[test]
+    fn corners_sit_on_the_near_and_far_planes() {
+        for view in views() {
+            let expected = [
+                view.point(-0.2, -0.1, 0.1),
+                view.point(0.2, -0.1, 0.1),
+                view.point(-0.2, 0.1, 0.1),
+                view.point(0.2, 0.1, 0.1),
+                view.point(-200.0, -100.0, 100.0),
+                view.point(200.0, -100.0, 100.0),
+                view.point(-200.0, 100.0, 100.0),
+                view.point(200.0, 100.0, 100.0),
+            ];
+            for (i, (got, want)) in view.frustum().corners().iter().zip(expected).enumerate() {
+                // The far corners are pulled in a hair, so they're always inside
+                let tolerance = if i < 4 { 1e-4 } else { 0.5 };
+                assert!(
+                    (got - want).norm() < tolerance,
+                    "corner {i}: {got:?} vs {want:?}"
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn planes_face_in() {
+        for view in views() {
+            let frustum = view.frustum();
+            let inside = view.point(1.0, -0.5, 10.0);
+            for (i, plane) in frustum.planes().iter().enumerate() {
+                assert!(signed_distance(plane, inside) > 0.0, "plane {i} faces out");
+            }
+        }
+    }
+
+    #[test]
+    fn a_point_past_one_side_is_only_outside_that_plane() {
+        for view in views() {
+            let frustum = view.frustum();
+            // At 10 ahead, the view spans -20..20 across and -10..10 up
+            let cases = [
+                (LEFT, view.point(-21.0, 0.0, 10.0)),
+                (RIGHT, view.point(21.0, 0.0, 10.0)),
+                (TOP, view.point(0.0, 11.0, 10.0)),
+                (BOTTOM, view.point(0.0, -11.0, 10.0)),
+                (NEAR, view.point(0.0, 0.0, 0.05)),
+                (FAR, view.point(0.0, 0.0, 101.0)),
+            ];
+            for (side, p) in cases {
+                for (i, plane) in frustum.planes().iter().enumerate() {
+                    let outside = signed_distance(plane, p) < 0.0;
+                    assert_eq!(outside, i == side, "point past side {side}, plane {i}");
+                }
+            }
+        }
+    }
+}

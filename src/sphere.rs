@@ -49,6 +49,33 @@ mod tests {
     use super::*;
     use nalgebra_glm::vec3;
 
+    #[test]
+    fn spheres_in_view_or_touching_it_are_within_the_frustum() {
+        // At depth d the view spans -d to d on both x and y
+        let frustum = crate::frustum::test_frustum(1.0);
+        for sphere in [
+            Sphere::new(vec3(1.0, -2.0, -10.0), 2.5),
+            Sphere::new(vec3(-11.5, 0.0, -10.0), 2.5), // across the left edge
+            Sphere::new(vec3(0.0, 0.0, 1.0), 2.5),     // around the camera
+            Sphere::new(vec3(0.0, 0.0, -101.0), 2.5),  // across the far plane
+        ] {
+            assert!(sphere.within_frustum(&frustum), "{sphere:?}");
+        }
+    }
+
+    #[test]
+    fn spheres_outside_the_view_are_not_within_the_frustum() {
+        let frustum = crate::frustum::test_frustum(1.0);
+        for sphere in [
+            Sphere::new(vec3(-16.0, 0.0, -10.0), 2.5), // off to the left
+            Sphere::new(vec3(0.0, 14.0, -10.0), 2.5),  // above
+            Sphere::new(vec3(0.0, 0.0, 3.0), 2.5),     // behind
+            Sphere::new(vec3(0.0, 0.0, -103.0), 2.5),  // past the far plane
+        ] {
+            assert!(!sphere.within_frustum(&frustum), "{sphere:?}");
+        }
+    }
+
     fn unit() -> Sphere {
         Sphere::new(vec3(0.0, 0.0, -5.0), 1.0)
     }

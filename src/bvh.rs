@@ -321,6 +321,37 @@ mod tests {
     use nalgebra_glm::vec3;
     use std::collections::HashSet;
 
+    #[test]
+    fn frustum_query_finds_just_the_boxes_in_view() {
+        // At depth d the view spans -d to d on both x and y
+        let frustum = crate::frustum::test_frustum(1.0);
+        let at = |x: f32, y: f32, z: f32| {
+            AABB::from_min_max(vec3(x - 0.5, y - 0.5, z - 0.5), vec3(x + 0.5, y + 0.5, z + 0.5))
+        };
+        let in_view = [
+            at(0.0, 0.0, -5.0),
+            at(3.0, -2.0, -20.0),
+            at(-40.0, 30.0, -60.0),
+            at(-10.0, 0.0, -10.0), // across the left edge
+            at(0.0, 0.0, -100.0),  // across the far plane
+        ];
+        let out_of_view = [
+            at(0.0, 0.0, 5.0),    // behind
+            at(0.0, 0.0, 0.8),    // just behind
+            at(-14.0, 0.0, -10.0), // off to the left
+            at(0.0, 14.0, -10.0), // above
+            at(0.0, 0.0, -105.0), // past the far plane
+        ];
+
+        let mut bvh = BVH::new();
+        for (i, aabb) in in_view.iter().chain(&out_of_view).enumerate() {
+            bvh.insert(i, *aabb);
+        }
+        let found: HashSet<usize> = bvh.iter_frustum(&frustum).collect();
+        let expected: HashSet<usize> = (0..in_view.len()).collect();
+        assert_eq!(found, expected);
+    }
+
     /// Little boxes scattered over a 40 unit cube, from a fixed seed
     fn boxes(count: usize) -> Vec<AABB> {
         let mut rng = StdRng::seed_from_u64(11);

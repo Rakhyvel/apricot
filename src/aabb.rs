@@ -248,23 +248,12 @@ impl Default for AABB {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::camera::{Camera, ProjectionKind};
+    use crate::frustum::test_frustum;
     use nalgebra_glm::vec3;
 
-    /// A camera at the origin looking down -z with a 90 degree view, so at depth `d` the view
-    /// spans -d to d on both x and y
+    /// At depth `d` the view spans -d to d on both x and y
     fn camera_frustum() -> Frustum {
-        Camera::new(
-            nalgebra_glm::Vec3::zeros(),
-            vec3(0.0, 0.0, -1.0),
-            vec3(0.0, 1.0, 0.0),
-            ProjectionKind::Perspective {
-                fov_rad: std::f32::consts::FRAC_PI_2,
-                near: 0.1,
-                far: 100.0,
-            },
-        )
-        .frustum(1.0)
+        test_frustum(1.0)
     }
 
     #[test]

@@ -127,47 +127,19 @@ impl Camera {
         radius / half_view_height * viewport_height / 2.0
     }
 
-    /// A ray from the camera through pixel (`x`, `y`) of a `width` by `height` image
+    /// A ray through the middle of pixel (`x`, `y`) of a `width` by `height` image, starting on
+    /// the near plane
     pub fn get_ray(&self, x: f32, y: f32, width: f32, height: f32) -> Ray {
-        let (lower_left_corner, horizontal, vertical) = match self.projection_kind {
-            ProjectionKind::Perspective { fov_rad, .. } => {
-                // Viewport spans at a near plane 1 unit away
-                let viewport_height = 2.0 * (fov_rad / 2.0).tan();
-                let viewport_width = width / height * viewport_height;
-
-                let w = (self.position - self.lookat).normalize();
-                let u = self.up.cross(&w).normalize();
-                let v = w.cross(&u);
-
-                let horizontal = u * viewport_width;
-                let vertical = v * viewport_height;
-                (
-                    self.position - horizontal / 2.0 - vertical / 2.0 - w,
-                    horizontal,
-                    vertical,
-                )
-            }
-            ProjectionKind::Orthographic {
-                left,
-                right,
-                bottom,
-                top,
-                ..
-            } => {
-                let horizontal = nalgebra_glm::vec3(right - left, 0.0, 0.0);
-                let vertical = nalgebra_glm::vec3(0.0, top - bottom, 0.0);
-                (
-                    self.position - horizontal * 0.5 - vertical * 0.5,
-                    horizontal,
-                    vertical,
-                )
-            }
+        let ndc_x = 2.0 * (x + 0.5) / width - 1.0;
+        let ndc_y = 1.0 - 2.0 * (y + 0.5) / height;
+        let inv = self.inv_proj_view(width / height);
+        let unproject = |ndc_z: f32| {
+            let p = inv * nalgebra_glm::vec4(ndc_x, ndc_y, ndc_z, 1.0);
+            p.xyz() / p.w
         };
-
-        let u = (x + 0.5) / width;
-        let v = 1.0 - (y + 0.5) / height;
-        let dir = (lower_left_corner + horizontal * u + vertical * v - self.position).normalize();
-        Ray::new(self.position, dir)
+        let near = unproject(-1.0);
+        let far = unproject(1.0);
+        Ray::new(near, far - near)
     }
 
     /// Sets the position of the camera
@@ -228,6 +200,86 @@ impl FloatingOrigin {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use nalgebra_glm::{vec2, vec3, vec4, Vec2};
+
+    const W: f32 = 800.0;
+    const H: f32 = 600.0;
+
+    fn looking_at_origin(projection_kind: ProjectionKind) -> Camera {
+        Camera::new(vec3(0.0, 0.0, 5.0), Vec3::zeros(), vec3(0.0, 1.0, 0.0), projection_kind)
+    }
+
+    fn perspective() -> Camera {
+        looking_at_origin(ProjectionKind::Perspective {
+            fov_rad: std::f32::consts::FRAC_PI_3,
+            near: 0.1,
+            far: 100.0,
+        })
+    }
+
+    fn orthographic() -> Camera {
+        looking_at_origin(ProjectionKind::Orthographic {
+            left: -4.0,
+            right: 4.0,
+            bottom: -3.0,
+            top: 3.0,
+            near: 0.1,
+            far: 100.0,
+        })
+    }
+
+    /// Where `p` lands on a `W` by `H` image, in pixels from the top left
+    fn to_screen(camera: &Camera, p: Vec3) -> Vec2 {
+        let (view, proj) = camera.view_proj_matrices(W / H);
+        let clip = proj * view * vec4(p.x, p.y, p.z, 1.0);
+        let ndc = clip.xyz() / clip.w;
+        vec2((ndc.x + 1.0) / 2.0 * W, (1.0 - ndc.y) / 2.0 * H)
+    }
+
+    /// How far `p` is from the line along `ray`
+    fn miss_distance(ray: &Ray, p: Vec3) -> f32 {
+        let to_p = p - ray.origin();
+        (to_p - ray.dir() * to_p.dot(&ray.dir())).norm()
+    }
+
+    fn assert_rays_hit_what_they_point_at(camera: &Camera) {
+        for p in [
+            Vec3::zeros(),
+            vec3(1.0, -0.5, 0.0),
+            vec3(-2.0, 1.0, -3.0),
+            vec3(0.5, 2.0, 1.5),
+        ] {
+            // Pixel (x, y) is the one whose top left corner is at (x, y)
+            let px = to_screen(camera, p) - vec2(0.5, 0.5);
+            let ray = camera.get_ray(px.x, px.y, W, H);
+            let miss = miss_distance(&ray, p);
+            assert!(
+                miss < 1e-3,
+                "{p:?} missed by {miss}, ray from {:?} going {:?}",
+                ray.origin(),
+                ray.dir()
+            );
+        }
+    }
+
+    #[test]
+    fn perspective_rays_go_through_the_point_on_that_pixel() {
+        assert_rays_hit_what_they_point_at(&perspective());
+    }
+
+    #[test]
+    fn orthographic_rays_go_through_the_point_on_that_pixel() {
+        assert_rays_hit_what_they_point_at(&orthographic());
+    }
+
+    #[test]
+    fn orthographic_rays_all_point_where_the_camera_looks() {
+        let camera = orthographic();
+        for (x, y) in [(W / 2.0 - 0.5, H / 2.0 - 0.5), (0.0, 0.0), (W - 1.0, 100.0)] {
+            let dir = camera.get_ray(x, y, W, H).dir();
+            assert!((dir - vec3(0.0, 0.0, -1.0)).norm() < 1e-5, "({x}, {y}) went {dir:?}");
+        }
+    }
 
     #[test]
     fn projected_radius_fills_the_screen_at_the_view_edge() {

@@ -1,3 +1,5 @@
+//! Meshes on the CPU, with their positions, normals, uvs, and indices, and ways to build common shapes
+
 use nalgebra_glm::{vec3, Vec3};
 use obj::{load_obj, Obj, TexturedVertex};
 

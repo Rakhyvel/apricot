@@ -2,7 +2,7 @@
 
 use nalgebra_glm::Vec3;
 
-use crate::mesh_data::MeshData;
+use crate::mesh::MeshData;
 
 /// Which chunk, counted in chunks from the origin along X and Z
 pub type ChunkCoord = (i32, i32);

@@ -16,7 +16,7 @@ use apricot::{
     camera::{fly::FlyController, ProjectionKind},
     error::Error,
     input::Scancode,
-    mesh_data::MeshData,
+    mesh::MeshData,
     model_set::{Model, ModelSet},
     geometry::rectangle::Rectangle,
     render_core::{MeshId, RenderContext},

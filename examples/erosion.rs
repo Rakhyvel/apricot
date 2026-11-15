@@ -21,7 +21,7 @@ use apricot::{
         grid::{ErosionSettings, HeightGrid},
     },
     input::Scancode,
-    mesh_data::MeshData,
+    mesh::MeshData,
     render_core::{MeshId, TextureId},
     shadow_map::DirectionalLight,
 };

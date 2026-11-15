@@ -6,7 +6,7 @@ use std::{
 use nalgebra_glm::{vec2, vec3, Mat4, Vec2, Vec4};
 
 use crate::{
-    mesh_data::MeshData,
+    mesh::MeshData,
     opengl::{self, DrawOptions},
     render_core::MeshId,
 };

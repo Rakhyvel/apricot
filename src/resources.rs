@@ -7,7 +7,7 @@ use crate::{
     geometry::aabb::AABB,
     error::Error,
     font::{Atlas, Font, FontId, FontManager},
-    mesh_data::MeshData,
+    mesh::MeshData,
     opengl::{create_program, Program, Texture},
     registry::Registry,
     render_core::{Mesh, MeshId, ProgramId, RenderContext, TextureId},

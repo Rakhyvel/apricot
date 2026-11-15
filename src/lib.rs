@@ -8,7 +8,7 @@ pub mod font;
 pub mod geometry;
 pub mod input;
 mod logging;
-pub mod mesh_data;
+pub mod mesh;
 pub mod model_set;
 pub mod opengl;
 pub mod registry;

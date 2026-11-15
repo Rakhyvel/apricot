@@ -8,7 +8,7 @@ use apricot::{
     app::{run, App, AppConfig, Scene, SceneCommand},
     camera::{Camera, ProjectionKind},
     error::Error,
-    mesh_data::MeshData,
+    mesh::MeshData,
     model_set::{Model, ModelSet},
     geometry::rectangle::Rectangle,
     render_core::{LinePath, LineStyle, MeshId, TextureId},

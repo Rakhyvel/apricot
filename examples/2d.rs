@@ -7,7 +7,7 @@ use std::f32::consts::TAU;
 use apricot::{
     app::{run, App, AppConfig, Scene, SceneCommand},
     error::Error,
-    mesh_data::MeshData,
+    mesh::MeshData,
     geometry::rectangle::Rectangle,
     render2d::NineSlice,
     render_core::{MeshId, TextureId},

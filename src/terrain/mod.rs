@@ -2,7 +2,7 @@
 
 use nalgebra_glm::{vec3, Vec3};
 
-use crate::mesh_data::MeshData;
+use crate::mesh::MeshData;
 
 pub mod chunks;
 pub mod grid;
@@ -97,7 +97,7 @@ pub fn mesh(cells_x: u32, cells_z: u32, height: impl Fn(f32, f32) -> f32) -> Mes
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::mesh_data::tests::{check, uv};
+    use crate::mesh::tests::{check, uv};
 
     #[test]
     fn normal_points_up_on_flat_ground() {

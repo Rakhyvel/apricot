@@ -6,7 +6,7 @@ use nalgebra_glm::{Mat4, Vec3, Vec4};
 
 use crate::{
     error::Error,
-    mesh_data::MeshData,
+    mesh::MeshData,
     opengl::{self, create_program, DrawOptions, Primitive, RawMesh},
     registry::{Handle, Registry},
     geometry::tri::Tri,
@@ -347,7 +347,7 @@ impl Mesh {
 
     /// Every triangle, in the mesh's own space
     pub fn triangles(&self) -> impl Iterator<Item = Tri> + '_ {
-        crate::mesh_data::triangles(&self.positions, &self.indices)
+        crate::mesh::triangles(&self.positions, &self.indices)
     }
 
     pub fn positions(&self) -> &[f32] {

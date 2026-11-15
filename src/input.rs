@@ -32,6 +32,7 @@ pub struct Input {
     right: ButtonState,
     click_consumed: Cell<bool>,
     wheel_consumed: Cell<bool>,
+    joysticks: Vec<Joystick>,
 }
 
 impl Default for Input {
@@ -47,6 +48,7 @@ impl Default for Input {
             right: ButtonState::default(),
             click_consumed: Cell::new(false),
             wheel_consumed: Cell::new(false),
+            joysticks: Vec::new(),
         }
     }
 }
@@ -121,9 +123,12 @@ impl Input {
         self.right.begin_tick();
         self.click_consumed.set(false);
         self.wheel_consumed.set(false);
+        for js in &mut self.joysticks {
+            js.buttons_pressed.fill(false);
+        }
     }
 
-    /// Fold one SDL event into the state. Ignores anything that isn't keyboard or mouse
+    /// Fold one SDL event into the state. Ignores anything that isn't keyboard, mouse, or joystick
     pub(crate) fn handle_event(&mut self, event: &Event) {
         match *event {
             Event::KeyDown {
@@ -165,6 +170,51 @@ impl Input {
                 }
             }
             Event::MouseWheel { y, .. } => self.mouse_wheel += y as f32,
+            Event::JoyAxisMotion {
+                which,
+                axis_idx,
+                value,
+                ..
+            } => {
+                if let Some(js) = self.joystick_mut(which) {
+                    if let Some(a) = js.axes.get_mut(axis_idx as usize) {
+                        // i16 runs -32768..32767, so clamp the bottom end
+                        *a = (value as f32 / 32767.0).max(-1.0);
+                    }
+                }
+            }
+            Event::JoyButtonDown {
+                which, button_idx, ..
+            } => {
+                if let Some(js) = self.joystick_mut(which) {
+                    let i = button_idx as usize;
+                    if i < js.buttons.len() {
+                        js.buttons[i] = true;
+                        js.buttons_pressed[i] = true;
+                    }
+                }
+            }
+            Event::JoyButtonUp {
+                which, button_idx, ..
+            } => {
+                if let Some(js) = self.joystick_mut(which) {
+                    if let Some(b) = js.buttons.get_mut(button_idx as usize) {
+                        *b = false;
+                    }
+                }
+            }
+            Event::JoyHatMotion {
+                which,
+                hat_idx,
+                state,
+                ..
+            } => {
+                if let Some(js) = self.joystick_mut(which) {
+                    if let Some(h) = js.hats.get_mut(hat_idx as usize) {
+                        *h = state;
+                    }
+                }
+            }
             _ => {}
         }
     }
@@ -188,6 +238,42 @@ impl Input {
             sdl2::mouse::MouseButton::Right => Some(&mut self.right),
             _ => None,
         }
+    }
+
+    /// The first connected joystick, if any
+    pub fn joystick(&self) -> Option<&Joystick> {
+        self.joysticks.first()
+    }
+
+    /// Every connected joystick
+    pub fn joysticks(&self) -> &[Joystick] {
+        &self.joysticks
+    }
+
+    /// Start tracking a joystick that was just opened
+    pub(crate) fn joystick_added(&mut self, js: &sdl2::joystick::Joystick) {
+        let id = js.instance_id();
+        if self.joysticks.iter().any(|j| j.id == id) {
+            return;
+        }
+        let num_buttons = js.num_buttons() as usize;
+        self.joysticks.push(Joystick {
+            name: js.name(),
+            id,
+            axes: vec![0.0; js.num_axes() as usize],
+            buttons: vec![false; num_buttons],
+            buttons_pressed: vec![false; num_buttons],
+            hats: vec![HatState::Centered; js.num_hats() as usize],
+        });
+    }
+
+    /// Stop tracking a joystick that was unplugged
+    pub(crate) fn joystick_removed(&mut self, id: u32) {
+        self.joysticks.retain(|j| j.id != id);
+    }
+
+    fn joystick_mut(&mut self, id: u32) -> Option<&mut Joystick> {
+        self.joysticks.iter_mut().find(|j| j.id == id)
     }
 }
 
@@ -231,6 +317,51 @@ impl ButtonState {
         let wandered = self.drag_dist > CLICK_SLOP_PX;
         self.clicked = self.released && !wandered;
         self.dragging = self.down && wandered;
+    }
+}
+
+pub use sdl2::joystick::HatState;
+
+/// One connected joystick's state for the current tick
+#[derive(Debug, Clone)]
+pub struct Joystick {
+    /// The name the device reports
+    pub name: String,
+    /// SDL's instance id, used to route events
+    id: u32,
+    axes: Vec<f32>,
+    buttons: Vec<bool>,
+    buttons_pressed: Vec<bool>,
+    hats: Vec<HatState>,
+}
+
+impl Joystick {
+    /// Axis `i` from -1 to 1. Missing axes read 0
+    pub fn axis(&self, i: usize) -> f32 {
+        self.axes.get(i).copied().unwrap_or(0.0)
+    }
+
+    /// Whether button `i` is held down
+    pub fn button_down(&self, i: usize) -> bool {
+        self.buttons.get(i).copied().unwrap_or(false)
+    }
+
+    /// Whether button `i` went down this tick
+    pub fn button_pressed(&self, i: usize) -> bool {
+        self.buttons_pressed.get(i).copied().unwrap_or(false)
+    }
+
+    /// Hat (POV switch) `i`. Missing hats read centered
+    pub fn hat(&self, i: usize) -> HatState {
+        self.hats.get(i).copied().unwrap_or(HatState::Centered)
+    }
+
+    pub fn num_axes(&self) -> usize {
+        self.axes.len()
+    }
+
+    pub fn num_buttons(&self) -> usize {
+        self.buttons.len()
     }
 }
 

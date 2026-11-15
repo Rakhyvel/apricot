@@ -47,6 +47,9 @@ pub struct App {
 
     /// Keyboard and mouse state for this tick
     pub input: Input,
+
+    joystick_subsystem: sdl2::JoystickSubsystem,
+    open_joysticks: Vec<sdl2::joystick::Joystick>,
 }
 
 pub struct AppConfig {
@@ -81,6 +84,7 @@ pub fn run<S: Scene + 'static>(cfg: AppConfig, init: impl FnOnce(&App) -> S) -> 
     let sdl_context = sdl2::init().map_err(Error::Sdl)?;
     let video_subsystem = sdl_context.video().map_err(Error::Sdl)?;
     let _audio_subsystem = sdl_context.audio().map_err(Error::Sdl)?;
+    let joystick_subsystem = sdl_context.joystick().map_err(Error::Sdl)?;
 
     let gl_attr = video_subsystem.gl_attr();
     gl_attr.set_context_profile(sdl2::video::GLProfile::Core);
@@ -123,6 +127,8 @@ pub fn run<S: Scene + 'static>(cfg: AppConfig, init: impl FnOnce(&App) -> S) -> 
         seconds: 0.0,
         ticks: 0,
         fps: 0,
+        joystick_subsystem,
+        open_joysticks: Vec::new(),
     };
     app.renderer.set_screen_size(app.window_size); // so the aspect is right in `init`
 
@@ -246,6 +252,28 @@ impl App {
                     self.window_size = nalgebra_glm::I32Vec2::new(new_width, new_height);
                     self.renderer.set_screen_size(self.window_size);
                     opengl::set_viewport(new_width, new_height);
+                }
+                Event::JoyDeviceAdded { which, .. } => {
+                    // `which` is a device index here, not an instance id
+                    match self.joystick_subsystem.open(which) {
+                        Ok(js) => {
+                            log::info!(
+                                "Joystick connected: {} ({} axes, {} buttons, {} hats)",
+                                js.name(),
+                                js.num_axes(),
+                                js.num_buttons(),
+                                js.num_hats()
+                            );
+                            self.input.joystick_added(&js);
+                            self.open_joysticks.push(js);
+                        }
+                        Err(e) => log::warn!("Couldn't open joystick {which}: {e}"),
+                    }
+                }
+                Event::JoyDeviceRemoved { which, .. } => {
+                    // `which` is an instance id here
+                    self.open_joysticks.retain(|j| j.instance_id() != which);
+                    self.input.joystick_removed(which);
                 }
                 _ => self.input.handle_event(&event),
             }

@@ -75,7 +75,6 @@ pub struct Registry<T> {
     slots: Vec<Slot<T>>,
     free: Vec<usize>,
     names: HashMap<&'static str, Handle<T>>,
-    len: usize,
 }
 
 impl<T> Default for Registry<T> {
@@ -91,7 +90,6 @@ impl<T> Registry<T> {
             slots: Vec::new(),
             free: Vec::new(),
             names: HashMap::new(),
-            len: 0,
         }
     }
 
@@ -111,7 +109,6 @@ impl<T> Registry<T> {
                 Handle::new(self.slots.len() - 1, 0)
             }
         };
-        self.len += 1;
         if let Some(name) = name {
             self.names.insert(name, handle);
         }
@@ -140,7 +137,6 @@ impl<T> Registry<T> {
         slot.generation += 1;
         self.free.push(handle.index());
         self.names.retain(|_, named| *named != handle);
-        self.len -= 1;
         Some(item)
     }
 
@@ -168,12 +164,12 @@ impl<T> Registry<T> {
 
     /// How many items there are
     pub fn len(&self) -> usize {
-        self.len
+        self.slots.len() - self.free.len() // every empty slot is in `free`
     }
 
     /// Whether there are no items
     pub fn is_empty(&self) -> bool {
-        self.len == 0
+        self.len() == 0
     }
 
     /// Every handle and item

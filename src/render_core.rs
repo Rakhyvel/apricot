@@ -5,12 +5,11 @@ use std::{cell::Ref, fmt::Debug, path::Path};
 use nalgebra_glm::{Mat4, Vec3, Vec4};
 
 use crate::{
-    camera::ViewProj,
     error::Error,
     font::Font,
     geometry::aabb::AABB,
     mesh::MeshData,
-    opengl::{self, DrawOptions, Primitive, RawMesh},
+    opengl::{DrawOptions, Primitive, RawMesh},
     render::{
         assets::{Assets, Builtins, FontId, Mesh, MeshId, ProgramId, TextureId},
         lighting::Lighting,
@@ -18,7 +17,7 @@ use crate::{
 };
 
 use super::{
-    opengl::{Program, Texture, Uniform},
+    opengl::{Program, Texture},
     render2d::Queue2d,
     view::View,
 };
@@ -76,83 +75,6 @@ impl RenderContext {
         })
     }
 
-    /// The uniform called `name` in `program`. Setting it works any time, whatever's being drawn
-    pub fn uniform(&self, program: ProgramId, name: &str) -> Uniform {
-        self.get_program_from_id(program)
-            .expect("invalid ProgramId")
-            .uniform(name)
-    }
-
-    fn bind(&self, program: ProgramId) {
-        self.get_program_from_id(program)
-            .expect("invalid ProgramId")
-            .bind();
-    }
-
-    pub fn clear(&self, color: Vec4) {
-        opengl::clear(color);
-    }
-
-    /// Draw `mesh` with `program`, which gets the model, view, and projection matrices
-    pub fn draw(
-        &self,
-        program: ProgramId,
-        mesh: &Mesh,
-        model_matrix: nalgebra_glm::Mat4,
-        view_proj: &ViewProj,
-    ) {
-        self.uniform(program, "u_model_matrix")
-            .set_mat4(&model_matrix);
-        self.uniform(program, "u_view_matrix")
-            .set_mat4(&view_proj.view);
-        self.uniform(program, "u_proj_matrix")
-            .set_mat4(&view_proj.proj);
-
-        self.bind(program);
-        mesh.draw();
-    }
-
-    /// Draw `mesh_id` with the built-in 3D shader from the current camera, in a solid `color`
-    pub fn draw_mesh(&self, mesh_id: MeshId, model: Mat4, color: Vec4) {
-        self.draw_mesh_textured(mesh_id, self.builtins.white_texture, model, color);
-    }
-
-    /// Draw `mesh_id` with a texture, tinted by `tint`. A white tint leaves the texture as is
-    pub fn draw_mesh_textured(
-        &self,
-        mesh_id: MeshId,
-        texture_id: TextureId,
-        model: Mat4,
-        tint: Vec4,
-    ) {
-        self.draw_mesh_textured_with(mesh_id, texture_id, model, tint, &DrawOptions::default());
-    }
-
-    /// Draw `mesh_id` with a texture and custom GL `options`
-    pub(crate) fn draw_mesh_textured_with(
-        &self,
-        mesh_id: MeshId,
-        texture_id: TextureId,
-        model: Mat4,
-        tint: Vec4,
-        options: &DrawOptions,
-    ) {
-        let before = options.apply();
-        let program = self.builtins.program_3d;
-        self.uniform(program, "u_color").set_vec4(&tint);
-        self.upload_light(program);
-
-        let texture = self
-            .get_texture_from_id(texture_id)
-            .expect("invalid TextureId");
-        texture.activate(0);
-        self.uniform(program, "texture0").set_i32(0);
-
-        let mesh = self.get_mesh_from_id(mesh_id).expect("invalid MeshId");
-        self.draw(program, &mesh, model, &self.camera_view_proj());
-        before.restore();
-    }
-
     /// Draw a line path from the current camera, moved by `transform`
     pub fn draw_line_path(&self, path: &LinePath, transform: Mat4) {
         let style = &path.style;
@@ -177,14 +99,6 @@ impl RenderContext {
             ..Default::default()
         };
         self.draw_raw(&path.mesh, program, &options);
-    }
-
-    /// Draw a `RawMesh` with `program` and `options`
-    pub fn draw_raw(&self, mesh: &RawMesh, program: ProgramId, options: &DrawOptions) {
-        let before = options.apply();
-        self.bind(program);
-        mesh.draw();
-        before.restore();
     }
 }
 

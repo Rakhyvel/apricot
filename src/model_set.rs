@@ -8,7 +8,6 @@ use crate::{
     geometry::aabb::AABB,
     geometry::bvh::{NodeId, BVH},
     geometry::ray::Ray,
-    opengl::{DrawOptions, Stencil},
     render::assets::{MeshId, TextureId},
     render::lighting::ShadowPass,
     render_core::RenderContext,
@@ -178,22 +177,17 @@ impl<K: Copy + Eq + Hash> ModelSet<K> {
     pub fn draw(&self, renderer: &RenderContext) {
         for key in self.bvh.iter_frustum(&renderer.camera_frustum()) {
             let model = &self.entries[&key].model;
-            // Outlined models mark the stencil buffer for draw_outlines
-            let options = DrawOptions {
-                stencil: if model.outlined {
-                    Stencil::Mark
-                } else {
-                    Stencil::Off
-                },
-                ..Default::default()
-            };
-            renderer.draw_mesh_textured_with(
-                model.mesh,
-                model.texture,
-                model.transform,
-                model.tint,
-                &options,
-            );
+            if model.outlined {
+                // Marks where it lands, for draw_outlines
+                renderer.draw_mesh_textured_marked(
+                    model.mesh,
+                    model.texture,
+                    model.transform,
+                    model.tint,
+                );
+            } else {
+                renderer.draw_mesh_textured(model.mesh, model.texture, model.transform, model.tint);
+            }
         }
     }
 
@@ -209,31 +203,14 @@ impl<K: Copy + Eq + Hash> ModelSet<K> {
 
     /// Draw a solid `color` outline around every outlined model. Call it after `draw`
     pub fn draw_outlines(&self, renderer: &RenderContext, color: Vec4) {
-        // Only draw where the model itself isn't
-        let before = DrawOptions {
-            stencil: Stencil::OutsideMarks,
-            depth_test: false,
-            ..Default::default()
-        }
-        .apply();
-        let program = renderer.builtins.program_3d_solid;
-        renderer.uniform(program, "u_color").set_vec4(&color);
-        let view_proj = renderer.camera_view_proj();
-
-        for key in self.bvh.iter_frustum(&renderer.camera_frustum()) {
-            let model = &self.entries[&key].model;
-            if !model.outlined {
-                continue;
+        renderer.outline_pass(color, |pass| {
+            for key in self.bvh.iter_frustum(&renderer.camera_frustum()) {
+                let model = &self.entries[&key].model;
+                if model.outlined {
+                    pass.draw(model.mesh, model.transform);
+                }
             }
-            let mesh = renderer
-                .get_mesh_from_id(model.mesh)
-                .expect("invalid MeshId");
-            // A slightly bigger copy, so only the rim pokes out past the stencil
-            let bigger = nalgebra_glm::scale(&model.transform, &nalgebra_glm::vec3(1.2, 1.2, 1.2));
-            renderer.draw(program, &mesh, bigger, &view_proj);
-        }
-
-        before.restore();
+        });
     }
 }
 

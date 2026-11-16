@@ -355,9 +355,7 @@ impl RenderContext {
 
     /// Free a font. If it was the current font, text goes back to the default font
     pub fn unload_font(&self, id: FontId) {
-        if self.assets.unload_font(id) && self.get_current_font_id() == id {
-            self.set_font(self.builtins.font);
-        }
+        self.assets.unload_font(id);
     }
 
     /// The font `id` refers to. `None` if it's been unloaded

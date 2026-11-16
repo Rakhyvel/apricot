@@ -365,13 +365,17 @@ impl RenderContext {
         self.queue_2d.font.set(font);
     }
 
+    /// The font text is drawn with. If the font that was set has been unloaded, that's the
+    /// default font
     pub fn get_current_font_id(&self) -> FontId {
-        self.queue_2d.font.get()
+        self.assets
+            .fonts
+            .live_or(self.queue_2d.font.get(), self.builtins.font)
     }
 
     pub fn get_current_font(&self) -> std::cell::Ref<'_, Font> {
-        self.get_font_from_id(self.queue_2d.font.get())
-            .expect("invalid FontId")
+        self.get_font_from_id(self.get_current_font_id())
+            .expect("the default font was unloaded")
     }
 
     pub fn draw_text(&self, pos: Vec2, text: &str, color: Vec4) {

@@ -190,6 +190,15 @@ impl<T> Store<T> {
     pub(crate) fn id_of(&self, name: &str) -> Option<Handle<T>> {
         self.registry.borrow().lookup(name)
     }
+
+    /// `id` if it's loaded, otherwise `fallback`
+    pub(crate) fn live_or(&self, id: Handle<T>, fallback: Handle<T>) -> Handle<T> {
+        if self.registry.borrow().get(id).is_some() {
+            id
+        } else {
+            fallback
+        }
+    }
 }
 
 /// Every asset the renderer holds
@@ -305,13 +314,11 @@ impl Assets {
         id
     }
 
-    /// Free a font and its atlas texture. Gives back whether it was loaded
-    pub(crate) fn unload_font(&self, id: FontId) -> bool {
-        let Some(font) = self.fonts.remove(id) else {
-            return false;
-        };
-        self.textures.remove(font.cache_texture);
-        true
+    /// Free a font and its atlas texture. Does nothing if it isn't loaded
+    pub(crate) fn unload_font(&self, id: FontId) {
+        if let Some(font) = self.fonts.remove(id) {
+            self.textures.remove(font.cache_texture);
+        }
     }
 }
 
@@ -389,6 +396,22 @@ mod tests {
         assert!(store.get(id).is_none());
         assert!(store.id_of("a").is_none());
         assert_eq!(store.remove(id), None);
+    }
+
+    #[test]
+    fn a_dead_id_falls_back_and_a_live_one_stays() {
+        let store = Store::new();
+        let fallback = named(&store, "fallback", "f");
+        let doomed = named(&store, "doomed", "d");
+        assert_eq!(store.live_or(doomed, fallback), doomed);
+
+        store.remove(doomed);
+        assert_eq!(store.live_or(doomed, fallback), fallback);
+
+        // A new asset taking the old one's slot doesn't bring its id back
+        let reused = store.add("new".to_string(), None);
+        assert_ne!(reused, doomed);
+        assert_eq!(store.live_or(doomed, fallback), fallback);
     }
 
     #[test]

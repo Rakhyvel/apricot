@@ -262,7 +262,12 @@ mod tests {
     };
 
     fn looking_at_origin(projection_kind: ProjectionKind) -> Camera {
-        Camera::new(vec3(0.0, 0.0, 5.0), Vec3::zeros(), vec3(0.0, 1.0, 0.0), projection_kind)
+        Camera::new(
+            vec3(0.0, 0.0, 5.0),
+            Vec3::zeros(),
+            vec3(0.0, 1.0, 0.0),
+            projection_kind,
+        )
     }
 
     fn perspective() -> Camera {
@@ -355,14 +360,21 @@ mod tests {
         let camera = orthographic();
         for pos in [vec2(W / 2.0, H / 2.0), vec2(0.0, 0.0), vec2(W - 1.0, 100.0)] {
             let dir = camera.screen_ray(pos, VIEWPORT).dir();
-            assert!((dir - vec3(0.0, 0.0, -1.0)).norm() < 1e-5, "{pos:?} went {dir:?}");
+            assert!(
+                (dir - vec3(0.0, 0.0, -1.0)).norm() < 1e-5,
+                "{pos:?} went {dir:?}"
+            );
         }
     }
 
     #[test]
     fn everything_on_a_screen_ray_lands_where_it_started() {
         for camera in [perspective(), orthographic()] {
-            for pos in [vec2(W / 2.0, H / 2.0), vec2(30.0, 570.0), vec2(712.5, 41.25)] {
+            for pos in [
+                vec2(W / 2.0, H / 2.0),
+                vec2(30.0, 570.0),
+                vec2(712.5, 41.25),
+            ] {
                 let ray = camera.screen_ray(pos, VIEWPORT);
                 for distance in [0.0, 1.0, 4.0, 20.0] {
                     let back = camera.world_to_screen(ray.at(distance), VIEWPORT).unwrap();
@@ -378,7 +390,9 @@ mod tests {
         let middle = camera.world_to_screen(Vec3::zeros(), VIEWPORT).unwrap();
         assert!((middle - vec2(W / 2.0, H / 2.0)).norm() < 1e-3);
         // Up in the world is up on screen, which is a smaller y
-        let above = camera.world_to_screen(vec3(0.0, 1.0, 0.0), VIEWPORT).unwrap();
+        let above = camera
+            .world_to_screen(vec3(0.0, 1.0, 0.0), VIEWPORT)
+            .unwrap();
         assert!(above.y < middle.y && (above.x - middle.x).abs() < 1e-3);
         assert_eq!(camera.world_to_screen(vec3(0.0, 0.0, 10.0), VIEWPORT), None);
     }
@@ -415,5 +429,4 @@ mod tests {
             assert!((px - 150.0).abs() < 1e-3, "at z {z}: {px}");
         }
     }
-
 }

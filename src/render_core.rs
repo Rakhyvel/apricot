@@ -267,8 +267,10 @@ impl RenderContext {
 
         let view_proj = self.camera_view_proj();
         self.uniform(program, "u_model_matrix").set_mat4(&transform);
-        self.uniform(program, "u_view_matrix").set_mat4(&view_proj.view);
-        self.uniform(program, "u_proj_matrix").set_mat4(&view_proj.proj);
+        self.uniform(program, "u_view_matrix")
+            .set_mat4(&view_proj.view);
+        self.uniform(program, "u_proj_matrix")
+            .set_mat4(&view_proj.proj);
         self.uniform(program, "u_color").set_vec4(&style.color);
         self.uniform(program, "u_seam").set_f32(style.seam);
         self.uniform(program, "u_fade").set_i32(style.fade as i32);

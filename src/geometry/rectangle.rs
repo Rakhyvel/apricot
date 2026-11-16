@@ -2,7 +2,7 @@
 
 use nalgebra_glm::vec2;
 
-#[derive(Default, Copy, Clone)]
+#[derive(Debug, Default, Copy, Clone, PartialEq)]
 /// A rectangle data structure
 pub struct Rectangle {
     pub pos: nalgebra_glm::Vec2,
@@ -53,7 +53,13 @@ mod tests {
 
     #[test]
     fn contains_the_top_and_left_edges_but_not_the_bottom_and_right() {
-        for p in [(1.0, 3.0), (3.0, 4.0), (4.99, 4.99), (1.0, 4.99), (4.99, 3.0)] {
+        for p in [
+            (1.0, 3.0),
+            (3.0, 4.0),
+            (4.99, 4.99),
+            (1.0, 4.99),
+            (4.99, 3.0),
+        ] {
             assert!(rect().contains_point(&vec2(p.0, p.1)), "{p:?}");
         }
         for p in [(5.0, 4.0), (3.0, 5.0), (0.99, 4.0), (3.0, 2.99), (5.0, 5.0)] {

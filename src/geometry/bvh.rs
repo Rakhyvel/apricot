@@ -6,17 +6,22 @@ use super::{aabb::AABB, frustum::Frustum, ray::Ray, sphere::Sphere};
 /// A tree of objects and their bounding boxes. For drawing models, `ModelSet` manages one for you
 pub struct BVH<Object: Copy> {
     nodes: Vec<Node<Object>>,
-    free: Vec<NodeId>,
+    /// Indices of the nodes that aren't in use
+    free: Vec<usize>,
     root: Option<NodeId>,
 }
 
-/// Refers to an object's spot in a `BVH`, for moving or removing it
+/// Refers to an object's spot in a `BVH`, for moving or removing it. Once the object is removed,
+/// the id stays dead, even if a new object reuses the spot
 #[derive(Debug, Copy, Clone, PartialEq, Eq, Hash)]
-pub struct NodeId(u32);
+pub struct NodeId {
+    index: u32,
+    generation: u32,
+}
 
 impl NodeId {
     fn index(self) -> usize {
-        self.0 as usize
+        self.index as usize
     }
 }
 
@@ -29,6 +34,8 @@ struct Node<Object> {
     object: Option<Object>,
     /// The longest path down to a leaf. Leaves are 0
     height: i32,
+    /// Bumped every time this spot is released, so old ids stop matching
+    generation: u32,
 }
 
 impl<Object> Node<Object> {
@@ -65,6 +72,7 @@ impl<Object: Copy> BVH<Object> {
             parent: None,
             object: Some(object),
             height: 0,
+            generation: 0,
         });
         self.insert_leaf(leaf);
         leaf
@@ -72,6 +80,7 @@ impl<Object: Copy> BVH<Object> {
 
     /// Take an object out of the tree
     pub fn remove(&mut self, id: NodeId) {
+        self.assert_live(id, "remove");
         assert!(self.node(id).is_leaf(), "can only remove objects");
         self.remove_leaf(id);
         self.release(id);
@@ -80,6 +89,7 @@ impl<Object: Copy> BVH<Object> {
     /// Tell the tree an object now fills `aabb`, after moving by `displacement`. Gives back whether
     /// the tree had to change
     pub fn move_obj(&mut self, id: NodeId, aabb: &AABB, displacement: &nalgebra_glm::Vec3) -> bool {
+        self.assert_live(id, "move_obj");
         assert!(self.node(id).is_leaf(), "can only move objects");
         if self.node(id).volume.contains(aabb) {
             return false;
@@ -146,9 +156,9 @@ impl<Object: Copy> BVH<Object> {
         let mut stack: Vec<NodeId> = self.root.into_iter().collect();
         while let Some(id) = stack.pop() {
             let node = self.node(id);
-            dot += &format!("  {} [label=\"{:?}\"]\n", id.0, node.volume);
+            dot += &format!("  {} [label=\"{:?}\"]\n", id.index, node.volume);
             for child in node.children().into_iter().flatten() {
-                dot += &format!("  {} -> {}\n", id.0, child.0);
+                dot += &format!("  {} -> {}\n", id.index, child.index);
                 stack.push(child);
             }
         }
@@ -206,6 +216,7 @@ impl<Object: Copy> BVH<Object> {
             parent: old_parent,
             object: None,
             height: 0, // refit below
+            generation: 0,
         });
         match old_parent {
             Some(parent) => self.replace_child(parent, sibling, new_parent),
@@ -330,13 +341,20 @@ impl<Object: Copy> BVH<Object> {
 
     fn allocate(&mut self, node: Node<Object>) -> NodeId {
         match self.free.pop() {
-            Some(id) => {
-                *self.node_mut(id) = node;
-                id
+            Some(index) => {
+                let generation = self.nodes[index].generation;
+                self.nodes[index] = Node { generation, ..node };
+                NodeId {
+                    index: index as u32,
+                    generation,
+                }
             }
             None => {
                 self.nodes.push(node);
-                NodeId(self.nodes.len() as u32 - 1)
+                NodeId {
+                    index: self.nodes.len() as u32 - 1,
+                    generation: 0,
+                }
             }
         }
     }
@@ -347,7 +365,18 @@ impl<Object: Copy> BVH<Object> {
         node.left = None;
         node.right = None;
         node.parent = None;
-        self.free.push(id);
+        node.generation += 1;
+        self.free.push(id.index());
+    }
+
+    /// Panics if `id` was already removed, or came from a different tree
+    #[track_caller]
+    fn assert_live(&self, id: NodeId, op: &str) {
+        let live = self
+            .nodes
+            .get(id.index())
+            .is_some_and(|node| node.generation == id.generation);
+        assert!(live, "BVH::{op}: {id:?} was already removed");
     }
 
     fn node(&self, id: NodeId) -> &Node<Object> {
@@ -724,6 +753,40 @@ mod tests {
         }
         // 50 leaves and 49 parents at most, however many times it's refilled
         assert!(bvh.nodes.len() <= 99, "grew to {} nodes", bvh.nodes.len());
+        assert_eq!(bvh.query(|_| true).count(), 0);
+    }
+
+    #[test]
+    #[should_panic(expected = "BVH::remove")]
+    fn removing_an_id_twice_panics_even_after_its_spot_is_reused() {
+        let mut bvh = BVH::new();
+        let stale = bvh.insert(0, unit_box_at(0.0, 0.0, 0.0));
+        bvh.remove(stale);
+        let fresh = bvh.insert(1, unit_box_at(5.0, 0.0, 0.0));
+        assert_eq!(fresh.index(), stale.index(), "the spot was reused");
+        bvh.remove(stale);
+    }
+
+    #[test]
+    #[should_panic(expected = "BVH::move_obj")]
+    fn moving_with_a_stale_id_panics() {
+        let mut bvh = BVH::new();
+        let stale = bvh.insert(0, unit_box_at(0.0, 0.0, 0.0));
+        bvh.remove(stale);
+        bvh.insert(1, unit_box_at(5.0, 0.0, 0.0));
+        bvh.move_obj(stale, &unit_box_at(50.0, 0.0, 0.0), &vec3(50.0, 0.0, 0.0));
+    }
+
+    #[test]
+    fn a_stale_id_leaves_the_object_that_took_its_spot_alone() {
+        let mut bvh = BVH::new();
+        let stale = bvh.insert(0, unit_box_at(0.0, 0.0, 0.0));
+        bvh.remove(stale);
+        let fresh = bvh.insert(1, unit_box_at(5.0, 0.0, 0.0));
+        let tried = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| bvh.remove(stale)));
+        assert!(tried.is_err());
+        assert_eq!(bvh.query(|_| true).collect::<Vec<_>>(), [1]);
+        bvh.remove(fresh);
         assert_eq!(bvh.query(|_| true).count(), 0);
     }
 }

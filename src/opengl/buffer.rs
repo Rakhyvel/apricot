@@ -50,6 +50,7 @@ impl<T> Buffer<T> {
         check_gl();
     }
 
+    /// Unbind this buffer's target
     pub fn unbind(&self) {
         unsafe {
             gl::BindBuffer(self.target, 0);

@@ -218,7 +218,8 @@ pub struct Uniform {
 }
 
 impl Uniform {
-    // Lookup `name` in `program`. If the program doesn't use it, `id` is -1 and the setters do nothing.
+    /// Look up `name` in the GL program `program`. If the program doesn't use it, the setters do
+    /// nothing
     pub fn new(program: u32, name: &str) -> Self {
         let cname: CString = CString::new(name).expect("uniform name contains a null byte");
         let id: GLint = unsafe { gl::GetUniformLocation(program, cname.as_ptr()) };
@@ -226,27 +227,37 @@ impl Uniform {
         Uniform { program, id }
     }
 
-    // GL sets uniforms on whichever program is bound, so bind ours first
+    /// Set a `mat4` uniform. The setters bind the program first, so it works whatever's bound
     pub fn set_mat4(&self, m: &Mat4) {
         bind_program(self.program);
         unsafe { gl::UniformMatrix4fv(self.id, 1, gl::FALSE, m.as_ptr()) }
     }
+
+    /// Set a `vec4` uniform
     pub fn set_vec4(&self, v: &Vec4) {
         bind_program(self.program);
         unsafe { gl::Uniform4f(self.id, v.x, v.y, v.z, v.w) }
     }
+
+    /// Set a `vec3` uniform
     pub fn set_vec3(&self, v: &Vec3) {
         bind_program(self.program);
         unsafe { gl::Uniform3f(self.id, v.x, v.y, v.z) }
     }
+
+    /// Set a `vec2` uniform
     pub fn set_vec2(&self, v: &Vec2) {
         bind_program(self.program);
         unsafe { gl::Uniform2f(self.id, v.x, v.y) }
     }
+
+    /// Set a `float` uniform
     pub fn set_f32(&self, x: f32) {
         bind_program(self.program);
         unsafe { gl::Uniform1f(self.id, x) }
     }
+
+    /// Set a `int` uniform
     pub fn set_i32(&self, x: i32) {
         bind_program(self.program);
         unsafe { gl::Uniform1i(self.id, x) }

@@ -1,12 +1,10 @@
 //! Images on the GPU
 
-use std::{cell::Cell, path::Path};
+use std::cell::Cell;
 
 use gl::types::{GLenum, GLint, GLuint};
-use image::{EncodableLayout, ImageError};
 
 use super::check_gl;
-use crate::error::Error;
 
 /// An OpenGL Texture
 pub struct Texture {
@@ -32,52 +30,6 @@ impl Texture {
             width: Cell::new(0),
             height: Cell::new(0),
         }
-    }
-
-    /// Create an OpenGL texture from a PNG
-    pub fn from_png(path: impl AsRef<Path>) -> Result<Self, Error> {
-        let texture = Texture::new();
-        let path = path.as_ref();
-        texture.load(path).map_err(|source| Error::Image {
-            path: path.into(),
-            source,
-        })?;
-        Ok(texture)
-    }
-
-    /// Create an OpenGL texture from an SDL surface
-    pub fn from_surface(surface: sdl2::surface::Surface) -> Self {
-        // Whatever format SDL gave us, upload it as RGBA
-        let surface = surface
-            .convert_format(sdl2::pixels::PixelFormatEnum::RGBA32)
-            .expect("out of memory converting surface to RGBA");
-        let texture = Texture::new();
-        unsafe {
-            texture.bind();
-
-            let width = surface.width() as i32;
-            let height = surface.height() as i32;
-            texture.set_size(width, height);
-
-            gl::TexImage2D(
-                gl::TEXTURE_2D,
-                0,
-                gl::RGBA as i32,
-                width,
-                height,
-                0,
-                gl::RGBA,
-                gl::UNSIGNED_BYTE,
-                surface
-                    .without_lock()
-                    .expect("a converted surface never needs locking")
-                    .as_ptr() as *const std::ffi::c_void,
-            );
-            check_gl();
-
-            set_sampler(gl::CLAMP_TO_EDGE, gl::NEAREST);
-        }
-        texture
     }
 
     /// Bind this texture
@@ -132,19 +84,6 @@ impl Texture {
             );
             check_gl();
         }
-    }
-
-    /// Load this texture into it's OpenGL slot
-    pub fn load(&self, path: &Path) -> Result<(), ImageError> {
-        self.bind();
-
-        let img = image::open(path)?.into_rgba8();
-        self.set_pixels(img.width() as i32, img.height() as i32, img.as_bytes());
-        unsafe {
-            gl::GenerateMipmap(gl::TEXTURE_2D);
-            check_gl();
-        }
-        Ok(())
     }
 
     /// Load this texture as a depth buffer

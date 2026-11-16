@@ -268,7 +268,16 @@ impl Assets {
         path: impl AsRef<Path>,
         name: Option<&'static str>,
     ) -> Result<TextureId, Error> {
-        Ok(self.textures.add(Texture::from_png(path)?, name))
+        let path = path.as_ref();
+        let image = image::open(path)
+            .map_err(|source| Error::Image {
+                path: path.into(),
+                source,
+            })?
+            .into_rgba8();
+        let texture = Texture::new();
+        texture.set_pixels(image.width() as i32, image.height() as i32, &image);
+        Ok(self.textures.add(texture, name))
     }
 
     pub(crate) fn add_program_from_source(
@@ -306,7 +315,11 @@ impl Assets {
     /// freed too
     fn add_font_atlas(&self, atlas: Atlas, name: &'static str) -> FontId {
         let old_atlas = self.fonts.get_named(name).map(|font| font.cache_texture);
-        let font = atlas.into_font(|image| self.textures.add(Texture::from_surface(image), None));
+        let font = atlas.into_font(|width, height, pixels| {
+            let texture = Texture::new();
+            texture.set_pixels(width, height, pixels);
+            self.textures.add(texture, None)
+        });
         let id = self.fonts.add(font, Some(name));
         if let Some(old_atlas) = old_atlas {
             self.textures.remove(old_atlas);

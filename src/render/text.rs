@@ -109,13 +109,33 @@ impl Atlas {
         })
     }
 
-    /// The finished font, once `upload` turns the atlas image into a texture
-    pub(crate) fn into_font(self, upload: impl FnOnce(Surface<'static>) -> TextureId) -> Font {
+    /// The finished font, once `upload` turns the atlas image into a texture. It gets the image's
+    /// width, height, and tightly packed RGBA bytes
+    pub(crate) fn into_font(self, upload: impl FnOnce(i32, i32, &[u8]) -> TextureId) -> Font {
+        let surface = self
+            .image
+            .convert_format(sdl2::pixels::PixelFormatEnum::RGBA32)
+            .expect("out of memory converting surface to RGBA");
+        let (width, height) = (surface.width() as usize, surface.height() as usize);
+        let pixels = surface
+            .without_lock()
+            .expect("a converted surface never needs locking");
+        let packed = pack_rows(pixels, width, height, surface.pitch() as usize);
         Font {
-            cache_texture: upload(self.image),
+            cache_texture: upload(width as i32, height as i32, &packed),
             table: self.table,
         }
     }
+}
+
+/// `height` rows of `width` RGBA pixels, copied out of `bytes` where each row starts `pitch` bytes
+/// after the last, so any padding at the end of a row is dropped
+fn pack_rows(bytes: &[u8], width: usize, height: usize, pitch: usize) -> Vec<u8> {
+    let row = width * 4;
+    (0..height)
+        .flat_map(|y| &bytes[y * pitch..y * pitch + row])
+        .copied()
+        .collect()
 }
 
 fn font_error(name: &str, msg: String) -> Error {
@@ -270,6 +290,19 @@ fn test_table() -> GlyphTable {
 mod tests {
     use super::*;
     use crate::registry::Handle;
+
+    #[test]
+    fn packing_rows_drops_the_padding_at_the_end_of_each() {
+        // Two rows of two pixels, each row padded out to 12 bytes
+        let padded: Vec<u8> = (0..24).collect();
+        let packed = pack_rows(&padded, 2, 2, 12);
+        assert_eq!(
+            packed,
+            [0, 1, 2, 3, 4, 5, 6, 7, 12, 13, 14, 15, 16, 17, 18, 19]
+        );
+        // Rows with no padding come back unchanged
+        assert_eq!(pack_rows(&padded[..16], 2, 2, 8), &padded[..16]);
+    }
 
     #[test]
     fn measuring_adds_up_the_advances_and_one_line_height() {

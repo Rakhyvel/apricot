@@ -59,7 +59,7 @@ struct Erosion {
 }
 
 impl Erosion {
-    fn new(app: &App) -> Self {
+    fn new(app: &App) -> Result<Self, Error> {
         let renderer = &app.renderer;
 
         let mut fly = FlyController::new(vec3(0.0, 60.0, 110.0), vec3(0.0, 0.0, 0.0));
@@ -71,13 +71,13 @@ impl Erosion {
         };
         renderer.set_camera(fly.camera());
 
-        let mut light = DirectionalLight::new(vec3(0.6, 0.8, 0.3), 2048).unwrap();
+        let mut light = DirectionalLight::new(vec3(0.6, 0.8, 0.3), 2048)?;
         light.frustum.shadow_distance = 150.0;
         app.renderer.set_light(Some(&light));
 
         let seed = 1;
         let grid = island(seed);
-        Self {
+        Ok(Self {
             fly,
             light,
             mesh: renderer.add_mesh_data(terrain_mesh(&grid), None),
@@ -86,7 +86,7 @@ impl Erosion {
             raining: false,
             drops: 0,
             seed,
-        }
+        })
     }
 
     /// Rebuild the mesh and texture from the grid

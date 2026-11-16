@@ -81,7 +81,7 @@ struct Terrain {
 }
 
 impl Terrain {
-    fn new(app: &App) -> Self {
+    fn new(app: &App) -> Result<Self, Error> {
         let mut fly = FlyController::new(vec3(0.0, 40.0, 0.0), vec3(0.0, 20.0, -60.0));
         fly.speed = 15.0;
         fly.projection = ProjectionKind::Perspective {
@@ -91,11 +91,11 @@ impl Terrain {
         };
         app.renderer.set_camera(fly.camera());
 
-        let mut light = DirectionalLight::new(vec3(0.6, 0.8, 0.3), 2048).unwrap();
+        let mut light = DirectionalLight::new(vec3(0.6, 0.8, 0.3), 2048)?;
         light.frustum.shadow_distance = 120.0;
         app.renderer.set_light(Some(&light));
 
-        Self {
+        Ok(Self {
             fly,
             light,
             grid: ChunkGrid::new(CHUNK_CELLS),
@@ -104,7 +104,7 @@ impl Terrain {
             leaves: app.renderer.add_mesh_data(MeshData::icosphere(1), None),
             chunk_count: 0,
             last_chunk: None,
-        }
+        })
     }
 
     /// Build a chunk's ground and trees, and add them to the set

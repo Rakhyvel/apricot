@@ -48,7 +48,7 @@ struct Models {
 }
 
 impl Models {
-    fn new(app: &App) -> Self {
+    fn new(app: &App) -> Result<Self, Error> {
         let renderer = &app.renderer;
 
         renderer.set_camera(Camera::new(
@@ -93,10 +93,10 @@ impl Models {
             models.insert(renderer, Thing::Shape(x, z), model);
         }
 
-        let light = DirectionalLight::new(vec3(0.5, 1.0, 0.3), 2048).unwrap();
+        let light = DirectionalLight::new(vec3(0.5, 1.0, 0.3), 2048)?;
         app.renderer.set_light(Some(&light));
 
-        Self {
+        Ok(Self {
             angle: 0.0,
             light,
             models,
@@ -109,7 +109,7 @@ impl Models {
                     ..Default::default()
                 },
             ),
-        }
+        })
     }
 
     /// The closest shape under the mouse, if any

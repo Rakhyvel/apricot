@@ -81,7 +81,10 @@ impl Default for AppConfig {
 }
 
 /// Start the app with the scene `init` makes as the only one on the stack, and run it until it quits
-pub fn run<S: Scene + 'static>(cfg: AppConfig, init: impl FnOnce(&App) -> S) -> Result<(), Error> {
+pub fn run<S: Scene + 'static>(
+    cfg: AppConfig,
+    init: impl FnOnce(&App) -> Result<S, Error>,
+) -> Result<(), Error> {
     logging::init(cfg.log_level);
     let mut platform = Platform::new(&cfg)?;
 
@@ -101,7 +104,7 @@ pub fn run<S: Scene + 'static>(cfg: AppConfig, init: impl FnOnce(&App) -> S) -> 
     };
     app.renderer.set_screen_size(app.window_size); // so the aspect is right in `init`
 
-    let mut scenes = SceneStack::new(Box::new(init(&app)));
+    let mut scenes = SceneStack::new(Box::new(init(&app)?));
 
     let time = Instant::now();
     let mut current;

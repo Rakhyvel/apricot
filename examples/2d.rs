@@ -39,9 +39,9 @@ struct Shapes {
 }
 
 impl Shapes {
-    fn new(app: &App) -> Self {
+    fn new(app: &App) -> Result<Self, Error> {
         let renderer = &app.renderer;
-        Self {
+        Ok(Self {
             checker: renderer.create_texture_rgba(8, 8, &checkerboard(8)),
             frame: renderer.create_texture_rgba(
                 FRAME_SIZE,
@@ -49,7 +49,7 @@ impl Shapes {
                 &frame(FRAME_SIZE, FRAME_BORDER),
             ),
             star: renderer.add_mesh_data(star(5, 0.45), None),
-        }
+        })
     }
 }
 

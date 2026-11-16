@@ -44,7 +44,7 @@ struct SpinningCube {
 }
 
 impl SpinningCube {
-    fn new(app: &App) -> Self {
+    fn new(app: &App) -> Result<Self, Error> {
         let renderer = &app.renderer;
 
         let mut fly = FlyController::new(vec3(0.0, 2.5, 5.0), vec3(0.0, -1.0, 0.0));
@@ -55,17 +55,17 @@ impl SpinningCube {
         };
         renderer.set_camera(fly.camera());
 
-        let light = DirectionalLight::new(vec3(0.5, 1.0, 0.3), 2048).unwrap();
+        let light = DirectionalLight::new(vec3(0.5, 1.0, 0.3), 2048)?;
         app.renderer.set_light(Some(&light));
 
-        Self {
+        Ok(Self {
             fly,
             angle: 0.0,
             paused: false,
-            beep: app.audio.load_sound_from_bytes(&beep_wav()).unwrap(),
+            beep: app.audio.load_sound_from_bytes(&beep_wav())?,
             light,
             checker: renderer.create_texture_rgba(10, 10, &checkerboard(10)),
-        }
+        })
     }
 }
 

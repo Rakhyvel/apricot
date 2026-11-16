@@ -7,9 +7,7 @@ use std::path::Path;
 use crate::error::Error;
 
 use super::{
-    geometry::rectangle::Rectangle,
-    registry::{Handle, Registry},
-    render_core::{RenderContext, TextureId},
+    geometry::rectangle::Rectangle, render::assets::TextureId, render_core::RenderContext,
 };
 
 #[derive(Copy, Clone, Default)]
@@ -38,13 +36,9 @@ pub struct Font {
     table: GlyphTable,
 }
 
-/// Refers to a font added to the renderer
-pub type FontId = Handle<Font>;
-
-/// Manages the loading and rendering of fonts
-pub struct FontManager {
+/// Turns font files into atlases. Holds the TTF library open for as long as it lives
+pub(crate) struct FontRasterizer {
     ttf_context: Sdl2TtfContext,
-    fonts: Registry<Font>,
 }
 
 impl Font {
@@ -201,14 +195,10 @@ fn glyph_idx_from_byte(char: u8) -> Option<usize> {
     Some((char - ASCII_FIRST_PRINTABLE_CHAR) as usize)
 }
 
-impl FontManager {
-    /// Create a new font manager
-    pub fn new() -> Result<Self, Error> {
+impl FontRasterizer {
+    pub(crate) fn new() -> Result<Self, Error> {
         let ttf_context = sdl2::ttf::init().map_err(|msg| Error::Sdl(format!("{msg}")))?;
-        Ok(Self {
-            ttf_context,
-            fonts: Registry::new(),
-        })
+        Ok(Self { ttf_context })
     }
 
     /// Rasterize a .ttf or .otf font file at `size`
@@ -243,31 +233,6 @@ impl FontManager {
         ttf_font.set_style(style);
         Atlas::new(&ttf_font)
     }
-
-    /// Add a finished font under `name`
-    pub(crate) fn add(&mut self, font: Font, name: &'static str) -> FontId {
-        self.fonts.add(font, Some(name))
-    }
-
-    /// Take the font out of the manager, giving it back
-    pub fn remove(&mut self, id: FontId) -> Option<Font> {
-        self.fonts.remove(id)
-    }
-
-    /// Retrieve a font from it's ID
-    pub fn get_font_from_id(&self, id: FontId) -> Option<&Font> {
-        self.fonts.get(id)
-    }
-
-    /// Get a font ID from it's name
-    pub fn get_id_from_name(&self, name: &'static str) -> Option<FontId> {
-        self.fonts.lookup(name)
-    }
-
-    /// Get a font from it's name
-    pub fn get_font(&self, name: &'static str) -> Option<&Font> {
-        self.get_font_from_id(self.get_id_from_name(name)?)
-    }
 }
 
 impl Glyph {
@@ -286,6 +251,7 @@ impl Glyph {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::registry::Handle;
 
     /// Glyphs 8 wide and 16 tall that each advance 10, except `i` which advances 4. A newline
     /// moves down 20
@@ -347,8 +313,13 @@ mod tests {
             cache_texture: Handle::for_tests(0),
             table: table(),
         };
-        assert_eq!(font.measure("a
-bc"), vec2(20.0, 36.0));
+        assert_eq!(
+            font.measure(
+                "a
+bc"
+            ),
+            vec2(20.0, 36.0)
+        );
     }
 
     #[test]

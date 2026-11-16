@@ -8,10 +8,11 @@ use apricot::{
     app::{run, App, AppConfig, Scene, SceneCommand},
     camera::{Camera, ProjectionKind},
     error::Error,
+    geometry::rectangle::Rectangle,
     mesh::MeshData,
     model_set::{Model, ModelSet},
-    geometry::rectangle::Rectangle,
-    render_core::{LinePath, LineStyle, MeshId, TextureId},
+    render::assets::{MeshId, TextureId},
+    render_core::{LinePath, LineStyle},
     shadow_map::DirectionalLight,
 };
 use nalgebra_glm::{vec2, vec3, vec4, Mat4};

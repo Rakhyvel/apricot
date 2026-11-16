@@ -3,7 +3,7 @@ use nalgebra_glm::{vec3, vec4, Mat4, Vec3};
 use crate::{
     camera::ViewProj,
     error::Error,
-    render_core::{MeshId, ProgramId},
+    render::assets::{MeshId, ProgramId},
 };
 
 use super::{

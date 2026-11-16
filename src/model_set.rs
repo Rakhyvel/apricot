@@ -9,7 +9,8 @@ use crate::{
     geometry::bvh::{NodeId, BVH},
     geometry::ray::Ray,
     opengl::{DrawOptions, Stencil},
-    render_core::{MeshId, RenderContext, TextureId},
+    render::assets::{MeshId, TextureId},
+    render_core::RenderContext,
     shadow_map::ShadowPass,
 };
 

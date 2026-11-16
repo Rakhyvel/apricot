@@ -9,8 +9,8 @@ use apricot::{
     error::Error,
     geometry::rectangle::Rectangle,
     mesh::{MeshData, Vertex},
+    render::assets::{MeshId, TextureId},
     render2d::NineSlice,
-    render_core::{MeshId, TextureId},
 };
 use nalgebra_glm::{vec2, vec3, vec4, Vec2};
 

@@ -16,14 +16,14 @@ use apricot::{
     app::{run, App, AppConfig, Scene, SceneCommand},
     camera::{fly::FlyController, ProjectionKind},
     error::Error,
+    input::Scancode,
+    mesh::MeshData,
+    render::assets::{MeshId, TextureId},
+    shadow_map::DirectionalLight,
     terrain::{
         self,
         grid::{ErosionSettings, HeightGrid},
     },
-    input::Scancode,
-    mesh::MeshData,
-    render_core::{MeshId, TextureId},
-    shadow_map::DirectionalLight,
 };
 use nalgebra_glm::{vec2, vec3, vec4, Mat4, Vec2};
 

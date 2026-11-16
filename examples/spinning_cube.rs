@@ -18,7 +18,7 @@ use apricot::{
     camera::{fly::FlyController, ProjectionKind},
     error::Error,
     input::Scancode,
-    render_core::TextureId,
+    render::assets::TextureId,
     shadow_map::DirectionalLight,
 };
 use nalgebra_glm::{vec2, vec3, vec4};

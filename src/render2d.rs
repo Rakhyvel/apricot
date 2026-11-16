@@ -8,14 +8,14 @@ use nalgebra_glm::{vec2, vec3, Mat4, Vec2, Vec4};
 use crate::{
     mesh::MeshData,
     opengl::{self, DrawOptions},
-    render_core::MeshId,
+    render::assets::{FontId, MeshId, TextureId},
 };
 
 use super::{
     camera::{Camera, ProjectionKind, ViewProj},
-    font::{Font, FontId},
+    font::Font,
     geometry::rectangle::Rectangle,
-    render_core::{RenderContext, TextureId},
+    render_core::RenderContext,
 };
 
 /// How many sides circles and rings get. Enough to look round at any reasonable size

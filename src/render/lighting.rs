@@ -221,7 +221,7 @@ pub(crate) struct ShadowMap {
 
 impl ShadowMap {
     fn new(size: u32) -> Result<Self, Error> {
-        let depth_map = Texture::new();
+        let mut depth_map = Texture::new();
         depth_map.load_depth_buffer(size, size);
         let frame_buffer = Fbo::new();
         frame_buffer.attach_depth(&depth_map)?;

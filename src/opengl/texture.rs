@@ -1,7 +1,5 @@
 //! Images on the GPU
 
-use std::cell::Cell;
-
 use gl::types::{GLenum, GLint, GLuint};
 
 use super::check_gl;
@@ -9,8 +7,8 @@ use super::check_gl;
 /// An OpenGL Texture
 pub struct Texture {
     pub(crate) id: GLuint,
-    width: Cell<u32>,
-    height: Cell<u32>,
+    width: u32,
+    height: u32,
 }
 
 impl Default for Texture {
@@ -27,8 +25,8 @@ impl Texture {
         check_gl();
         Self {
             id,
-            width: Cell::new(0),
-            height: Cell::new(0),
+            width: 0,
+            height: 0,
         }
     }
 
@@ -40,7 +38,7 @@ impl Texture {
 
     /// Fill the texture with tightly packed RGBA bytes, `width * height * 4` of them. Updating a
     /// texture without changing its size is cheap
-    pub fn set_pixels(&self, width: u32, height: u32, data: &[u8]) {
+    pub fn set_pixels(&mut self, width: u32, height: u32, data: &[u8]) {
         assert_eq!(
             data.len(),
             width as usize * height as usize * 4,
@@ -87,7 +85,7 @@ impl Texture {
     }
 
     /// Load this texture as a depth buffer
-    pub fn load_depth_buffer(&self, width: u32, height: u32) {
+    pub fn load_depth_buffer(&mut self, width: u32, height: u32) {
         self.bind();
         self.set_size(width, height);
 
@@ -138,13 +136,13 @@ impl Texture {
 
     /// The width and height of this texture, or `None` if it has no pixels yet
     pub fn get_dimensions(&self) -> Option<(u32, u32)> {
-        let (width, height) = (self.width.get(), self.height.get());
+        let (width, height) = (self.width, self.height);
         (width > 0 && height > 0).then_some((width, height))
     }
 
-    fn set_size(&self, width: u32, height: u32) {
-        self.width.set(width);
-        self.height.set(height);
+    fn set_size(&mut self, width: u32, height: u32) {
+        self.width = width;
+        self.height = height;
     }
 }
 

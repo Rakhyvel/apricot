@@ -2,7 +2,7 @@
 //! them
 
 use std::{
-    cell::{Ref, RefCell},
+    cell::{Ref, RefCell, RefMut},
     path::Path,
 };
 
@@ -64,7 +64,7 @@ impl Builtins {
             16,
             sdl2::ttf::FontStyle::NORMAL,
         )?;
-        let white = Texture::new();
+        let mut white = Texture::new();
         white.set_pixels(1, 1, &[255; 4]);
 
         Ok(Self {
@@ -188,6 +188,16 @@ impl<T> Store<T> {
         }
     }
 
+    /// The asset `id` refers to, to change it. Panics if it isn't loaded, naming `op`. Also panics
+    /// if something is still borrowing the store
+    #[track_caller]
+    pub(crate) fn require_mut(&self, id: Handle<T>, op: &str) -> RefMut<'_, T> {
+        match RefMut::filter_map(self.registry.borrow_mut(), |registry| registry.get_mut(id)) {
+            Ok(item) => item,
+            Err(_) => not_loaded(op, id),
+        }
+    }
+
     /// The asset `id` refers to. Panics if it isn't loaded, naming `op`
     #[track_caller]
     pub(crate) fn require(&self, id: Handle<T>, op: &str) -> Ref<'_, T> {
@@ -271,14 +281,15 @@ impl Assets {
     }
 
     pub(crate) fn create_texture_rgba(&self, w: u32, h: u32, bytes: &[u8]) -> TextureId {
-        let texture = Texture::new();
+        let mut texture = Texture::new();
         texture.set_pixels(w, h, bytes);
         self.textures.add(texture, None)
     }
 
     pub(crate) fn update_texture_rgba(&self, id: TextureId, w: u32, h: u32, bytes: &[u8]) {
-        let texture = self.textures.require(id, "update_texture_rgba");
-        texture.set_pixels(w, h, bytes);
+        self.textures
+            .require_mut(id, "update_texture_rgba")
+            .set_pixels(w, h, bytes);
     }
 
     pub(crate) fn add_texture_from_png(
@@ -293,7 +304,7 @@ impl Assets {
                 source,
             })?
             .into_rgba8();
-        let texture = Texture::new();
+        let mut texture = Texture::new();
         texture.set_pixels(image.width(), image.height(), &image);
         Ok(self.textures.add(texture, name))
     }
@@ -334,7 +345,7 @@ impl Assets {
     fn add_font_atlas(&self, atlas: Atlas, name: &'static str) -> FontId {
         let old_atlas = self.fonts.get_named(name).map(|font| font.cache_texture);
         let font = atlas.into_font(|width, height, pixels| {
-            let texture = Texture::new();
+            let mut texture = Texture::new();
             texture.set_pixels(width, height, pixels);
             self.textures.add(texture, None)
         });
@@ -461,6 +472,24 @@ mod tests {
         assert_eq!(*store.require(id, "test"), "apple");
         assert_eq!(store.take(id, "test"), "apple");
         assert!(store.get(id).is_none());
+    }
+
+    #[test]
+    fn require_mut_changes_the_asset_in_place() {
+        let store = Store::new();
+        let id = named(&store, "apple", "a");
+        store.require_mut(id, "test").push_str(" pie");
+        assert_eq!(*store.get(id).unwrap(), "apple pie");
+        assert_eq!(*store.get_named("a").unwrap(), "apple pie");
+    }
+
+    #[test]
+    #[should_panic(expected = "update_texture_rgba: Handle<String>(0) isn't loaded")]
+    fn requiring_a_dead_id_mutably_panics() {
+        let store = Store::new();
+        let id = named(&store, "apple", "a");
+        store.remove(id);
+        let _ = store.require_mut(id, "update_texture_rgba");
     }
 
     #[test]

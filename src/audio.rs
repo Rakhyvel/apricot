@@ -48,7 +48,7 @@ impl Audio {
         let path = path.as_ref();
         let chunk = match self.mixer {
             Some(_) => Some(Chunk::from_file(path).map_err(|msg| Error::Sound {
-                sound: path.display().to_string(),
+                path: path.into(),
                 msg,
             })?),
             None => None,
@@ -58,15 +58,11 @@ impl Audio {
 
     /// Decode a sound from the bytes of a sound file
     pub fn load_sound_from_bytes(&self, bytes: &[u8]) -> Result<SoundId, Error> {
-        let error = |msg| Error::Sound {
-            sound: "from bytes".to_string(),
-            msg,
-        };
         let chunk = match self.mixer {
             Some(_) => Some(
                 RWops::from_bytes(bytes)
                     .and_then(|rw| rw.load_wav())
-                    .map_err(error)?,
+                    .map_err(Error::SoundBytes)?,
             ),
             None => None,
         };

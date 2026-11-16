@@ -96,9 +96,9 @@ pub(crate) struct Atlas {
 }
 
 impl Atlas {
-    fn new(font: &sdl2::ttf::Font) -> Result<Self, Error> {
+    fn new(font: &sdl2::ttf::Font, name: &str) -> Result<Self, Error> {
         let height = font.height() as usize;
-        let (image, glyphs) = pack_glyphs(font, height)?;
+        let (image, glyphs) = pack_glyphs(font, height, name)?;
         Ok(Self {
             image,
             table: GlyphTable {
@@ -149,6 +149,7 @@ fn font_error(name: &str, msg: String) -> Error {
 fn pack_glyphs(
     font: &sdl2::ttf::Font,
     height: usize,
+    name: &str,
 ) -> Result<(Surface<'static>, [Glyph; ASCII_NUM_PRINTABLE_CHARS]), Error> {
     let mut glyphs = [Glyph::default(); ASCII_NUM_PRINTABLE_CHARS];
     let mut x_offset: usize = 0;
@@ -158,8 +159,10 @@ fn pack_glyphs(
         height as u32 * 16,
         sdl2::pixels::PixelFormatEnum::RGBA32,
     )
-    .map_err(Error::Sdl)?;
-    let _ = mega_surface.set_blend_mode(sdl2::render::BlendMode::None);
+    .map_err(|msg| font_error(name, msg))?;
+    mega_surface
+        .set_blend_mode(sdl2::render::BlendMode::None)
+        .map_err(|msg| font_error(name, msg))?;
     let color = Color {
         r: 255,
         g: 255,
@@ -174,7 +177,7 @@ fn pack_glyphs(
         let mut surf = font
             .render(&c.to_string())
             .blended(color)
-            .map_err(|e| Error::Sdl(format!("{e}")))?;
+            .map_err(|e| font_error(name, e.to_string()))?;
         if x_offset + surf.width() as usize > height * 16 {
             x_offset = 0;
             y_offset += height;
@@ -186,8 +189,10 @@ fn pack_glyphs(
             surf.width(),
             surf.height(),
         );
-        let _ = surf.set_blend_mode(sdl2::render::BlendMode::None);
-        let _ = surf.blit(Some(src_rect), &mut mega_surface, Some(dest_rect));
+        surf.set_blend_mode(sdl2::render::BlendMode::None)
+            .map_err(|msg| font_error(name, msg))?;
+        surf.blit(Some(src_rect), &mut mega_surface, Some(dest_rect))
+            .map_err(|msg| font_error(name, msg))?;
         x_offset += surf.width() as usize;
 
         // A font missing this character keeps a zero-sized glyph
@@ -226,7 +231,7 @@ impl FontRasterizer {
             .load_font(path.as_ref(), size)
             .map_err(|msg| font_error(name, msg))?;
         ttf_font.set_style(style);
-        Atlas::new(&ttf_font)
+        Atlas::new(&ttf_font, name)
     }
 
     /// Rasterize a .ttf or .otf font from its bytes at `size`
@@ -243,7 +248,7 @@ impl FontRasterizer {
             .load_font_from_rwops(rwops, size)
             .map_err(|msg| font_error(name, msg))?;
         ttf_font.set_style(style);
-        Atlas::new(&ttf_font)
+        Atlas::new(&ttf_font, name)
     }
 }
 

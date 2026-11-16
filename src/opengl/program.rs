@@ -7,11 +7,11 @@ use std::{
     ptr::{null, null_mut},
 };
 
-use gl::types::{GLchar, GLenum, GLint, GLuint};
+use gl::types::{GLchar, GLint, GLuint};
 use nalgebra_glm::{Mat4, Vec2, Vec3, Vec4};
 
 use super::check_gl;
-use crate::error::Error;
+use crate::error::{Error, ShaderStage};
 
 /// An OpenGL Shader
 pub struct Shader {
@@ -20,7 +20,11 @@ pub struct Shader {
 
 impl Shader {
     /// Compile an OpenGL shader from GLSL souce
-    pub fn from_source(source: &CStr, kind: GLenum) -> Result<Self, Error> {
+    pub fn from_source(source: &CStr, stage: ShaderStage) -> Result<Self, Error> {
+        let kind = match stage {
+            ShaderStage::Vertex => gl::VERTEX_SHADER,
+            ShaderStage::Fragment => gl::FRAGMENT_SHADER,
+        };
         let id = unsafe { gl::CreateShader(kind) };
         check_gl();
 
@@ -53,7 +57,7 @@ impl Shader {
             check_gl();
 
             return Err(Error::ShaderCompile {
-                stage: "idk",
+                stage,
                 log: error.to_string_lossy().into_owned(),
             });
         }
@@ -185,22 +189,21 @@ fn create_whitespace_cstring_with_len(len: usize) -> CString {
     unsafe { CString::from_vec_unchecked(buffer) }
 }
 
+/// `source` as a C string, or an error if it has a NUL byte in it
+fn shader_source(source: &str, stage: ShaderStage) -> Result<CString, Error> {
+    CString::new(source).map_err(|_| Error::ShaderSourceNul { stage })
+}
+
 /// Create a program with a vert and frag shader
 pub fn create_program(vert_data: &'static str, frag_data: &'static str) -> Result<Program, Error> {
     let vert_shader = Shader::from_source(
-        &CString::new(vert_data).map_err(|e| Error::ShaderCompile {
-            stage: "vert",
-            log: format!("{e}"),
-        })?,
-        gl::VERTEX_SHADER,
+        &shader_source(vert_data, ShaderStage::Vertex)?,
+        ShaderStage::Vertex,
     )?;
 
     let frag_shader = Shader::from_source(
-        &CString::new(frag_data).map_err(|e| Error::ShaderCompile {
-            stage: "frag",
-            log: format!("{e}"),
-        })?,
-        gl::FRAGMENT_SHADER,
+        &shader_source(frag_data, ShaderStage::Fragment)?,
+        ShaderStage::Fragment,
     )?;
 
     let shader_program = Program::from_shaders(&[vert_shader, frag_shader])?;
@@ -247,5 +250,22 @@ impl Uniform {
     pub fn set_i32(&self, x: i32) {
         bind_program(self.program);
         unsafe { gl::Uniform1i(self.id, x) }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn source_with_a_nul_byte_is_its_own_error() {
+        let error = shader_source("void main() {\0}", ShaderStage::Vertex).unwrap_err();
+        assert!(matches!(
+            error,
+            Error::ShaderSourceNul {
+                stage: ShaderStage::Vertex
+            }
+        ));
+        assert!(shader_source("void main() {}", ShaderStage::Fragment).is_ok());
     }
 }

@@ -1,8 +1,8 @@
 //! Helpers for working with terrain described by a height function
 
-use nalgebra_glm::{vec3, Vec3};
+use nalgebra_glm::{vec2, vec3, Vec3};
 
-use crate::mesh::MeshData;
+use crate::mesh::{MeshData, Vertex};
 
 pub mod chunks;
 pub mod grid;
@@ -79,14 +79,8 @@ pub fn mesh(cells_x: u32, cells_z: u32, height: impl Fn(f32, f32) -> f32) -> Mes
                 let normal = (p[1] - p[0]).cross(&(p[2] - p[0])).normalize();
                 for (i, (cx, cz)) in tri.into_iter().enumerate() {
                     data.indices.push(data.vertex_count() as u32);
-                    data.positions.extend_from_slice(&[p[i].x, p[i].y, p[i].z]);
-                    data.normals
-                        .extend_from_slice(&[normal.x, normal.y, normal.z]);
-                    data.uvs.extend_from_slice(&[
-                        cx as f32 / cells_x as f32,
-                        cz as f32 / cells_z as f32,
-                        0.0,
-                    ]);
+                    let uv = vec2(cx as f32 / cells_x as f32, cz as f32 / cells_z as f32);
+                    data.vertices.push(Vertex::new(p[i], normal, uv));
                 }
             }
         }

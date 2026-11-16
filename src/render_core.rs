@@ -314,11 +314,11 @@ impl Mesh {
     /// Upload `data` to the GPU. Keeps its shape on the CPU, but the normals and UVs only live on
     /// the GPU
     pub fn from_data(data: MeshData) -> Self {
-        // Slots match the shaders: 0 = position, 1 = normal, 2 = uv
+        // The layout has to match the slots the shaders read
         let raw = RawMesh::with_indices(
             &data.interleaved(),
             &data.indices,
-            &[3, 3, 3],
+            &MeshData::LAYOUT,
             Primitive::Triangles,
         );
         Mesh {

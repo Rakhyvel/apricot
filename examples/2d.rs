@@ -7,12 +7,12 @@ use std::f32::consts::TAU;
 use apricot::{
     app::{run, App, AppConfig, Scene, SceneCommand},
     error::Error,
-    mesh::MeshData,
     geometry::rectangle::Rectangle,
+    mesh::{MeshData, Vertex},
     render2d::NineSlice,
     render_core::{MeshId, TextureId},
 };
-use nalgebra_glm::{vec2, vec4, Vec2};
+use nalgebra_glm::{vec2, vec3, vec4, Vec2};
 
 const COLUMNS: usize = 4;
 const ROWS: usize = 4;
@@ -292,19 +292,14 @@ fn frame(size: u32, border: u32) -> Vec<u8> {
 /// A star with `points` points, with outer radius 1 and inner radius `inner`
 fn star(points: u32, inner: f32) -> MeshData {
     let n = points * 2;
-    let mut positions = vec![0.0, 0.0, 0.0]; // the center
+    let flat = |x, y| Vertex::new(vec3(x, y, 0.0), vec3(0.0, 0.0, 1.0), vec2(0.0, 0.0));
+    let mut vertices = vec![flat(0.0, 0.0)]; // the center
     let mut indices = Vec::new();
     for i in 0..n {
         let a = i as f32 / n as f32 * TAU;
         let radius = if i % 2 == 0 { 1.0 } else { inner };
-        positions.extend_from_slice(&[a.cos() * radius, a.sin() * radius, 0.0]);
+        vertices.push(flat(a.cos() * radius, a.sin() * radius));
         indices.extend_from_slice(&[0, 1 + i, 1 + (i + 1) % n]);
     }
-    let count = positions.len() / 3;
-    MeshData {
-        positions,
-        normals: [0.0, 0.0, 1.0].repeat(count),
-        uvs: vec![0.0; count * 3],
-        indices,
-    }
+    MeshData { vertices, indices }
 }

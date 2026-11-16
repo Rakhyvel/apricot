@@ -101,8 +101,9 @@ mod tests {
     fn edge(mesh: &MeshData, axis: usize, at: f32) -> Vec<(i32, i32)> {
         let across = 2 - axis; // x edges run along z, z edges along x
         let mut points: Vec<(i32, i32)> = mesh
-            .positions
-            .chunks(3)
+            .vertices
+            .iter()
+            .map(|v| v.position)
             .filter(|p| p[axis] == at)
             .map(|p| (p[across] as i32, (p[1] * 1000.0).round() as i32))
             .collect();

@@ -8,7 +8,7 @@ uniform vec3 u_sun_dir; // direction towards the light
 
 layout(location = 0) in vec3 a_position;
 layout(location = 1) in vec3 a_normal;
-layout(location = 2) in vec3 a_uv;
+layout(location = 2) in vec2 a_uv;
 
 out vec3 v_normal;
 out vec2 v_uv;
@@ -26,7 +26,7 @@ void main() {
     vec3 offset = n * u_shadow_texel * (1.0 + 2.0 * slope);
 
     v_normal = n;
-    v_uv = a_uv.xy;
+    v_uv = a_uv;
     v_light_space_pos = light_mvp * vec4(world_pos.xyz + offset, 1.0);
     gl_Position = u_proj_matrix * u_view_matrix * world_pos;
 }

@@ -1,6 +1,6 @@
 //! A mesh's triangles kept on the CPU, for picking and culling
 
-use nalgebra_glm::{vec3, vec4, Mat4, Vec3};
+use nalgebra_glm::{vec4, Mat4, Vec3};
 
 use super::MeshData;
 use crate::geometry::{aabb::AABB, ray::Ray, tri::Tri};
@@ -15,11 +15,7 @@ pub struct MeshShape {
 
 impl From<MeshData> for MeshShape {
     fn from(data: MeshData) -> Self {
-        let positions: Vec<Vec3> = data
-            .positions
-            .chunks_exact(3)
-            .map(|p| vec3(p[0], p[1], p[2]))
-            .collect();
+        let positions: Vec<Vec3> = data.vertices.iter().map(|v| v.position).collect();
         Self {
             aabb: AABB::from_points(positions.iter().copied()),
             positions,
@@ -83,6 +79,7 @@ impl MeshShape {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use nalgebra_glm::vec3;
 
     fn cube() -> MeshShape {
         MeshShape::from(MeshData::cube())
@@ -90,7 +87,10 @@ mod tests {
 
     /// Moved 3 along x and scaled up 2 times, so it spans 2 to 4 on x and -1 to 1 on y and z
     fn placed() -> Mat4 {
-        nalgebra_glm::scale(&nalgebra_glm::translation(&vec3(3.0, 0.0, 0.0)), &vec3(2.0, 2.0, 2.0))
+        nalgebra_glm::scale(
+            &nalgebra_glm::translation(&vec3(3.0, 0.0, 0.0)),
+            &vec3(2.0, 2.0, 2.0),
+        )
     }
 
     #[test]
@@ -110,9 +110,15 @@ mod tests {
     #[test]
     fn boxes_fit_the_mesh_where_it_is_and_where_it_goes() {
         let aabb = cube().aabb();
-        assert_eq!((aabb.min, aabb.max), (vec3(-0.5, -0.5, -0.5), vec3(0.5, 0.5, 0.5)));
+        assert_eq!(
+            (aabb.min, aabb.max),
+            (vec3(-0.5, -0.5, -0.5), vec3(0.5, 0.5, 0.5))
+        );
         let world = cube().world_aabb(&placed());
-        assert_eq!((world.min, world.max), (vec3(2.0, -1.0, -1.0), vec3(4.0, 1.0, 1.0)));
+        assert_eq!(
+            (world.min, world.max),
+            (vec3(2.0, -1.0, -1.0), vec3(4.0, 1.0, 1.0))
+        );
     }
 
     #[test]

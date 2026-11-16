@@ -1,5 +1,3 @@
-/// Raw OpenGL, for anything apricot doesn't cover
-pub use gl;
 pub mod app;
 pub mod audio;
 pub mod camera;

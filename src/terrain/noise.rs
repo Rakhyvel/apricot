@@ -74,7 +74,7 @@ mod tests {
     use super::*;
 
     #[test]
-    fn perlin_stays_in_range_and_repeats() {
+    fn value_noise_stays_in_range_and_repeats() {
         for i in -50..50 {
             let (x, y) = (i as f32 * 3.7, i as f32 * -1.3);
             let n = value_noise(x, y, 0.05, 6, 7);
@@ -84,7 +84,7 @@ mod tests {
     }
 
     #[test]
-    fn perlin_uses_most_of_the_range() {
+    fn value_noise_uses_most_of_the_range() {
         for octaves in [1, 3] {
             let samples: Vec<f32> = (0..2000)
                 .map(|i| value_noise(i as f32 * 0.37, i as f32 * 0.11, 1.0, octaves, 2))
@@ -148,7 +148,7 @@ mod tests {
     }
 
     #[test]
-    fn perlin_is_smooth_across_zero() {
+    fn value_noise_is_smooth_across_zero() {
         // Neighbors on either side of the origin should be close, not mirrored jumps
         let step = 0.01;
         let left = value_noise(-step, 0.5, 1.0, 1, 3);

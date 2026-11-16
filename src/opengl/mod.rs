@@ -1,4 +1,4 @@
-//! The OpenGL layer. Everything that calls `gl::` lives in here
+//! The OpenGL layer. Everything that calls `gl::` lives in here. No one cometh unto OpenGL but through me.
 
 use gl::types::GLuint;
 use nalgebra_glm::Vec4;

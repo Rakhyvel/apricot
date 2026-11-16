@@ -1,15 +1,12 @@
 //! This file contains the core rendering functionality that is shared between 2D and 3D rendering.
 
-use std::{cell::Ref, fmt::Debug, path::Path};
-
-use nalgebra_glm::{Mat4, Vec3, Vec4};
+use std::{cell::Ref, path::Path};
 
 use crate::{
     error::Error,
     font::Font,
     geometry::aabb::AABB,
     mesh::MeshData,
-    opengl::{DrawOptions, Primitive, RawMesh},
     render::{
         assets::{Assets, Builtins, FontId, Mesh, MeshId, ProgramId, TextureId},
         lighting::Lighting,
@@ -30,38 +27,6 @@ pub struct RenderContext {
     pub builtins: Builtins,
 }
 
-/// How a `LinePath` looks
-#[derive(Clone, Copy, Debug)]
-pub struct LineStyle {
-    /// Thickness in pixels. Most drivers only support 1
-    pub width: f32,
-    pub color: Vec4,
-    /// Whether the line fades out behind the seam, like a trail
-    pub fade: bool,
-    /// Where along the path the fade starts, from 0 (the first point) to 1 (the last)
-    pub seam: f32,
-    /// Whether 3D geometry in front of the line hides it
-    pub depth_test: bool,
-}
-
-impl Default for LineStyle {
-    fn default() -> Self {
-        Self {
-            width: 1.0,
-            color: nalgebra_glm::vec4(0.7, 0.9, 0.9, 0.9),
-            fade: true,
-            seam: 0.0,
-            depth_test: true,
-        }
-    }
-}
-
-/// A 3D line through a list of points
-pub struct LinePath {
-    mesh: RawMesh,
-    pub style: LineStyle,
-}
-
 impl RenderContext {
     pub fn new() -> Result<Self, Error> {
         let assets = Assets::new()?;
@@ -73,32 +38,6 @@ impl RenderContext {
             assets,
             builtins,
         })
-    }
-
-    /// Draw a line path from the current camera, moved by `transform`
-    pub fn draw_line_path(&self, path: &LinePath, transform: Mat4) {
-        let style = &path.style;
-        let program = self.builtins.program_line;
-
-        let view_proj = self.camera_view_proj();
-        self.uniform(program, "u_model_matrix").set_mat4(&transform);
-        self.uniform(program, "u_view_matrix")
-            .set_mat4(&view_proj.view);
-        self.uniform(program, "u_proj_matrix")
-            .set_mat4(&view_proj.proj);
-        self.uniform(program, "u_color").set_vec4(&style.color);
-        self.uniform(program, "u_seam").set_f32(style.seam);
-        self.uniform(program, "u_fade").set_i32(style.fade as i32);
-        self.uniform(program, "u_num_vertices")
-            .set_i32(path.mesh.vertex_count() as i32);
-
-        let options = DrawOptions {
-            depth_test: style.depth_test,
-            depth_write: false, // lines shouldn't hide what's drawn after them
-            line_width: style.width,
-            ..Default::default()
-        };
-        self.draw_raw(&path.mesh, program, &options);
     }
 }
 
@@ -266,23 +205,4 @@ impl RenderContext {
     pub fn get_font_id_from_name(&self, name: &'static str) -> Option<FontId> {
         self.assets.fonts.id_of(name)
     }
-}
-
-impl LinePath {
-    /// A line through `points`, in order
-    pub fn new(points: &[Vec3], style: LineStyle) -> Self {
-        Self {
-            mesh: RawMesh::new(&flatten(points), &[3], Primitive::LineStrip),
-            style,
-        }
-    }
-
-    /// Replace the points the line goes through. Cheaper than making a new `LinePath`
-    pub fn set_points(&mut self, points: &[Vec3]) {
-        self.mesh.set_vertices(&flatten(points));
-    }
-}
-
-fn flatten(points: &[Vec3]) -> Vec<f32> {
-    points.iter().flat_map(|p| [p.x, p.y, p.z]).collect()
 }

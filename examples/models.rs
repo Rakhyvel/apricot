@@ -13,7 +13,7 @@ use apricot::{
     model_set::{Model, ModelSet},
     render::assets::{MeshId, TextureId},
     render::lighting::DirectionalLight,
-    render_core::{LinePath, LineStyle},
+    render::lines::{LinePath, LineStyle},
 };
 use nalgebra_glm::{vec2, vec3, vec4, Mat4};
 

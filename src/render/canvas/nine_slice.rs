@@ -3,9 +3,7 @@
 use nalgebra_glm::{vec2, Vec2, Vec4};
 
 use super::Queue2d;
-use crate::{
-    geometry::rectangle::Rectangle, render::assets::TextureId, render_core::RenderContext,
-};
+use crate::{geometry::rectangle::Rectangle, render::assets::TextureId, render::RenderContext};
 
 /// A texture that can stretch to any size without its edges getting blurry or squished
 #[derive(Clone, Copy)]

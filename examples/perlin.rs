@@ -21,7 +21,7 @@ use apricot::{
     model_set::{Model, ModelSet},
     render::assets::MeshId,
     render::lighting::DirectionalLight,
-    render_core::RenderContext,
+    render::RenderContext,
     terrain::{
         chunks::{ChunkCoord, ChunkGrid},
         noise, normal_at, scatter, surface_height,

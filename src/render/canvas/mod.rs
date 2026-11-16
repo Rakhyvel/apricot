@@ -10,11 +10,11 @@ use nalgebra_glm::{vec2, Vec2, Vec4};
 
 use crate::{
     geometry::rectangle::Rectangle,
+    render::RenderContext,
     render::{
         assets::{FontId, MeshId, TextureId},
         text::Font,
     },
-    render_core::RenderContext,
 };
 
 mod command;

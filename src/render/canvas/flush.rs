@@ -9,7 +9,7 @@ use crate::{
     mesh::MeshData,
     opengl::{self, DrawOptions, ScissorBox},
     render::assets::{MeshId, TextureId},
-    render_core::RenderContext,
+    render::RenderContext,
 };
 
 impl RenderContext {
@@ -108,7 +108,7 @@ impl RenderContext {
     }
 
     /// Execute all queued 2D draw commands in layer order. Called once per frame after scene.render().
-    pub fn flush_2d_queue(&self) {
+    pub(crate) fn flush_2d_queue(&self) {
         let draws = self.queue_2d.take_draws();
 
         // Setup the GL context for drawing 2d stuff

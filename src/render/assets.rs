@@ -16,7 +16,7 @@ use crate::{
 };
 
 /// The font text uses until another is picked
-pub(crate) const DEFAULT_FONT: &[u8] = include_bytes!("../fonts/Not Jam Mono Clean 16.ttf");
+pub(crate) const DEFAULT_FONT: &[u8] = include_bytes!("fonts/Not Jam Mono Clean 16.ttf");
 
 /// Refers to a mesh added to the renderer
 pub type MeshId = Handle<Mesh>;
@@ -69,28 +69,28 @@ impl Builtins {
 
         Ok(Self {
             program_2d: program(
-                include_str!("../shaders/2d.vert"),
-                include_str!("../shaders/2d.frag"),
+                include_str!("shaders/2d.vert"),
+                include_str!("shaders/2d.frag"),
                 "2d",
             )?,
             program_3d: program(
-                include_str!("../shaders/3d.vert"),
-                include_str!("../shaders/3d.frag"),
+                include_str!("shaders/3d.vert"),
+                include_str!("shaders/3d.frag"),
                 "3d",
             )?,
             program_3d_solid: program(
-                include_str!("../shaders/3d.vert"),
-                include_str!("../shaders/solid-color.frag"),
+                include_str!("shaders/3d.vert"),
+                include_str!("shaders/solid-color.frag"),
                 "3d-solid",
             )?,
             program_shadow: program(
-                include_str!("../shaders/shadow.vert"),
-                include_str!("../shaders/shadow.frag"),
+                include_str!("shaders/shadow.vert"),
+                include_str!("shaders/shadow.frag"),
                 "shadow",
             )?,
             program_line: program(
-                include_str!("../shaders/line.vert"),
-                include_str!("../shaders/line.frag"),
+                include_str!("shaders/line.vert"),
+                include_str!("shaders/line.frag"),
                 "line",
             )?,
             white_texture: assets.textures.add(white, Some("white")),

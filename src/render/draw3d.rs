@@ -6,7 +6,7 @@ use crate::{
     camera::ViewProj,
     opengl::{self, DrawOptions, RawMesh, Stencil, Uniform},
     render::assets::{Mesh, MeshId, ProgramId, TextureId},
-    render_core::RenderContext,
+    render::RenderContext,
 };
 
 /// How many times bigger than its model an outline's copy of it is

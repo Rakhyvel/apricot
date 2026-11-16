@@ -11,7 +11,7 @@ use crate::{
     geometry::frustum::Frustum,
     opengl::{self, DrawOptions, Fbo, Texture},
     render::assets::{MeshId, ProgramId},
-    render_core::RenderContext,
+    render::RenderContext,
 };
 
 /// A light shining from far away in one direction, like the sun, with a shadow map

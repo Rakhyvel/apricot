@@ -16,7 +16,7 @@ use crate::geometry::rectangle::Rectangle;
 use crate::input::{Input, Scancode};
 use crate::opengl;
 
-use crate::render_core::RenderContext;
+use crate::render::RenderContext;
 
 mod logging;
 mod platform;

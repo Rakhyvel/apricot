@@ -11,5 +11,4 @@ pub mod model_set;
 pub mod opengl;
 pub mod registry;
 pub mod render;
-pub mod render_core;
 pub mod terrain;

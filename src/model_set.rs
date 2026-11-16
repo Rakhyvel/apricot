@@ -10,7 +10,7 @@ use crate::{
     geometry::ray::Ray,
     render::assets::{MeshId, TextureId},
     render::lighting::ShadowPass,
-    render_core::RenderContext,
+    render::RenderContext,
 };
 
 /// A mesh with a texture, placed in the world

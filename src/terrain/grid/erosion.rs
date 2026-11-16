@@ -76,7 +76,7 @@ impl HeightGrid {
                 // Roll downhill: the normal leans the way the ground falls away
                 let scale = settings.height_scale;
                 let n = terrain::surface_normal(
-                    |x, z| self.height(nalgebra_glm::vec2(x, z)) * scale,
+                    |x, z| self.height_at(nalgebra_glm::vec2(x, z)) * scale,
                     pos.x,
                     pos.y,
                 );
@@ -156,14 +156,14 @@ impl HeightGrid {
             .iter()
             .map(|n| n + pos)
             .filter(|npos| self.contains(*npos))
-            .map(|npos| nalgebra_glm::vec3(npos.x, npos.y, self.height(npos)))
+            .map(|npos| nalgebra_glm::vec3(npos.x, npos.y, self.height_at(npos)))
             .collect();
 
         in_bound_neighbors.sort_by(|a, b| a.z.partial_cmp(&b.z).unwrap_or(Ordering::Greater));
 
         for npos in in_bound_neighbors {
             // Full height-different between positions
-            let diff = self.height(pos) - npos.z;
+            let diff = self.height_at(pos) - npos.z;
             if diff == 0.0 {
                 continue;
             }
@@ -221,7 +221,7 @@ mod tests {
         for z in 0..width {
             for x in 0..width {
                 let h = 1.0 - x as f32 / width as f32;
-                grid.set_height(nalgebra_glm::vec2(x as f32, z as f32), h);
+                grid.set_height(x, z, h);
             }
         }
         grid

@@ -111,7 +111,7 @@ impl Atlas {
 
     /// The finished font, once `upload` turns the atlas image into a texture. It gets the image's
     /// width, height, and tightly packed RGBA bytes
-    pub(crate) fn into_font(self, upload: impl FnOnce(i32, i32, &[u8]) -> TextureId) -> Font {
+    pub(crate) fn into_font(self, upload: impl FnOnce(u32, u32, &[u8]) -> TextureId) -> Font {
         let surface = self
             .image
             .convert_format(sdl2::pixels::PixelFormatEnum::RGBA32)
@@ -122,7 +122,7 @@ impl Atlas {
             .expect("a converted surface never needs locking");
         let packed = pack_rows(pixels, width, height, surface.pitch() as usize);
         Font {
-            cache_texture: upload(width as i32, height as i32, &packed),
+            cache_texture: upload(width as u32, height as u32, &packed),
             table: self.table,
         }
     }

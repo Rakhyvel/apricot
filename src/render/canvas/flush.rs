@@ -47,7 +47,7 @@ impl RenderContext {
         dest: Rectangle,
         texture_id: TextureId,
         texture_dest: Rectangle,
-        color_mod: &Vec4,
+        color_mod: Vec4,
     ) {
         let model_matrix = self.rect_model_matrix(dest);
 
@@ -69,7 +69,7 @@ impl RenderContext {
             texture_id,
             sprite_offset,
             sprite_size,
-            *color_mod,
+            color_mod,
         );
     }
 
@@ -139,7 +139,7 @@ impl RenderContext {
                     texture_id,
                     texture_dest,
                     color_mod,
-                } => self.copy_texture_immediate(dest, texture_id, texture_dest, &color_mod),
+                } => self.copy_texture_immediate(dest, texture_id, texture_dest, color_mod),
             }
         }
 

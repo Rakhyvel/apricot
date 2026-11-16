@@ -25,7 +25,7 @@ pub struct DirectionalLight {
 
 impl DirectionalLight {
     /// A light shining from `direction`, with a `shadow_map_size` by `shadow_map_size` shadow map
-    pub fn new(direction: Vec3, shadow_map_size: i32) -> Result<Self, Error> {
+    pub fn new(direction: Vec3, shadow_map_size: u32) -> Result<Self, Error> {
         Ok(Self {
             frustum: LightFrustum::new(direction, shadow_map_size),
             map: Rc::new(ShadowMap::new(shadow_map_size)?),
@@ -106,14 +106,14 @@ pub struct LightFrustum {
     /// How far past the camera's view, toward the light, things still cast shadows into it
     pub caster_distance: f32,
     /// How many texels across the shadow map is, so the box can move in whole texels
-    map_size: i32,
+    map_size: u32,
     view_proj: ViewProj,
     texel_size: f32,
 }
 
 impl LightFrustum {
     /// A light shining from `direction`, for a `map_size` by `map_size` shadow map
-    pub fn new(direction: Vec3, map_size: i32) -> Self {
+    pub fn new(direction: Vec3, map_size: u32) -> Self {
         Self {
             direction: direction.normalize(),
             shadow_distance: 50.0,
@@ -216,11 +216,11 @@ impl LightFrustum {
 pub(crate) struct ShadowMap {
     frame_buffer: Fbo,
     depth_map: Texture,
-    size: i32,
+    size: u32,
 }
 
 impl ShadowMap {
-    fn new(size: i32) -> Result<Self, Error> {
+    fn new(size: u32) -> Result<Self, Error> {
         let depth_map = Texture::new();
         depth_map.load_depth_buffer(size, size);
         let frame_buffer = Fbo::new();
@@ -302,7 +302,7 @@ impl RenderContext {
             .fit_to_camera(&self.camera(), self.aspect_ratio());
 
         light.map.frame_buffer.bind();
-        opengl::set_viewport(light.map.size, light.map.size);
+        opengl::set_viewport(light.map.size as i32, light.map.size as i32);
         let before = DrawOptions {
             depth_bias: Some((1.0, 1.0)),
             ..Default::default()

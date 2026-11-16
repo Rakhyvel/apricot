@@ -143,7 +143,7 @@ impl Scene for Shapes {
                         Rectangle::new(c.x - size, c.y - size, size * 2.0, size * 2.0),
                         self.checker,
                         Rectangle::new(0.0, 0.0, 8.0, 8.0),
-                        &vec4(1.0, 0.5 + 0.5 * pulse, 1.0 - 0.5 * pulse, 1.0),
+                        vec4(1.0, 0.5 + 0.5 * pulse, 1.0 - 0.5 * pulse, 1.0),
                     )
                 })),
             ),

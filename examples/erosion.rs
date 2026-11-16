@@ -25,7 +25,7 @@ use apricot::{
         grid::{ErosionSettings, HeightGrid},
     },
 };
-use nalgebra_glm::{vec2, vec3, vec4, Mat4, Vec2};
+use nalgebra_glm::{vec2, vec3, vec4, Mat4};
 
 /// How many cells across the island is. The grid has one more point than that per side
 const CELLS: u32 = 128;
@@ -55,7 +55,7 @@ struct Erosion {
     texture: TextureId,
     raining: bool,
     drops: usize,
-    seed: i32,
+    seed: u64,
 }
 
 impl Erosion {
@@ -121,7 +121,7 @@ impl Scene for Erosion {
             // A fresh seed each tick, so it doesn't rain on the same spots over and over
             self.grid.erode_with(
                 DROPS_PER_TICK,
-                (self.seed as u64) << 32 | self.drops as u64,
+                self.seed << 32 | self.drops as u64,
                 &ErosionSettings {
                     height_scale: 15.0,
                     friction: 0.05,
@@ -164,7 +164,7 @@ impl Scene for Erosion {
 }
 
 /// Noise that fades into the sea toward the edges, stretched to fill 0 to 1
-fn island(seed: i32) -> HeightGrid {
+fn island(seed: u64) -> HeightGrid {
     let width = CELLS as usize + 1;
     let mut grid = HeightGrid::from_noise(width, 0.02, 6, seed, 1.0, vec2(0.0, 0.0));
     grid.normalize();
@@ -175,7 +175,7 @@ fn island(seed: i32) -> HeightGrid {
             let p = vec2(x as f32, z as f32);
             let d = nalgebra_glm::distance(&p, &vec2(center, center)) / center;
             let falloff = 1.0 - smoothstep(0.15, 1.0, d);
-            grid.set_height(p, grid.height(p) * falloff);
+            grid.set_height(x, z, grid.height(x, z) * falloff);
         }
     }
     grid.normalize();
@@ -188,29 +188,34 @@ fn smoothstep(edge0: f32, edge1: f32, x: f32) -> f32 {
 }
 
 fn terrain_mesh(grid: &HeightGrid) -> MeshData {
-    terrain::mesh(CELLS, CELLS, |x, z| grid.height(vec2(x, z)) * HEIGHT)
+    terrain::mesh(CELLS, CELLS, |x, z| {
+        grid.height(x as usize, z as usize) * HEIGHT
+    })
 }
 
 /// One color per cell by height, turning blue where lots of water has run
 fn terrain_colors(grid: &HeightGrid) -> Vec<u8> {
-    let cells: Vec<Vec2> = (0..CELLS * CELLS)
-        .map(|i| vec2((i % CELLS) as f32, (i / CELLS) as f32))
+    let cells: Vec<(usize, usize)> = (0..CELLS * CELLS)
+        .map(|i| ((i % CELLS) as usize, (i / CELLS) as usize))
         .collect();
     // Flow piles up fast along rivers, so compare it on a log scale
-    let max_flow = cells.iter().map(|p| grid.flow(*p)).fold(0.0, f32::max);
+    let max_flow = cells
+        .iter()
+        .map(|&(x, z)| grid.flow(x, z))
+        .fold(0.0, f32::max);
     let river_scale = (1.0 + max_flow).ln().max(1e-6);
 
     cells
         .iter()
-        .flat_map(|p| {
-            let h = grid.height(*p);
+        .flat_map(|&(x, z)| {
+            let h = grid.height(x, z);
             let land = match h {
                 h if h < SEA_LEVEL + 0.03 => [220.0, 205.0, 150.0],
                 h if h < 0.45 => [90.0, 160.0, 70.0],
                 h if h < 0.7 => [120.0, 115.0, 110.0],
                 _ => [240.0, 240.0, 245.0],
             };
-            let river = smoothstep(0.4, 0.8, (1.0 + grid.flow(*p)).ln() / river_scale);
+            let river = smoothstep(0.4, 0.8, (1.0 + grid.flow(x, z)).ln() / river_scale);
             let water = [50.0, 110.0, 200.0];
             let mix = |i: usize| (land[i] + (water[i] - land[i]) * river) as u8;
             [mix(0), mix(1), mix(2), 255]

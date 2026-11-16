@@ -9,8 +9,8 @@ use super::check_gl;
 /// An OpenGL Texture
 pub struct Texture {
     pub(crate) id: GLuint,
-    width: Cell<i32>,
-    height: Cell<i32>,
+    width: Cell<u32>,
+    height: Cell<u32>,
 }
 
 impl Default for Texture {
@@ -40,10 +40,10 @@ impl Texture {
 
     /// Fill the texture with tightly packed RGBA bytes, `width * height * 4` of them. Updating a
     /// texture without changing its size is cheap
-    pub fn set_pixels(&self, width: i32, height: i32, data: &[u8]) {
+    pub fn set_pixels(&self, width: u32, height: u32, data: &[u8]) {
         assert_eq!(
             data.len(),
-            (width * height * 4) as usize,
+            width as usize * height as usize * 4,
             "expected {width}x{height} RGBA pixels"
         );
         self.bind();
@@ -56,8 +56,8 @@ impl Texture {
                     0,
                     0,
                     0,
-                    width,
-                    height,
+                    width as i32,
+                    height as i32,
                     gl::RGBA,
                     gl::UNSIGNED_BYTE,
                     data.as_ptr() as *const _,
@@ -75,8 +75,8 @@ impl Texture {
                 gl::TEXTURE_2D,
                 0,
                 gl::RGBA as i32,
-                width,
-                height,
+                width as i32,
+                height as i32,
                 0,
                 gl::RGBA,
                 gl::UNSIGNED_BYTE,
@@ -87,7 +87,7 @@ impl Texture {
     }
 
     /// Load this texture as a depth buffer
-    pub fn load_depth_buffer(&self, width: i32, height: i32) {
+    pub fn load_depth_buffer(&self, width: u32, height: u32) {
         self.bind();
         self.set_size(width, height);
 
@@ -96,8 +96,8 @@ impl Texture {
                 gl::TEXTURE_2D,
                 0,
                 gl::DEPTH_COMPONENT32F as GLint,
-                width,
-                height,
+                width as i32,
+                height as i32,
                 0,
                 gl::DEPTH_COMPONENT,
                 gl::FLOAT,
@@ -137,12 +137,12 @@ impl Texture {
     }
 
     /// The width and height of this texture, or `None` if it has no pixels yet
-    pub fn get_dimensions(&self) -> Option<(i32, i32)> {
+    pub fn get_dimensions(&self) -> Option<(u32, u32)> {
         let (width, height) = (self.width.get(), self.height.get());
         (width > 0 && height > 0).then_some((width, height))
     }
 
-    fn set_size(&self, width: i32, height: i32) {
+    fn set_size(&self, width: u32, height: u32) {
         self.width.set(width);
         self.height.set(height);
     }

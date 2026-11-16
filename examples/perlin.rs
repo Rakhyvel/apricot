@@ -41,7 +41,7 @@ const CHUNKS_PER_TICK: usize = 2;
 const HEIGHT: f32 = 24.0;
 /// Everything below this (0 to 1) gets flattened into lakes
 const WATER_LEVEL: f32 = 0.3;
-const SEED: i32 = 42;
+const SEED: u64 = 42;
 /// How many spots per chunk get tried for a tree
 const TREE_ATTEMPTS: u32 = 60;
 /// How close two trees can be
@@ -120,7 +120,7 @@ impl Terrain {
         // Trees on grass that isn't too steep. Seeding by chunk means a chunk always grows the same trees
         let size = self.grid.chunk_size();
         let area = Rectangle::new(origin.x, origin.z, size, size);
-        let seed = ((chunk.0 as u64) << 32) ^ (chunk.1 as u32 as u64);
+        let seed = ((chunk.x as u64) << 32) ^ (chunk.z as u32 as u64);
         let spots = scatter(area, TREE_ATTEMPTS, TREE_SPACING, seed, |p| {
             let h = height(p.x, p.y);
             let slope = 1.0 - normal_at(ground, p.x, p.y).y;

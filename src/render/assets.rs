@@ -272,13 +272,13 @@ impl Assets {
 
     pub(crate) fn create_texture_rgba(&self, w: u32, h: u32, bytes: &[u8]) -> TextureId {
         let texture = Texture::new();
-        texture.set_pixels(w as i32, h as i32, bytes);
+        texture.set_pixels(w, h, bytes);
         self.textures.add(texture, None)
     }
 
     pub(crate) fn update_texture_rgba(&self, id: TextureId, w: u32, h: u32, bytes: &[u8]) {
         let texture = self.textures.require(id, "update_texture_rgba");
-        texture.set_pixels(w as i32, h as i32, bytes);
+        texture.set_pixels(w, h, bytes);
     }
 
     pub(crate) fn add_texture_from_png(
@@ -294,7 +294,7 @@ impl Assets {
             })?
             .into_rgba8();
         let texture = Texture::new();
-        texture.set_pixels(image.width() as i32, image.height() as i32, &image);
+        texture.set_pixels(image.width(), image.height(), &image);
         Ok(self.textures.add(texture, name))
     }
 

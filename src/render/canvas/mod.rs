@@ -265,11 +265,11 @@ impl RenderContext {
         dest: Rectangle,
         texture_id: TextureId,
         texture_dest: Rectangle,
-        color_mod: &Vec4,
+        color_mod: Vec4,
     ) {
         drop(self.assets.textures.require(texture_id, "copy_texture"));
         self.queue_2d
-            .copy_texture(dest, texture_id, texture_dest, *color_mod);
+            .copy_texture(dest, texture_id, texture_dest, color_mod);
     }
 
     pub fn fill_rect(&self, dest: Rectangle, color: Vec4) {

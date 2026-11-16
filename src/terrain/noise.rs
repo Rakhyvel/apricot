@@ -18,8 +18,8 @@ static HASH: [u8; 256] = [
 
 /// Smooth 2D noise at (`x`, `y`), between 0 and 1. Lower `frequency` makes bigger, gentler
 /// hills, and each extra octave adds finer detail on top.
-pub fn perlin(x: f32, y: f32, frequency: f32, octaves: i32, seed: i32) -> f32 {
-    if octaves <= 0 {
+pub fn perlin(x: f32, y: f32, frequency: f32, octaves: u32, seed: u64) -> f32 {
+    if octaves == 0 {
         return 0.0;
     }
     let mut xa = x * frequency;
@@ -40,7 +40,7 @@ pub fn perlin(x: f32, y: f32, frequency: f32, octaves: i32, seed: i32) -> f32 {
 }
 
 /// One layer of noise, smoothly blended between the hashed values at the 4 surrounding corners
-fn octave(x: f32, y: f32, seed: i32) -> f32 {
+fn octave(x: f32, y: f32, seed: u64) -> f32 {
     // floor, not `as`, so negative coordinates don't fold back on themselves
     let x_int = x.floor() as i32;
     let y_int = y.floor() as i32;
@@ -57,8 +57,9 @@ fn octave(x: f32, y: f32, seed: i32) -> f32 {
     smooth_lerp(low, high, y_frac)
 }
 
-fn corner(x: i32, y: i32, seed: i32) -> f32 {
-    let tmp = HASH[((y + seed) & 0xFF) as usize];
+fn corner(x: i32, y: i32, seed: u64) -> f32 {
+    // Only the low byte of the seed matters after the mask, so wrapping is fine
+    let tmp = HASH[(y.wrapping_add(seed as i32) & 0xFF) as usize];
     HASH[((tmp as i32 + x) & 0xFF) as usize] as f32
 }
 
@@ -126,7 +127,15 @@ mod tests {
         assert_eq!(corner(-4, 7, 11), 250.0);
         assert_eq!(corner(200, -30, 5), 8.0);
         for (x, y, seed) in [(3, 5, 2), (-4, 7, 11), (17, 0, 100)] {
-            assert_eq!(corner(x, y, seed), corner(x, y + seed, 0));
+            assert_eq!(corner(x, y, seed), corner(x, y + seed as i32, 0));
+        }
+    }
+
+    #[test]
+    fn a_seed_can_be_any_u64() {
+        for seed in [0, 1, u64::from(u32::MAX), u64::MAX] {
+            let n = perlin(3.3, -4.4, 0.1, 3, seed);
+            assert!((0.0..=1.0).contains(&n), "seed {seed} gave {n}");
         }
     }
 

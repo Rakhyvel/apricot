@@ -36,8 +36,8 @@ impl HeightGrid {
     pub fn from_noise(
         width: usize,
         frequency: f32,
-        octaves: i32,
-        seed: i32,
+        octaves: u32,
+        seed: u64,
         amplitude: f32,
         offset: Vec2,
     ) -> Self {
@@ -63,31 +63,31 @@ impl HeightGrid {
         self.width
     }
 
-    /// The height of the grid point at `p`, rounding down to the nearest point. 0 off the edge
-    pub fn height(&self, p: Vec2) -> f32 {
-        self.index(p).map_or(0.0, |i| self.cells[i].height)
+    /// The height of the grid point at (`x`, `z`). 0 off the edge
+    pub fn height(&self, x: usize, z: usize) -> f32 {
+        self.point(x, z).map_or(0.0, |i| self.cells[i].height)
     }
 
-    /// Set the height of the grid point at `p`. Does nothing off the edge
-    pub fn set_height(&mut self, p: Vec2, height: f32) {
-        if let Some(i) = self.index(p) {
+    /// Set the height of the grid point at (`x`, `z`). Does nothing off the edge
+    pub fn set_height(&mut self, x: usize, z: usize, height: f32) {
+        if let Some(i) = self.point(x, z) {
             self.cells[i].height = height;
         }
     }
 
-    /// How much water has run over the point at `p`. 0 off the edge
-    pub fn flow(&self, p: Vec2) -> f32 {
-        self.index(p).map_or(0.0, |i| self.cells[i].flow)
+    /// How much water has run over the point at (`x`, `z`). 0 off the edge
+    pub fn flow(&self, x: usize, z: usize) -> f32 {
+        self.point(x, z).map_or(0.0, |i| self.cells[i].flow)
     }
 
-    /// The height between grid points
+    /// The height anywhere on the grid, blending between the points
     pub fn surface_height(&self, p: Vec2) -> f32 {
-        terrain::surface_height(|x, z| self.height(nalgebra_glm::vec2(x, z)), p.x, p.y)
+        terrain::surface_height(|x, z| self.height_at(nalgebra_glm::vec2(x, z)), p.x, p.y)
     }
 
     /// The Y-up normal of the flat triangle under `p`
     pub fn surface_normal(&self, p: Vec2) -> Vec3 {
-        terrain::surface_normal(|x, z| self.height(nalgebra_glm::vec2(x, z)), p.x, p.y)
+        terrain::surface_normal(|x, z| self.height_at(nalgebra_glm::vec2(x, z)), p.x, p.y)
     }
 
     /// Drop everything between `shelf_depth` and `shelf_height` down to `shelf_depth`, making a
@@ -112,6 +112,16 @@ impl HeightGrid {
                 0.0
             };
         }
+    }
+
+    /// The height of the grid point at `p`, rounding down to the nearest point. 0 off the edge
+    fn height_at(&self, p: Vec2) -> f32 {
+        self.index(p).map_or(0.0, |i| self.cells[i].height)
+    }
+
+    /// Where the point at (`x`, `z`) is in `cells`, if it's on the grid
+    fn point(&self, x: usize, z: usize) -> Option<usize> {
+        (x < self.width && z < self.width).then(|| self.point_index(x, z))
     }
 
     fn add_height(&mut self, p: Vec2, amount: f32) {
@@ -154,7 +164,7 @@ mod tests {
         let mut grid = HeightGrid::new(4);
         for z in 0..4 {
             for x in 0..4 {
-                grid.set_height(vec2(x as f32, z as f32), (10 * z + x) as f32);
+                grid.set_height(x, z, (10 * z + x) as f32);
             }
         }
         for (i, cell) in grid.cells.iter().enumerate() {
@@ -166,7 +176,24 @@ mod tests {
         grid.add_flow(vec2(3.0, 2.99), 2.0);
         assert_eq!(grid.cells[11].height, 23.5);
         assert_eq!(grid.cells[11].flow, 2.0);
-        assert_eq!(grid.flow(vec2(3.5, 2.5)), 2.0);
+        assert_eq!(grid.cells[grid.point_index(3, 2)].flow, 2.0);
+        assert_eq!(grid.flow(3, 2), 2.0);
+    }
+
+    #[test]
+    fn points_are_read_and_written_by_whole_number_position() {
+        let mut grid = HeightGrid::new(4);
+        grid.set_height(3, 2, 7.0);
+        assert_eq!(grid.height(3, 2), 7.0);
+        assert_eq!(grid.height(2, 3), 0.0);
+        assert_eq!(grid.flow(3, 2), 0.0);
+
+        // Off the edge, nothing is written and everything reads as zero
+        grid.set_height(4, 0, 1.0);
+        grid.set_height(0, 4, 1.0);
+        assert_eq!(grid.cells.iter().filter(|c| c.height != 0.0).count(), 1);
+        assert_eq!((grid.height(4, 0), grid.height(0, 100)), (0.0, 0.0));
+        assert_eq!((grid.flow(4, 0), grid.flow(0, 100)), (0.0, 0.0));
     }
 
     #[test]
@@ -179,8 +206,9 @@ mod tests {
             vec2(3.99, 3.99),
         ] {
             assert!(grid.contains(p), "{p:?}");
-            grid.set_height(p, 1.0);
-            assert_eq!(grid.height(p), 1.0, "{p:?}");
+            let i = grid.index(p).unwrap();
+            grid.cells[i].height = 1.0;
+            assert_eq!(grid.height_at(p), 1.0, "{p:?}");
         }
         for p in [
             vec2(4.0, 0.0),
@@ -198,8 +226,7 @@ mod tests {
         // x past the edge used to wrap into the next row, or panic past the end
         for p in [(4.0, 0.0), (0.0, 4.0), (-0.5, 1.0), (10.0, 10.0)] {
             let p = vec2(p.0, p.1);
-            assert_eq!(grid.flow(p), 0.0);
-            assert_eq!(grid.height(p), 0.0);
+            assert_eq!(grid.height_at(p), 0.0);
         }
     }
 
@@ -209,9 +236,9 @@ mod tests {
         let grid = HeightGrid::from_noise(6, 0.2, 3, 7, 2.5, offset);
         for z in 0..6 {
             for x in 0..6 {
-                let (x, z) = (x as f32, z as f32);
-                let expected = noise::perlin(x + offset.x, z + offset.y, 0.2, 3, 7) * 2.5;
-                assert_eq!(grid.height(vec2(x, z)), expected, "at ({x}, {z})");
+                let expected =
+                    noise::perlin(x as f32 + offset.x, z as f32 + offset.y, 0.2, 3, 7) * 2.5;
+                assert_eq!(grid.height(x, z), expected, "at ({x}, {z})");
             }
         }
     }
@@ -254,7 +281,10 @@ mod tests {
     fn surface_height_matches_the_grid_points() {
         let grid = HeightGrid::from_noise(6, 0.3, 3, 9, 5.0, vec2(0.0, 0.0));
         for (x, z) in [(1.0, 1.0), (3.0, 2.0), (4.0, 4.0)] {
-            assert_eq!(grid.surface_height(vec2(x, z)), grid.height(vec2(x, z)));
+            assert_eq!(
+                grid.surface_height(vec2(x, z)),
+                grid.height(x as usize, z as usize)
+            );
         }
     }
 }

@@ -19,11 +19,6 @@ impl<T> Handle<T> {
         }
     }
 
-    /// A handle for whatever ends up first at `index`, for engine code that fills it in right after
-    pub(crate) fn placeholder(index: usize) -> Self {
-        Self::new(index, 0)
-    }
-
     /// A handle to slot `index`, for tests that need one without a registry
     #[cfg(test)]
     pub(crate) fn for_tests(index: usize) -> Self {

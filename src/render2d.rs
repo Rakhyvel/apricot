@@ -37,8 +37,9 @@ pub(crate) struct Queue2d {
     view_proj: ViewProj,
 }
 
-impl Default for Queue2d {
-    fn default() -> Self {
+impl Queue2d {
+    /// An empty queue that draws text with `font` until told otherwise
+    pub(crate) fn new(font: FontId) -> Self {
         let camera = Camera::new(
             vec3(0.0, 0.0, 0.0),
             vec3(0.0, 0.0, 1.0),
@@ -57,7 +58,7 @@ impl Default for Queue2d {
             layer: Cell::default(),
             clips: RefCell::default(),
             poly_meshes: RefCell::default(),
-            font: Cell::new(FontId::placeholder(0)), // the renderer sets the default font right after
+            font: Cell::new(font),
             view_proj: camera.view_proj(1.0),
         }
     }
@@ -747,6 +748,10 @@ mod tests {
 
     const RED: Vec4 = Vec4::new(1.0, 0.0, 0.0, 1.0);
 
+    fn queue() -> Queue2d {
+        Queue2d::new(Handle::for_tests(0))
+    }
+
     fn rect_at(x: f32) -> Rectangle {
         Rectangle::new(x, 0.0, 1.0, 1.0)
     }
@@ -770,8 +775,14 @@ mod tests {
     }
 
     #[test]
+    fn a_new_queue_draws_text_with_the_font_it_was_given() {
+        let queue = Queue2d::new(Handle::for_tests(4));
+        assert_eq!(queue.font.get(), Handle::for_tests(4));
+    }
+
+    #[test]
     fn draws_come_out_lowest_layer_first_and_keep_their_order_within_a_layer() {
-        let queue = Queue2d::default();
+        let queue = queue();
         for (layer, x) in [(1, 0.0), (0, 1.0), (1, 2.0), (-1, 3.0), (0, 4.0)] {
             queue.set_layer(layer);
             queue.fill_rect(rect_at(x), RED);
@@ -790,7 +801,7 @@ mod tests {
 
     #[test]
     fn a_draw_remembers_the_clip_it_was_made_under() {
-        let queue = Queue2d::default();
+        let queue = queue();
         let outer = Rectangle::new(0.0, 0.0, 100.0, 100.0);
         let inner = Rectangle::new(50.0, 50.0, 100.0, 100.0);
         let both = Rectangle::new(50.0, 50.0, 50.0, 50.0);
@@ -809,7 +820,7 @@ mod tests {
 
     #[test]
     fn ending_the_frame_resets_the_layer_and_clip_and_reports_a_missing_pop() {
-        let queue = Queue2d::default();
+        let queue = queue();
         queue.set_layer(3);
         queue.push_clip(rect_at(0.0));
         assert!(!queue.end_frame());
@@ -821,7 +832,7 @@ mod tests {
 
     #[test]
     fn fills_and_copies_record_what_they_were_given() {
-        let queue = Queue2d::default();
+        let queue = queue();
         queue.fill_rect(rect_at(7.0), RED);
         assert_eq!(
             only_command(&queue),
@@ -860,7 +871,7 @@ mod tests {
 
     #[test]
     fn a_line_is_a_stretched_quad_through_both_ends() {
-        let queue = Queue2d::default();
+        let queue = queue();
         queue.draw_line(vec2(2.0, 1.0), vec2(8.0, 9.0), 4.0, RED);
         assert_eq!(
             only_command(&queue),
@@ -876,7 +887,7 @@ mod tests {
 
     #[test]
     fn a_rect_outline_is_four_bars_that_dont_overlap() {
-        let queue = Queue2d::default();
+        let queue = queue();
         queue.draw_rect(Rectangle::new(10.0, 20.0, 100.0, 50.0), 4.0, RED);
         let bars: Vec<Rectangle> = queue
             .take_draws()
@@ -904,7 +915,7 @@ mod tests {
             color: RED,
         };
         let ngon = |sides, inner_key| PolygonShape::Ngon { sides, inner_key };
-        let queue = Queue2d::default();
+        let queue = queue();
 
         queue.draw_poly(center, 6, 10.0, 0.5, RED);
         assert_eq!(only_command(&queue), polygon(ngon(6, 0), 10.0, 0.5));
@@ -990,7 +1001,7 @@ mod tests {
 
     #[test]
     fn a_nine_slice_records_its_nine_pieces_as_copies() {
-        let queue = Queue2d::default();
+        let queue = queue();
         let texture = Handle::for_tests(1);
         let dest = Rectangle::new(0.0, 0.0, 90.0, 60.0);
         let nine_slice = NineSlice {

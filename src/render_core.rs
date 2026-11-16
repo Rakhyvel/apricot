@@ -10,8 +10,8 @@ use crate::{
     font::Font,
     geometry::aabb::AABB,
     mesh::MeshData,
-    opengl::{self, create_program, DrawOptions, Primitive, RawMesh},
-    render::assets::{Assets, Builtins, FontId, Mesh, MeshId, ProgramId, TextureId, DEFAULT_FONT},
+    opengl::{self, DrawOptions, Primitive, RawMesh},
+    render::assets::{Assets, Builtins, FontId, Mesh, MeshId, ProgramId, TextureId},
 };
 
 use super::{
@@ -61,80 +61,14 @@ pub struct LinePath {
 
 impl RenderContext {
     pub fn new() -> Result<Self, Error> {
-        fn builtin(vert: &'static str, frag: &'static str) -> Program {
-            create_program(vert, frag).expect("apricot built-in shader failed to compile")
-        }
-
         let assets = Assets::new()?;
-
-        let builtins = Builtins {
-            program_2d: assets.programs.add(
-                builtin(
-                    include_str!("shaders/2d.vert"),
-                    include_str!("shaders/2d.frag"),
-                ),
-                Some("2d"),
-            ),
-            program_3d: assets.programs.add(
-                builtin(
-                    include_str!("shaders/3d.vert"),
-                    include_str!("shaders/3d.frag"),
-                ),
-                Some("3d"),
-            ),
-            program_3d_solid: assets.programs.add(
-                builtin(
-                    include_str!("shaders/3d.vert"),
-                    include_str!("shaders/solid-color.frag"),
-                ),
-                Some("3d-solid"),
-            ),
-            program_shadow: assets.programs.add(
-                builtin(
-                    include_str!("shaders/shadow.vert"),
-                    include_str!("shaders/shadow.frag"),
-                ),
-                Some("shadow"),
-            ),
-            program_line: assets.programs.add(
-                builtin(
-                    include_str!("shaders/line.vert"),
-                    include_str!("shaders/line.frag"),
-                ),
-                Some("line"),
-            ),
-            white_texture: {
-                let white = Texture::new();
-                white.set_pixels(1, 1, &[255; 4]);
-                assets.textures.add(white, Some("white"))
-            },
-            font: FontId::placeholder(0),
-            quad: assets
-                .meshes
-                .add(Mesh::from_data(MeshData::quad()), Some("quad")),
-            cube: assets
-                .meshes
-                .add(Mesh::from_data(MeshData::cube()), Some("cube")),
-            plane: assets
-                .meshes
-                .add(Mesh::from_data(MeshData::plane()), Some("plane")),
-        };
-
-        let mut renderer = Self {
-            assets,
+        let builtins = Builtins::new(&assets)?;
+        Ok(Self {
             view: View::default(),
-            queue_2d: Queue2d::default(),
+            queue_2d: Queue2d::new(builtins.font),
+            assets,
             builtins,
-        };
-
-        renderer.builtins.font = renderer.add_font_from_bytes(
-            DEFAULT_FONT,
-            "default",
-            16,
-            sdl2::ttf::FontStyle::NORMAL,
-        )?;
-        renderer.set_font(renderer.builtins.font);
-        Ok(renderer)
+        })
     }
 
     /// The uniform called `name` in `program`. Setting it works any time, whatever's being drawn

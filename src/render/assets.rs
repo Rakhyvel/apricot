@@ -47,6 +47,61 @@ pub struct Builtins {
     pub plane: MeshId,
 }
 
+impl Builtins {
+    /// Add the built-in assets to `assets`, starting with the default font. Fails if the font can't
+    /// be loaded or a built-in shader doesn't compile
+    pub(crate) fn new(assets: &Assets) -> Result<Self, Error> {
+        let program = |vert: &'static str, frag: &'static str, name: &'static str| {
+            Ok::<_, Error>(assets.programs.add(create_program(vert, frag)?, Some(name)))
+        };
+        let mesh = |data: MeshData, name: &'static str| {
+            assets.meshes.add(Mesh::from_data(data), Some(name))
+        };
+
+        let font = assets.add_font_from_bytes(
+            DEFAULT_FONT,
+            "default",
+            16,
+            sdl2::ttf::FontStyle::NORMAL,
+        )?;
+        let white = Texture::new();
+        white.set_pixels(1, 1, &[255; 4]);
+
+        Ok(Self {
+            program_2d: program(
+                include_str!("../shaders/2d.vert"),
+                include_str!("../shaders/2d.frag"),
+                "2d",
+            )?,
+            program_3d: program(
+                include_str!("../shaders/3d.vert"),
+                include_str!("../shaders/3d.frag"),
+                "3d",
+            )?,
+            program_3d_solid: program(
+                include_str!("../shaders/3d.vert"),
+                include_str!("../shaders/solid-color.frag"),
+                "3d-solid",
+            )?,
+            program_shadow: program(
+                include_str!("../shaders/shadow.vert"),
+                include_str!("../shaders/shadow.frag"),
+                "shadow",
+            )?,
+            program_line: program(
+                include_str!("../shaders/line.vert"),
+                include_str!("../shaders/line.frag"),
+                "line",
+            )?,
+            white_texture: assets.textures.add(white, Some("white")),
+            font,
+            quad: mesh(MeshData::quad(), "quad"),
+            cube: mesh(MeshData::cube(), "cube"),
+            plane: mesh(MeshData::plane(), "plane"),
+        })
+    }
+}
+
 /// A mesh uploaded to the GPU, with its shape kept on the CPU for picking and culling
 pub struct Mesh {
     raw: RawMesh,

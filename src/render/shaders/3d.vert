@@ -18,7 +18,7 @@ void main() {
     vec4 world_pos = u_model_matrix * vec4(a_position, 1.0);
     mat3 normal_matrix = transpose(inverse(mat3(u_model_matrix)));
     vec3 n = normalize(normal_matrix * a_normal);
-    vec3 l = dot(u_sun_dir, u_sun_dir) > 0.0 ? normalize(u_sun_dir) : normalize(vec3(0.4, 1.0, 0.6));
+    vec3 l = normalize(u_sun_dir);
 
     // Look up the shadow from slightly above the surface, so it can never shadow itself.
     // 1 texel when facing the light, up to 3 when edge-on, where the self-shadowing error is biggest.

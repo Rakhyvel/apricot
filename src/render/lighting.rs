@@ -52,6 +52,14 @@ pub(crate) struct LightState {
     shadows: bool,
 }
 
+/// Where the sun is when nothing has set a light, as a direction towards it
+const DEFAULT_SUN_DIRECTION: Vec3 = Vec3::new(0.4, 1.0, 0.6);
+
+/// The direction towards the sun that the shaders light with. `light` is the active light, if any
+fn sun_direction(light: Option<&LightState>) -> Vec3 {
+    light.map_or(DEFAULT_SUN_DIRECTION, |light| light.direction)
+}
+
 /// The active light
 pub(crate) struct Lighting<M = ShadowMap> {
     active: RefCell<Option<Active<M>>>,
@@ -270,10 +278,12 @@ impl RenderContext {
     pub(crate) fn upload_light(&self, program: ProgramId) {
         self.uniform(program, "u_shadow_map").set_i32(1);
 
-        match self.lighting.current() {
+        let current = self.lighting.current();
+        self.uniform(program, "u_sun_dir")
+            .set_vec3(&sun_direction(current.as_ref().map(|(_, light)| light)));
+
+        match current {
             Some((map, light)) => {
-                self.uniform(program, "u_sun_dir")
-                    .set_vec3(&light.direction);
                 self.uniform(program, "u_light_mvp")
                     .set_mat4(&light.proj_view);
                 self.uniform(program, "u_shadows")
@@ -285,7 +295,6 @@ impl RenderContext {
                 }
             }
             None => {
-                self.uniform(program, "u_sun_dir").set_vec3(&Vec3::zeros());
                 self.uniform(program, "u_shadows").set_i32(0);
             }
         }
@@ -498,6 +507,18 @@ mod tests {
             texel_size,
             shadows: true,
         }
+    }
+
+    #[test]
+    fn the_sun_is_the_lights_direction_or_a_default_when_theres_no_light() {
+        let light = lit(0.5);
+        assert_eq!(sun_direction(Some(&light)), light.direction);
+        let default = sun_direction(None);
+        assert!(
+            default.norm() > 0.5,
+            "the shader never gets a zero direction"
+        );
+        assert!(default.y > 0.0, "the default sun is above the horizon");
     }
 
     #[test]

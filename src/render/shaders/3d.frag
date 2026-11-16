@@ -3,7 +3,7 @@ uniform sampler2D u_texture;
 uniform sampler2DShadow u_shadow_map;
 uniform int u_shadows; // 0 = no shadow map bound
 uniform vec4 u_color;
-uniform vec3 u_sun_dir; // direction towards the light, all zeros means "use the default"
+uniform vec3 u_sun_dir; // direction towards the light
 
 in vec3 v_normal;
 in vec2 v_uv;
@@ -27,7 +27,7 @@ float shadow_visibility() {
 
 void main() {
     vec3 n = normalize(v_normal);
-    vec3 l = dot(u_sun_dir, u_sun_dir) > 0.0 ? normalize(u_sun_dir) : normalize(vec3(0.4, 1.0, 0.6));
+    vec3 l = normalize(u_sun_dir);
     float diffuse = max(dot(n, l), 0.0) * shadow_visibility();
     vec4 base = texture(u_texture, v_uv) * u_color;
     color = vec4(base.rgb * (0.2 + 0.8 * diffuse), base.a);

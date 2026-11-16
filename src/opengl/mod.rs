@@ -35,19 +35,22 @@ pub(crate) fn set_viewport(width: i32, height: i32) {
     check_gl();
 }
 
-/// Only draw inside `rect`, measured from the top left of a window `window_height` pixels tall.
-/// `None` draws everywhere
-pub(crate) fn set_scissor(rect: Option<crate::geometry::rectangle::Rectangle>, window_height: i32) {
+/// A box of whole pixels to draw inside, measured from the bottom left of the window like GL does
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) struct ScissorBox {
+    pub(crate) x: i32,
+    pub(crate) y: i32,
+    pub(crate) width: i32,
+    pub(crate) height: i32,
+}
+
+/// Only draw inside `scissor`. `None` draws everywhere
+pub(crate) fn set_scissor(scissor: Option<ScissorBox>) {
     unsafe {
-        match rect {
-            Some(r) => {
+        match scissor {
+            Some(b) => {
                 gl::Enable(gl::SCISSOR_TEST);
-                gl::Scissor(
-                    r.pos.x as i32,
-                    window_height - (r.pos.y + r.size.y) as i32,
-                    r.size.x as i32,
-                    r.size.y as i32,
-                );
+                gl::Scissor(b.x, b.y, b.width, b.height);
             }
             None => gl::Disable(gl::SCISSOR_TEST),
         }

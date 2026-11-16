@@ -10,7 +10,7 @@ use apricot::{
     geometry::rectangle::Rectangle,
     mesh::{MeshData, Vertex},
     render::assets::{MeshId, TextureId},
-    render2d::NineSlice,
+    render::canvas::NineSlice,
 };
 use nalgebra_glm::{vec2, vec3, vec4, Vec2};
 

@@ -8,6 +8,7 @@ use crate::{
     mesh::MeshData,
     render::{
         assets::{Assets, Builtins, FontId, Mesh, MeshId, ProgramId, TextureId},
+        canvas::Queue2d,
         lighting::Lighting,
         text::Font,
     },
@@ -15,7 +16,6 @@ use crate::{
 
 use super::{
     opengl::{Program, Texture},
-    render2d::Queue2d,
     view::View,
 };
 

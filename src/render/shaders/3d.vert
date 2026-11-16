@@ -2,7 +2,7 @@
 uniform mat4 u_model_matrix;
 uniform mat4 u_view_matrix;
 uniform mat4 u_proj_matrix;
-uniform mat4 light_mvp; // light's proj * view, only used when u_shadows != 0
+uniform mat4 u_light_mvp; // light's proj * view, only used when u_shadows != 0
 uniform float u_shadow_texel; // world-space size of one shadow-map texel
 uniform vec3 u_sun_dir; // direction towards the light
 
@@ -27,6 +27,6 @@ void main() {
 
     v_normal = n;
     v_uv = a_uv;
-    v_light_space_pos = light_mvp * vec4(world_pos.xyz + offset, 1.0);
+    v_light_space_pos = u_light_mvp * vec4(world_pos.xyz + offset, 1.0);
     gl_Position = u_proj_matrix * u_view_matrix * world_pos;
 }

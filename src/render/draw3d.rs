@@ -83,7 +83,7 @@ impl RenderContext {
             .get_texture_from_id(texture_id)
             .expect("invalid TextureId");
         texture.activate(0);
-        self.uniform(program, "texture0").set_i32(0);
+        self.uniform(program, "u_texture").set_i32(0);
 
         let mesh = self.get_mesh_from_id(mesh_id).expect("invalid MeshId");
         self.draw(program, &mesh, model, &self.camera_view_proj());

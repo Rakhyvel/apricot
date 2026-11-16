@@ -267,13 +267,13 @@ impl RenderContext {
 
     /// Hand `program` the light that's on, and bind its shadow map
     pub(crate) fn upload_light(&self, program: ProgramId) {
-        self.uniform(program, "shadow_map").set_i32(1);
+        self.uniform(program, "u_shadow_map").set_i32(1);
 
         match self.lighting.current() {
             Some((map, light)) => {
                 self.uniform(program, "u_sun_dir")
                     .set_vec3(&light.direction);
-                self.uniform(program, "light_mvp")
+                self.uniform(program, "u_light_mvp")
                     .set_mat4(&light.proj_view);
                 self.uniform(program, "u_shadows")
                     .set_i32(light.shadows as i32);

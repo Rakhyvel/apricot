@@ -11,7 +11,10 @@ use crate::{
     geometry::aabb::AABB,
     mesh::MeshData,
     opengl::{self, DrawOptions, Primitive, RawMesh},
-    render::assets::{Assets, Builtins, FontId, Mesh, MeshId, ProgramId, TextureId},
+    render::{
+        assets::{Assets, Builtins, FontId, Mesh, MeshId, ProgramId, TextureId},
+        lighting::Lighting,
+    },
 };
 
 use super::{
@@ -23,6 +26,7 @@ use super::{
 pub struct RenderContext {
     pub(crate) assets: Assets,
     pub(crate) view: View,
+    pub(crate) lighting: Lighting,
     pub(crate) queue_2d: Queue2d,
     pub builtins: Builtins,
 }
@@ -65,6 +69,7 @@ impl RenderContext {
         let builtins = Builtins::new(&assets)?;
         Ok(Self {
             view: View::default(),
+            lighting: Lighting::new(),
             queue_2d: Queue2d::new(builtins.font),
             assets,
             builtins,
@@ -135,27 +140,7 @@ impl RenderContext {
         let before = options.apply();
         let program = self.builtins.program_3d;
         self.uniform(program, "u_color").set_vec4(&tint);
-        self.uniform(program, "shadow_map").set_i32(1);
-
-        match self.light() {
-            Some(light) => {
-                self.uniform(program, "u_sun_dir")
-                    .set_vec3(&light.light_dir);
-                self.uniform(program, "light_mvp")
-                    .set_mat4(&light.light_proj_view);
-                self.uniform(program, "u_shadows")
-                    .set_i32(light.shadows as i32);
-                self.uniform(program, "u_shadow_texel")
-                    .set_f32(light.texel_size);
-                if light.shadows {
-                    opengl::bind_texture_id(1, light.depth_map);
-                }
-            }
-            None => {
-                self.uniform(program, "u_sun_dir").set_vec3(&Vec3::zeros());
-                self.uniform(program, "u_shadows").set_i32(0);
-            }
-        }
+        self.upload_light(program);
 
         let texture = self
             .get_texture_from_id(texture_id)

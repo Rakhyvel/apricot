@@ -10,8 +10,8 @@ use crate::{
     geometry::ray::Ray,
     opengl::{DrawOptions, Stencil},
     render::assets::{MeshId, TextureId},
+    render::lighting::ShadowPass,
     render_core::RenderContext,
-    shadow_map::ShadowPass,
 };
 
 /// A mesh with a texture, placed in the world

@@ -1,4 +1,4 @@
-//! What the renderer looks through: the camera, the window's size, and the light
+//! What the renderer looks through, the camera and the window's size
 
 use std::cell::{Cell, RefCell};
 
@@ -9,14 +9,12 @@ use crate::{
     geometry::frustum::Frustum,
     geometry::ray::Ray,
     render_core::RenderContext,
-    shadow_map::{ActiveLight, DirectionalLight},
 };
 
 #[derive(Default)]
 pub(crate) struct View {
     camera: RefCell<Camera>,
     screen: Cell<I32Vec2>,
-    light: Cell<Option<ActiveLight>>,
 }
 
 impl RenderContext {
@@ -37,10 +35,7 @@ impl RenderContext {
 
     /// The current camera's view and projection matrices, fitted to the window
     pub fn camera_view_proj(&self) -> ViewProj {
-        self.view
-            .camera
-            .borrow()
-            .view_proj(self.aspect_ratio())
+        self.view.camera.borrow().view_proj(self.aspect_ratio())
     }
 
     /// The current camera's view frustum, fitted to the window
@@ -81,27 +76,5 @@ impl RenderContext {
 
     pub(crate) fn set_screen_size(&self, size: I32Vec2) {
         self.view.screen.set(size);
-    }
-
-    /// Light everything drawn after this with `light`, or with nothing for `None`. Shadow passes on
-    /// the same light keep it up to date, and it lights without shadows until its first one
-    pub fn set_light(&self, light: Option<&DirectionalLight>) {
-        self.view.light.set(light.map(DirectionalLight::active));
-    }
-
-    pub(crate) fn light(&self) -> Option<ActiveLight> {
-        self.view.light.get()
-    }
-
-    /// Swap in a light's new state, if it's the light being drawn with
-    pub(crate) fn refresh_light(&self, updated: ActiveLight) {
-        let same = self
-            .view
-            .light
-            .get()
-            .is_some_and(|light| light.depth_map == updated.depth_map);
-        if same {
-            self.view.light.set(Some(updated));
-        }
     }
 }

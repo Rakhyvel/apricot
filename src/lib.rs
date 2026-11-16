@@ -14,6 +14,5 @@ pub mod registry;
 pub mod render;
 pub mod render2d;
 pub mod render_core;
-pub mod shadow_map;
 pub mod terrain;
 mod view;

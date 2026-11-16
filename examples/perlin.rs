@@ -20,8 +20,8 @@ use apricot::{
     mesh::MeshData,
     model_set::{Model, ModelSet},
     render::assets::MeshId,
+    render::lighting::DirectionalLight,
     render_core::RenderContext,
-    shadow_map::DirectionalLight,
     terrain::{
         chunks::{ChunkCoord, ChunkGrid},
         noise, normal_at, scatter, surface_height,

@@ -19,7 +19,7 @@ use apricot::{
     error::Error,
     input::Scancode,
     render::assets::TextureId,
-    shadow_map::DirectionalLight,
+    render::lighting::DirectionalLight,
 };
 use nalgebra_glm::{vec2, vec3, vec4};
 

@@ -1,15 +1,16 @@
+use std::{
+    cell::RefCell,
+    rc::{Rc, Weak},
+};
+
 use nalgebra_glm::{vec3, vec4, Mat4, Vec3};
 
 use crate::{
-    camera::ViewProj,
+    camera::{Camera, ViewProj},
     error::Error,
-    render::assets::{MeshId, ProgramId},
-};
-
-use super::{
-    camera::Camera,
     geometry::frustum::Frustum,
     opengl::{self, DrawOptions, Fbo, Texture},
+    render::assets::{MeshId, ProgramId},
     render_core::RenderContext,
 };
 
@@ -17,18 +18,9 @@ use super::{
 pub struct DirectionalLight {
     /// Where the light comes from, and the box it fits around the camera's view for shadows
     pub frustum: LightFrustum,
-    map: ShadowMap,
+    map: Rc<ShadowMap>,
     /// Whether it's had a shadow pass yet
     has_shadows: bool,
-}
-
-#[derive(Clone, Copy)]
-pub(crate) struct ActiveLight {
-    pub light_dir: Vec3,
-    pub light_proj_view: Mat4,
-    pub depth_map: u32,
-    pub texel_size: f32,
-    pub shadows: bool,
 }
 
 impl DirectionalLight {
@@ -36,7 +28,7 @@ impl DirectionalLight {
     pub fn new(direction: Vec3, shadow_map_size: i32) -> Result<Self, Error> {
         Ok(Self {
             frustum: LightFrustum::new(direction, shadow_map_size),
-            map: ShadowMap::new(shadow_map_size)?,
+            map: Rc::new(ShadowMap::new(shadow_map_size)?),
             has_shadows: false,
         })
     }
@@ -45,14 +37,61 @@ impl DirectionalLight {
         self.frustum.view_proj.combined()
     }
 
-    pub(crate) fn active(&self) -> ActiveLight {
-        ActiveLight {
-            light_dir: self.frustum.direction,
-            light_proj_view: self.light_proj_view(),
-            depth_map: self.map.depth_map.id,
-            texel_size: self.frustum.texel_size,
-            shadows: self.has_shadows,
+    /// What drawing needs to know about the light right now
+    fn state(&self) -> LightState {
+        self.frustum.state(self.has_shadows)
+    }
+}
+
+/// What the shaders need to know about a light, as of its last shadow pass
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub(crate) struct LightState {
+    direction: Vec3,
+    proj_view: Mat4,
+    texel_size: f32,
+    shadows: bool,
+}
+
+/// The active light
+pub(crate) struct Lighting<M = ShadowMap> {
+    active: RefCell<Option<Active<M>>>,
+}
+
+struct Active<M> {
+    map: Weak<M>,
+    state: LightState,
+}
+
+impl<M> Lighting<M> {
+    pub(crate) fn new() -> Self {
+        Self {
+            active: RefCell::new(None),
         }
+    }
+
+    /// Turn on the light with shadow map `map` and `state`, or turn the light off for `None`
+    pub(crate) fn set(&self, light: Option<(&Rc<M>, LightState)>) {
+        *self.active.borrow_mut() = light.map(|(map, state)| Active {
+            map: Rc::downgrade(map),
+            state,
+        });
+    }
+
+    /// Bring the light up to date after a shadow pass, if `map` is the light that's on
+    pub(crate) fn refresh(&self, map: &Rc<M>, state: LightState) {
+        if let Some(active) = self.active.borrow_mut().as_mut() {
+            if std::ptr::eq(active.map.as_ptr(), Rc::as_ptr(map)) {
+                active.state = state;
+            }
+        }
+    }
+
+    /// The light that's on and its shadow map. The map stays alive for as long as it's held.
+    /// `None` if no light is on, or if its owner dropped it
+    pub(crate) fn current(&self) -> Option<(Rc<M>, LightState)> {
+        let active = self.active.borrow();
+        let active = active.as_ref()?;
+        Some((active.map.upgrade()?, active.state))
     }
 }
 
@@ -109,6 +148,17 @@ impl LightFrustum {
         self.texel_size
     }
 
+    /// What drawing needs to know about the light as of the last fit. `shadows` says whether
+    /// there's a shadow map drawn to use
+    fn state(&self, shadows: bool) -> LightState {
+        LightState {
+            direction: self.direction,
+            proj_view: self.view_proj.combined(),
+            texel_size: self.texel_size,
+            shadows,
+        }
+    }
+
     /// Fit the box around everything `camera` can see on a screen with the given aspect ratio,
     /// out to `shadow_distance`
     pub fn fit_to_camera(&mut self, camera: &Camera, aspect: f32) {
@@ -163,7 +213,7 @@ impl LightFrustum {
 }
 
 /// The depth texture shadows get drawn into, and the framebuffer that draws into it
-struct ShadowMap {
+pub(crate) struct ShadowMap {
     frame_buffer: Fbo,
     depth_map: Texture,
     size: i32,
@@ -207,6 +257,39 @@ impl ShadowPass<'_> {
 }
 
 impl RenderContext {
+    /// Light everything drawn after this with `light`, or with nothing for `None`. Shadow passes on
+    /// the same light keep it up to date, and it lights without shadows until its first one. The
+    /// renderer doesn't keep the light alive, so dropping it turns the light off
+    pub fn set_light(&self, light: Option<&DirectionalLight>) {
+        self.lighting
+            .set(light.map(|light| (&light.map, light.state())));
+    }
+
+    /// Hand `program` the light that's on, and bind its shadow map
+    pub(crate) fn upload_light(&self, program: ProgramId) {
+        self.uniform(program, "shadow_map").set_i32(1);
+
+        match self.lighting.current() {
+            Some((map, light)) => {
+                self.uniform(program, "u_sun_dir")
+                    .set_vec3(&light.direction);
+                self.uniform(program, "light_mvp")
+                    .set_mat4(&light.proj_view);
+                self.uniform(program, "u_shadows")
+                    .set_i32(light.shadows as i32);
+                self.uniform(program, "u_shadow_texel")
+                    .set_f32(light.texel_size);
+                if light.shadows {
+                    opengl::bind_texture_id(1, map.depth_map.id);
+                }
+            }
+            None => {
+                self.uniform(program, "u_sun_dir").set_vec3(&Vec3::zeros());
+                self.uniform(program, "u_shadows").set_i32(0);
+            }
+        }
+    }
+
     /// Render onto `light`'s shadow map, fitted to the current camera.
     pub fn shadow_pass(
         &self,
@@ -238,7 +321,7 @@ impl RenderContext {
         before.restore();
 
         light.has_shadows = true;
-        self.refresh_light(light.active());
+        self.lighting.refresh(&light.map, light.state());
     }
 }
 
@@ -405,5 +488,90 @@ mod tests {
         let light = fitted();
         let width = 2.0 / light.view_proj().proj[(0, 0)];
         assert!((light.texel_size() - width / 1024.0).abs() < 1e-6);
+    }
+
+    fn lit(texel_size: f32) -> LightState {
+        LightState {
+            direction: vec3(0.0, 1.0, 0.0),
+            proj_view: Mat4::identity(),
+            texel_size,
+            shadows: true,
+        }
+    }
+
+    #[test]
+    fn a_fitted_light_describes_itself_for_the_shaders() {
+        let light = fitted();
+        let state = light.state(true);
+        assert_eq!(state.direction, light.direction());
+        assert_eq!(state.proj_view, light.view_proj().combined());
+        assert_eq!(state.texel_size, light.texel_size());
+        assert!(state.shadows);
+        assert!(!light.state(false).shadows);
+    }
+
+    #[test]
+    fn nothing_is_lit_until_a_light_is_set() {
+        let lighting: Lighting<u8> = Lighting::new();
+        assert!(lighting.current().is_none());
+    }
+
+    #[test]
+    fn the_light_that_is_set_is_the_one_drawn_with_until_it_is_turned_off() {
+        let lighting = Lighting::new();
+        let map = Rc::new(7u8);
+        lighting.set(Some((&map, lit(0.5))));
+        let (current, state) = lighting.current().unwrap();
+        assert!(Rc::ptr_eq(&current, &map));
+        assert_eq!(state, lit(0.5));
+
+        lighting.set(None);
+        assert!(lighting.current().is_none());
+    }
+
+    #[test]
+    fn setting_a_light_doesnt_keep_it_alive_and_dropping_it_turns_the_light_off() {
+        let lighting = Lighting::new();
+        let map = Rc::new(7u8);
+        lighting.set(Some((&map, lit(0.5))));
+        assert_eq!(Rc::strong_count(&map), 1, "the renderer only watches it");
+
+        drop(map);
+        assert!(lighting.current().is_none(), "no shadow map left to bind");
+    }
+
+    #[test]
+    fn a_dropped_light_stays_off_when_another_light_shows_up() {
+        let lighting = Lighting::new();
+        let old = Rc::new(1u8);
+        lighting.set(Some((&old, lit(0.5))));
+        drop(old);
+        // A light that was never set isn't mistaken for the dropped one
+        let newer = Rc::new(2u8);
+        lighting.refresh(&newer, lit(9.0));
+        assert!(lighting.current().is_none());
+    }
+
+    #[test]
+    fn refreshing_only_updates_the_light_that_is_on() {
+        let lighting = Lighting::new();
+        let (on, other) = (Rc::new(1u8), Rc::new(2u8));
+        lighting.set(Some((&on, lit(0.5))));
+        lighting.refresh(&other, lit(9.0));
+        assert_eq!(lighting.current().unwrap().1, lit(0.5));
+        lighting.refresh(&on, lit(2.0));
+        assert_eq!(lighting.current().unwrap().1, lit(2.0));
+    }
+
+    #[test]
+    fn a_shadow_map_being_drawn_with_stays_alive_even_if_its_light_is_dropped_mid_draw() {
+        let lighting = Lighting::new();
+        let map = Rc::new(7u8);
+        lighting.set(Some((&map, lit(0.5))));
+        let (held, _) = lighting.current().unwrap();
+        drop(map);
+        assert_eq!(*held, 7);
+        drop(held);
+        assert!(lighting.current().is_none());
     }
 }

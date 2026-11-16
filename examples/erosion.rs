@@ -19,7 +19,7 @@ use apricot::{
     input::Scancode,
     mesh::MeshData,
     render::assets::{MeshId, TextureId},
-    shadow_map::DirectionalLight,
+    render::lighting::DirectionalLight,
     terrain::{
         self,
         grid::{ErosionSettings, HeightGrid},

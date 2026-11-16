@@ -13,4 +13,3 @@ pub mod registry;
 pub mod render;
 pub mod render_core;
 pub mod terrain;
-mod view;

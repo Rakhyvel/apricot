@@ -1,10 +1,16 @@
 //! This file contains the core rendering functionality that is shared between 2D and 3D rendering.
 
-use std::{cell::Ref, path::Path};
+use std::{
+    cell::{Cell, Ref},
+    path::Path,
+};
+
+use nalgebra_glm::{I32Vec2, Vec2, Vec3};
 
 use crate::{
+    camera::{Camera, ViewProj, Viewport},
     error::Error,
-    geometry::aabb::AABB,
+    geometry::{aabb::AABB, frustum::Frustum, ray::Ray},
     mesh::MeshData,
     render::{
         assets::{Assets, Builtins, FontId, Mesh, MeshId, ProgramId, TextureId},
@@ -14,14 +20,12 @@ use crate::{
     },
 };
 
-use super::{
-    opengl::{Program, Texture},
-    view::View,
-};
+use super::opengl::{Program, Texture};
 
 pub struct RenderContext {
     pub(crate) assets: Assets,
-    pub(crate) view: View,
+    camera: Cell<Camera>,
+    screen_size: Cell<I32Vec2>,
     pub(crate) lighting: Lighting,
     pub(crate) queue_2d: Queue2d,
     pub builtins: Builtins,
@@ -32,12 +36,71 @@ impl RenderContext {
         let assets = Assets::new()?;
         let builtins = Builtins::new(&assets)?;
         Ok(Self {
-            view: View::default(),
+            camera: Cell::default(),
+            screen_size: Cell::default(),
             lighting: Lighting::new(),
             queue_2d: Queue2d::new(builtins.font),
             assets,
             builtins,
         })
+    }
+}
+
+/// The camera, and the window it looks through
+impl RenderContext {
+    pub fn set_camera(&self, camera: Camera) {
+        self.camera.set(camera);
+    }
+
+    /// A copy of the current camera
+    pub fn camera(&self) -> Camera {
+        self.camera.get()
+    }
+
+    /// The window's size, in pixels
+    pub fn screen_size(&self) -> I32Vec2 {
+        self.screen_size.get()
+    }
+
+    pub(crate) fn set_screen_size(&self, size: I32Vec2) {
+        self.screen_size.set(size);
+    }
+
+    /// The window as a viewport, for converting between the world and the screen
+    pub fn viewport(&self) -> Viewport {
+        let size = self.screen_size();
+        Viewport::new(size.x as f32, size.y as f32)
+    }
+
+    /// The window's aspect ratio (width / height)
+    pub fn aspect_ratio(&self) -> f32 {
+        self.viewport().aspect_ratio()
+    }
+
+    /// The current camera's view and projection matrices, fitted to the window
+    pub fn camera_view_proj(&self) -> ViewProj {
+        self.camera().view_proj(self.aspect_ratio())
+    }
+
+    /// The current camera's view frustum, fitted to the window
+    pub fn camera_frustum(&self) -> Frustum {
+        self.camera().frustum(self.aspect_ratio())
+    }
+
+    /// Roughly how many pixels across the radius of a sphere at `center` looks on screen
+    pub fn projected_radius_px(&self, center: Vec3, radius: f32) -> f32 {
+        self.camera()
+            .projected_radius_px(center, radius, self.viewport())
+    }
+
+    /// Where a world-space point lands on screen, in pixels. `None` if it's behind the camera
+    pub fn world_to_screen(&self, p: Vec3) -> Option<Vec2> {
+        self.camera().world_to_screen(p, self.viewport())
+    }
+
+    /// The ray from the camera through `pos` on screen, in pixels from the top left
+    pub fn screen_ray(&self, pos: Vec2) -> Ray {
+        self.camera().screen_ray(pos, self.viewport())
     }
 }
 

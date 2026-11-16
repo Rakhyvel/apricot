@@ -107,10 +107,12 @@ impl<K: Copy + Eq + Hash> ModelSet<K> {
         self.entries.get(&key).map(|e| &e.model)
     }
 
-    /// The model under `key`, to change its texture, tint, outline, or shadow. Changing its
-    /// transform here doesn't move it for culling or picking
-    pub fn get_mut(&mut self, key: K) -> Option<&mut Model> {
-        self.entries.get_mut(&key).map(|e| &mut e.model)
+    /// Whether the model under `key` gets an outline from `draw_outlines`. Does nothing if there
+    /// isn't one
+    pub fn set_outlined(&mut self, key: K, outlined: bool) {
+        if let Some(entry) = self.entries.get_mut(&key) {
+            entry.model.outlined = outlined;
+        }
     }
 
     /// Move, rotate, or scale the model under `key`. Does nothing if there isn't one
@@ -276,8 +278,11 @@ mod tests {
         assert_eq!(set.len(), 2);
         assert_eq!(set.get("a").unwrap().transform, at(9.0));
 
-        set.get_mut("b").unwrap().outlined = true;
+        set.set_outlined("b", true);
         assert!(set.get("b").unwrap().outlined);
+        set.set_outlined("b", false);
+        assert!(!set.get("b").unwrap().outlined);
+        set.set_outlined("missing", true);
 
         assert_eq!(set.remove("a").unwrap().transform, at(9.0));
         assert!(set.remove("a").is_none());

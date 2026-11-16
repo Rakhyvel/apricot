@@ -131,9 +131,7 @@ impl Scene for Models {
             let key = Thing::Shape(x, z);
             self.models
                 .set_transform(key, shape_transform(x, z, self.angle));
-            if let Some(shape) = self.models.get_mut(key) {
-                shape.outlined = self.hovered == Some(key);
-            }
+            self.models.set_outlined(key, self.hovered == Some(key));
         }
         SceneCommand::None
     }

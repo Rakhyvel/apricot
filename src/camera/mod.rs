@@ -100,7 +100,7 @@ impl Default for ProjectionKind {
     }
 }
 
-#[derive(Default, Debug, Copy, Clone)]
+#[derive(Debug, Copy, Clone)]
 /// A camera data structure
 pub struct Camera {
     position: nalgebra_glm::Vec3,
@@ -109,6 +109,18 @@ pub struct Camera {
 
     pub projection_kind: ProjectionKind,
     view_matrix: nalgebra_glm::Mat4,
+}
+
+impl Default for Camera {
+    /// Looks at the origin from a little above and behind it, with a 45 degree field of view
+    fn default() -> Self {
+        Self::new(
+            nalgebra_glm::vec3(0.0, 2.0, 6.0),
+            Vec3::zeros(),
+            nalgebra_glm::vec3(0.0, 1.0, 0.0),
+            ProjectionKind::default(),
+        )
+    }
 }
 
 impl Camera {
@@ -382,6 +394,24 @@ mod tests {
                 }
             }
         }
+    }
+
+    #[test]
+    fn the_default_camera_looks_at_the_origin_from_above_and_behind() {
+        let camera = Camera::default();
+        let middle = camera.world_to_screen(Vec3::zeros(), VIEWPORT).unwrap();
+        assert!((middle - vec2(W / 2.0, H / 2.0)).norm() < 1e-3);
+        let above = camera
+            .world_to_screen(vec3(0.0, 1.0, 0.0), VIEWPORT)
+            .unwrap();
+        assert!(above.y < middle.y, "up is up on screen");
+        assert!(camera
+            .world_to_screen(vec3(0.0, 0.0, 100.0), VIEWPORT)
+            .is_none());
+        assert!(matches!(
+            camera.projection_kind,
+            ProjectionKind::Perspective { .. }
+        ));
     }
 
     #[test]

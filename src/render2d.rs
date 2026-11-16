@@ -13,8 +13,8 @@ use crate::{
 
 use super::{
     camera::{Camera, ProjectionKind, ViewProj},
-    font::Font,
     geometry::rectangle::Rectangle,
+    render::text::Font,
     render_core::RenderContext,
 };
 
@@ -247,6 +247,16 @@ impl Queue2d {
         );
     }
 
+    fn draw_text(&self, font: &Font, pos: Vec2, text: &str, color: Vec4) {
+        font.layout(text, |offset, source| {
+            let dest = Rectangle {
+                pos: pos + offset,
+                size: source.size,
+            };
+            self.copy_texture(dest, font.cache_texture, source, color);
+        });
+    }
+
     fn set_layer(&self, layer: i32) {
         self.layer.set(layer);
     }
@@ -379,7 +389,13 @@ impl RenderContext {
     }
 
     pub fn draw_text(&self, pos: Vec2, text: &str, color: Vec4) {
-        self.get_current_font().draw(pos, text, self, color);
+        let font = self.get_current_font();
+        assert!(
+            self.get_texture_from_id(font.cache_texture).is_some(),
+            "draw_text: {:?} isn't a loaded texture",
+            font.cache_texture
+        );
+        self.queue_2d.draw_text(&font, pos, text, color);
     }
 
     pub fn set_draw_layer(&self, layer: i32) {
@@ -681,6 +697,7 @@ impl ClipStack {
 mod tests {
     use super::*;
     use crate::registry::Handle;
+    use crate::render::text::test_font;
 
     fn same_rect(a: Rectangle, b: Rectangle) -> bool {
         a.pos == b.pos && a.size == b.size
@@ -870,6 +887,36 @@ mod tests {
                 texture_dest: rect_at(2.0),
                 color_mod: RED,
             }
+        );
+    }
+
+    #[test]
+    fn text_records_one_copy_per_glyph_at_the_place_the_font_puts_it() {
+        let queue = queue();
+        let texture = Handle::for_tests(3);
+        // 8 by 16 glyphs that advance 10, with a newline moving down 20
+        let font = test_font(texture);
+        queue.draw_text(&font, vec2(100.0, 50.0), "ai\nb\u{e9}", RED);
+        let glyph = |byte: u8| {
+            let x = (byte - 32) as f32 * 8.0;
+            Rectangle::new(x, 0.0, 8.0, 16.0)
+        };
+        let copy = |x: f32, y: f32, byte: u8| DrawCommand::CopyTexture {
+            dest: Rectangle::new(x, y, 8.0, 16.0),
+            texture_id: texture,
+            texture_dest: glyph(byte),
+            color_mod: RED,
+        };
+        let commands: Vec<DrawCommand> =
+            queue.take_draws().into_iter().map(|d| d.command).collect();
+        // The accented letter has no glyph, so it gets no copy
+        assert_eq!(
+            commands,
+            [
+                copy(100.0, 50.0, b'a'),
+                copy(110.0, 50.0, b'i'),
+                copy(100.0, 70.0, b'b')
+            ]
         );
     }
 

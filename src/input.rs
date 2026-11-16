@@ -555,7 +555,10 @@ mod tests {
         assert!(!input.key_down(Scancode::W) && input.key_released(Scancode::W));
 
         run_tick(&mut input, &[]);
-        assert!(!input.key_released(Scancode::W), "released only lasts one tick");
+        assert!(
+            !input.key_released(Scancode::W),
+            "released only lasts one tick"
+        );
     }
 
     #[test]
@@ -566,7 +569,11 @@ mod tests {
         assert_eq!(input.mouse_vel, vec2(7.0, -3.0));
 
         run_tick(&mut input, &[]);
-        assert_eq!(input.mouse_pos, vec2(14.0, 18.0), "the mouse stays where it was");
+        assert_eq!(
+            input.mouse_pos,
+            vec2(14.0, 18.0),
+            "the mouse stays where it was"
+        );
         assert_eq!(input.mouse_vel, vec2(0.0, 0.0));
     }
 
@@ -593,20 +600,32 @@ mod tests {
         assert!(!input.mouse_down(MouseButton::Right));
         assert!(!input.take_click(), "not clicked until it's let go");
 
-        run_tick(&mut input, &[mouse_up(Left, 51, 50), mouse_down(Middle, 0, 0)]);
+        run_tick(
+            &mut input,
+            &[mouse_up(Left, 51, 50), mouse_down(Middle, 0, 0)],
+        );
         assert!(input.mouse_clicked(MouseButton::Left));
         assert!(!input.mouse_clicked(MouseButton::Right));
         assert!(!input.is_click_consumed());
         assert!(input.take_click());
         assert!(input.is_click_consumed());
         assert!(!input.take_click(), "someone already took it");
-        assert!(input.mouse_clicked(MouseButton::Left), "taking it doesn't unclick it");
+        assert!(
+            input.mouse_clicked(MouseButton::Left),
+            "taking it doesn't unclick it"
+        );
 
-        run_tick(&mut input, &[mouse_down(Right, 5, 5), mouse_up(Right, 5, 5)]);
+        run_tick(
+            &mut input,
+            &[mouse_down(Right, 5, 5), mouse_up(Right, 5, 5)],
+        );
         assert!(input.mouse_clicked(MouseButton::Right));
         assert!(!input.mouse_clicked(MouseButton::Left));
         assert!(!input.is_click_consumed(), "consuming only lasts one tick");
-        assert!(!input.take_click(), "take_click only looks at the left button");
+        assert!(
+            !input.take_click(),
+            "take_click only looks at the left button"
+        );
     }
 
     #[test]
@@ -619,7 +638,10 @@ mod tests {
 
         run_tick(&mut input, &[mouse_up(Left, 30, 0)]);
         assert!(!input.mouse_dragging(MouseButton::Left));
-        assert!(!input.mouse_clicked(MouseButton::Left), "a drag isn't a click");
+        assert!(
+            !input.mouse_clicked(MouseButton::Left),
+            "a drag isn't a click"
+        );
     }
 
     /// A joystick with 3 axes, 4 buttons, and 1 hat, as if it was just plugged in
@@ -663,10 +685,17 @@ mod tests {
     fn joystick_axes_run_from_minus_one_to_one() {
         let mut input = Input::default();
         plug_in(&mut input, 7);
-        run_tick(&mut input, &[axis(7, 0, 32767), axis(7, 1, -32768), axis(7, 2, 16384)]);
+        run_tick(
+            &mut input,
+            &[axis(7, 0, 32767), axis(7, 1, -32768), axis(7, 2, 16384)],
+        );
         let js = input.joystick().unwrap();
         assert_eq!(js.axis(0), 1.0);
-        assert_eq!(js.axis(1), -1.0, "the extra step at the bottom gets clamped");
+        assert_eq!(
+            js.axis(1),
+            -1.0,
+            "the extra step at the bottom gets clamped"
+        );
         assert!((js.axis(2) - 0.5).abs() < 1e-4);
         assert_eq!(js.axis(3), 0.0, "missing axes read 0");
         assert_eq!(js.num_axes(), 3);
@@ -692,7 +721,10 @@ mod tests {
 
         run_tick(&mut input, &[]);
         let js = input.joystick().unwrap();
-        assert!(js.button_down(2) && !js.button_pressed(2), "pressed only lasts one tick");
+        assert!(
+            js.button_down(2) && !js.button_pressed(2),
+            "pressed only lasts one tick"
+        );
 
         run_tick(&mut input, &[joy_button(7, 2, false)]);
         assert!(!input.joystick().unwrap().button_down(2));

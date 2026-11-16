@@ -4,7 +4,6 @@ pub mod app;
 pub mod audio;
 pub mod camera;
 pub mod error;
-pub mod font;
 pub mod geometry;
 pub mod input;
 pub mod mesh;

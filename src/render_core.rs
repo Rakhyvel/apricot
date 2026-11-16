@@ -4,12 +4,12 @@ use std::{cell::Ref, path::Path};
 
 use crate::{
     error::Error,
-    font::Font,
     geometry::aabb::AABB,
     mesh::MeshData,
     render::{
         assets::{Assets, Builtins, FontId, Mesh, MeshId, ProgramId, TextureId},
         lighting::Lighting,
+        text::Font,
     },
 };
 

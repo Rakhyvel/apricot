@@ -338,5 +338,4 @@ mod tests {
         assert!(scenes.is_empty());
         assert!(scenes.top().is_none());
     }
-
 }

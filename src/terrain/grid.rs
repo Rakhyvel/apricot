@@ -172,12 +172,22 @@ mod tests {
     #[test]
     fn the_last_point_on_each_side_is_on_the_grid() {
         let mut grid = HeightGrid::new(4);
-        for p in [vec2(3.0, 0.0), vec2(0.0, 3.0), vec2(3.0, 3.0), vec2(3.99, 3.99)] {
+        for p in [
+            vec2(3.0, 0.0),
+            vec2(0.0, 3.0),
+            vec2(3.0, 3.0),
+            vec2(3.99, 3.99),
+        ] {
             assert!(grid.contains(p), "{p:?}");
             grid.set_height(p, 1.0);
             assert_eq!(grid.height(p), 1.0, "{p:?}");
         }
-        for p in [vec2(4.0, 0.0), vec2(0.0, 4.0), vec2(-0.01, 2.0), vec2(2.0, -0.01)] {
+        for p in [
+            vec2(4.0, 0.0),
+            vec2(0.0, 4.0),
+            vec2(-0.01, 2.0),
+            vec2(2.0, -0.01),
+        ] {
             assert!(!grid.contains(p), "{p:?}");
         }
     }

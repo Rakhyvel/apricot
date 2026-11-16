@@ -1,14 +1,10 @@
-//! This module deals with managing fonts
+//! Fonts, from rasterizing a font file to laying out text with the result
 
-use nalgebra_glm::{vec2, Vec2, Vec4};
+use nalgebra_glm::{vec2, Vec2};
 use sdl2::{pixels::Color, rect::Rect, surface::Surface, ttf::Sdl2TtfContext};
 use std::path::Path;
 
-use crate::error::Error;
-
-use super::{
-    geometry::rectangle::Rectangle, render::assets::TextureId, render_core::RenderContext,
-};
+use crate::{error::Error, geometry::rectangle::Rectangle, render::assets::TextureId};
 
 #[derive(Copy, Clone, Default)]
 struct Glyph {
@@ -32,7 +28,7 @@ struct GlyphTable {
 
 /// A cached font
 pub struct Font {
-    pub cache_texture: TextureId,
+    pub(crate) cache_texture: TextureId,
     table: GlyphTable,
 }
 
@@ -47,15 +43,11 @@ impl Font {
         self.table.measure(text)
     }
 
-    /// Draw text in a font to the screen
-    pub fn draw(&self, pos: Vec2, text: &str, renderer: &RenderContext, color: Vec4) {
-        self.table.layout(text, |offset, glyph| {
-            let dest = Rectangle {
-                pos: pos + offset,
-                size: glyph.rect.size,
-            };
-            renderer.copy_texture(dest, self.cache_texture, glyph.rect, &color);
-        });
+    /// Lays out `text` starting at the origin, calling `place` with where each glyph goes and the
+    /// part of the font's image that holds it. Returns the size of the whole block of text
+    pub(crate) fn layout(&self, text: &str, mut place: impl FnMut(Vec2, Rectangle)) -> Vec2 {
+        self.table
+            .layout(text, |offset, glyph| place(offset, glyph.rect))
     }
 }
 
@@ -237,7 +229,7 @@ impl FontRasterizer {
 
 impl Glyph {
     /// Create a new glyph
-    pub fn new(rect: Rect, advance: i32) -> Self {
+    fn new(rect: Rect, advance: i32) -> Self {
         Self {
             rect: Rectangle {
                 pos: vec2(rect.x as f32, rect.y as f32),
@@ -248,52 +240,62 @@ impl Glyph {
     }
 }
 
+/// A font for tests with hand-made glyphs. They're 8 wide and 16 tall, and each advances 10
+/// except `i`, which advances 4. A newline moves down 20. The glyph for byte `b` is cut from
+/// `(b - 32) * 8` across the image
+#[cfg(test)]
+pub(crate) fn test_font(cache_texture: TextureId) -> Font {
+    Font {
+        cache_texture,
+        table: test_table(),
+    }
+}
+
+#[cfg(test)]
+fn test_table() -> GlyphTable {
+    let mut glyphs = [Glyph::default(); ASCII_NUM_PRINTABLE_CHARS];
+    for (i, glyph) in glyphs.iter_mut().enumerate() {
+        glyph.rect = Rectangle::new(i as f32 * 8.0, 0.0, 8.0, 16.0);
+        glyph.advance = 10;
+    }
+    glyphs[(b'i' - ASCII_FIRST_PRINTABLE_CHAR) as usize].advance = 4;
+    GlyphTable {
+        glyphs,
+        height: 16,
+        line_skip: 20,
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
     use crate::registry::Handle;
 
-    /// Glyphs 8 wide and 16 tall that each advance 10, except `i` which advances 4. A newline
-    /// moves down 20
-    fn table() -> GlyphTable {
-        let mut glyphs = [Glyph::default(); ASCII_NUM_PRINTABLE_CHARS];
-        for (i, glyph) in glyphs.iter_mut().enumerate() {
-            glyph.rect = Rectangle::new(i as f32 * 8.0, 0.0, 8.0, 16.0);
-            glyph.advance = 10;
-        }
-        glyphs[(b'i' - ASCII_FIRST_PRINTABLE_CHAR) as usize].advance = 4;
-        GlyphTable {
-            glyphs,
-            height: 16,
-            line_skip: 20,
-        }
-    }
-
     #[test]
     fn measuring_adds_up_the_advances_and_one_line_height() {
-        assert_eq!(table().measure(""), vec2(0.0, 16.0));
-        assert_eq!(table().measure("abc"), vec2(30.0, 16.0));
-        assert_eq!(table().measure("ii"), vec2(8.0, 16.0));
+        assert_eq!(test_table().measure(""), vec2(0.0, 16.0));
+        assert_eq!(test_table().measure("abc"), vec2(30.0, 16.0));
+        assert_eq!(test_table().measure("ii"), vec2(8.0, 16.0));
     }
 
     #[test]
     fn each_newline_goes_down_a_line_skip_and_the_widest_line_sets_the_width() {
-        assert_eq!(table().measure("a\nbc"), vec2(20.0, 36.0));
-        assert_eq!(table().measure("abc\nd"), vec2(30.0, 36.0));
-        assert_eq!(table().measure("a\n"), vec2(10.0, 36.0));
-        assert_eq!(table().measure("a\n\nb"), vec2(10.0, 56.0));
+        assert_eq!(test_table().measure("a\nbc"), vec2(20.0, 36.0));
+        assert_eq!(test_table().measure("abc\nd"), vec2(30.0, 36.0));
+        assert_eq!(test_table().measure("a\n"), vec2(10.0, 36.0));
+        assert_eq!(test_table().measure("a\n\nb"), vec2(10.0, 56.0));
     }
 
     #[test]
     fn characters_without_a_glyph_are_skipped() {
-        let plain = table().measure("ab");
-        assert_eq!(table().measure("a\t\u{e9}\u{20ac}b\u{7f}"), plain);
+        let plain = test_table().measure("ab");
+        assert_eq!(test_table().measure("a\t\u{e9}\u{20ac}b\u{7f}"), plain);
     }
 
     #[test]
     fn layout_places_each_glyph_where_the_cursor_is() {
         let mut placed = Vec::new();
-        let size = table().layout("ab\nc", |at, glyph| placed.push((at, glyph.rect.pos.x)));
+        let size = test_table().layout("ab\nc", |at, glyph| placed.push((at, glyph.rect.pos.x)));
         // The glyph for byte b is the one at b - 32, and each is 8 wide
         let glyph_x = |c: u8| (c - ASCII_FIRST_PRINTABLE_CHAR) as f32 * 8.0;
         assert_eq!(
@@ -309,22 +311,33 @@ mod tests {
 
     #[test]
     fn a_font_measures_with_its_table() {
-        let font = Font {
-            cache_texture: Handle::for_tests(0),
-            table: table(),
+        let font = test_font(Handle::for_tests(0));
+        assert_eq!(font.measure("a\nbc"), vec2(20.0, 36.0));
+    }
+
+    #[test]
+    fn a_font_lays_out_the_part_of_its_image_for_each_glyph() {
+        let font = test_font(Handle::for_tests(0));
+        let mut placed = Vec::new();
+        let size = font.layout("ab\ni", |at, source| placed.push((at, source)));
+        let glyph = |byte: u8| {
+            let x = (byte - ASCII_FIRST_PRINTABLE_CHAR) as f32 * 8.0;
+            Rectangle::new(x, 0.0, 8.0, 16.0)
         };
         assert_eq!(
-            font.measure(
-                "a
-bc"
-            ),
-            vec2(20.0, 36.0)
+            placed,
+            [
+                (vec2(0.0, 0.0), glyph(b'a')),
+                (vec2(10.0, 0.0), glyph(b'b')),
+                (vec2(0.0, 20.0), glyph(b'i')),
+            ]
         );
+        assert_eq!(size, vec2(20.0, 36.0));
     }
 
     #[test]
     fn only_printable_ascii_has_glyphs() {
-        let table = table();
+        let table = test_table();
         for byte in [32, b'a', 126] {
             assert!(table.get_glyph(byte).is_some(), "byte {byte}");
         }

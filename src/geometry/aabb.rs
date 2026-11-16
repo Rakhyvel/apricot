@@ -264,16 +264,47 @@ mod tests {
     fn raycast_finds_each_face_of_an_off_center_box() {
         // (start, direction, t, normal of the face it hits)
         let cases = [
-            (vec3(4.0, -5.0, 0.0), vec3(0.0, 1.0, 0.0), 6.0, vec3(0.0, -1.0, 0.0)),
-            (vec3(4.0, 9.0, 0.5), vec3(0.0, -1.0, 0.0), 6.0, vec3(0.0, 1.0, 0.0)),
-            (vec3(4.5, 2.0, 10.0), vec3(0.0, 0.0, -1.0), 9.0, vec3(0.0, 0.0, 1.0)),
-            (vec3(-1.0, 2.0, 0.0), vec3(1.0, 0.0, 0.0), 4.0, vec3(-1.0, 0.0, 0.0)),
-            (vec3(8.0, 1.5, -0.5), vec3(-1.0, 0.0, 0.0), 3.0, vec3(1.0, 0.0, 0.0)),
+            (
+                vec3(4.0, -5.0, 0.0),
+                vec3(0.0, 1.0, 0.0),
+                6.0,
+                vec3(0.0, -1.0, 0.0),
+            ),
+            (
+                vec3(4.0, 9.0, 0.5),
+                vec3(0.0, -1.0, 0.0),
+                6.0,
+                vec3(0.0, 1.0, 0.0),
+            ),
+            (
+                vec3(4.5, 2.0, 10.0),
+                vec3(0.0, 0.0, -1.0),
+                9.0,
+                vec3(0.0, 0.0, 1.0),
+            ),
+            (
+                vec3(-1.0, 2.0, 0.0),
+                vec3(1.0, 0.0, 0.0),
+                4.0,
+                vec3(-1.0, 0.0, 0.0),
+            ),
+            (
+                vec3(8.0, 1.5, -0.5),
+                vec3(-1.0, 0.0, 0.0),
+                3.0,
+                vec3(1.0, 0.0, 0.0),
+            ),
         ];
         for (start, dir, t, normal) in cases {
-            let hit = off_center_box().raycast(&Ray::new(start, dir), 0.0..f32::INFINITY).unwrap();
+            let hit = off_center_box()
+                .raycast(&Ray::new(start, dir), 0.0..f32::INFINITY)
+                .unwrap();
             assert!((hit.t - t).abs() < 1e-5, "from {start:?}: t {}", hit.t);
-            assert!((hit.normal - normal).norm() < 1e-5, "from {start:?}: normal {:?}", hit.normal);
+            assert!(
+                (hit.normal - normal).norm() < 1e-5,
+                "from {start:?}: normal {:?}",
+                hit.normal
+            );
             assert!(hit.front_face);
         }
     }
@@ -370,7 +401,11 @@ mod tests {
                 "length {length} hit {:?}",
                 hit.point
             );
-            assert!((hit.t - expected.norm()).abs() < 1e-5, "length {length} t {}", hit.t);
+            assert!(
+                (hit.t - expected.norm()).abs() < 1e-5,
+                "length {length} t {}",
+                hit.t
+            );
         }
     }
 

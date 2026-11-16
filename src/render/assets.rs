@@ -8,11 +8,11 @@ use std::{
 
 use crate::{
     error::Error,
-    font::{Atlas, Font, FontRasterizer},
     geometry::aabb::AABB,
     mesh::{MeshData, MeshShape},
     opengl::{create_program, Primitive, Program, RawMesh, Texture},
     registry::{Handle, Registry},
+    render::text::{Atlas, Font, FontRasterizer},
 };
 
 /// The font text uses until another is picked

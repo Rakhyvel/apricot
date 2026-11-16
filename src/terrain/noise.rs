@@ -111,7 +111,8 @@ mod tests {
     #[test]
     fn each_octave_is_twice_as_fine_and_half_as_strong() {
         let (x, y) = (5.3, -1.7);
-        let layers = octave(x, y, 4) + 0.5 * octave(2.0 * x, 2.0 * y, 4)
+        let layers = octave(x, y, 4)
+            + 0.5 * octave(2.0 * x, 2.0 * y, 4)
             + 0.25 * octave(4.0 * x, 4.0 * y, 4);
         // Each layer's corners go up to 255, so this keeps the total under 1
         let expected = layers / (256.0 + 128.0 + 64.0);

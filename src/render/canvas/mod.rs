@@ -81,28 +81,28 @@ impl Queue2d {
         });
     }
 
-    fn copy_texture(
+    fn draw_texture(
         &self,
-        dest: Rectangle,
         texture_id: TextureId,
-        texture_dest: Rectangle,
+        dest: Rectangle,
+        source: Rectangle,
         color_mod: Vec4,
     ) {
-        self.push(DrawCommand::CopyTexture {
-            dest,
+        self.push(DrawCommand::DrawTexture {
             texture_id,
-            texture_dest,
+            dest,
+            source,
             color_mod,
         });
     }
 
-    fn draw_poly(&self, center: Vec2, sides: u32, radius: f32, rotation: f32, color: Vec4) {
+    fn fill_poly(&self, center: Vec2, sides: u32, radius: f32, rotation: f32, color: Vec4) {
         let shape = PolygonShape::ngon(sides, 0.0);
         self.fill_polygon(shape, center, vec2(radius, radius), rotation, color);
     }
 
     fn fill_circle(&self, center: Vec2, radius: f32, color: Vec4) {
-        self.draw_poly(center, CIRCLE_SIDES, radius, 0.0, color);
+        self.fill_poly(center, CIRCLE_SIDES, radius, 0.0, color);
     }
 
     fn draw_line(&self, a: Vec2, b: Vec2, thickness: f32, color: Vec4) {
@@ -117,7 +117,7 @@ impl Queue2d {
         );
     }
 
-    fn draw_poly_lines(
+    fn draw_poly(
         &self,
         center: Vec2,
         sides: u32,
@@ -131,7 +131,7 @@ impl Queue2d {
         self.fill_polygon(shape, center, vec2(radius, radius), rotation, color);
     }
 
-    fn draw_ring(&self, center: Vec2, inner_radius: f32, outer_radius: f32, color: Vec4) {
+    fn fill_ring(&self, center: Vec2, inner_radius: f32, outer_radius: f32, color: Vec4) {
         let inner = (inner_radius / outer_radius).clamp(0.0, 1.0);
         let shape = PolygonShape::ngon(CIRCLE_SIDES, inner);
         self.fill_polygon(shape, center, vec2(outer_radius, outer_radius), 0.0, color);
@@ -181,7 +181,7 @@ impl Queue2d {
                 pos: pos + offset,
                 size: source.size,
             };
-            self.copy_texture(dest, font.cache_texture, source, color);
+            self.draw_texture(font.cache_texture, dest, source, color);
         });
     }
 
@@ -260,23 +260,26 @@ impl RenderContext {
         self.queue_2d.set_layer(layer);
     }
 
-    pub fn copy_texture(
+    /// Draws the part of a texture inside `source`, in the texture's pixels, stretched over `dest`.
+    /// `color_mod` is multiplied with the texture's colors
+    pub fn draw_texture(
         &self,
-        dest: Rectangle,
         texture_id: TextureId,
-        texture_dest: Rectangle,
+        dest: Rectangle,
+        source: Rectangle,
         color_mod: Vec4,
     ) {
-        drop(self.assets.textures.require(texture_id, "copy_texture"));
+        drop(self.assets.textures.require(texture_id, "draw_texture"));
         self.queue_2d
-            .copy_texture(dest, texture_id, texture_dest, color_mod);
+            .draw_texture(texture_id, dest, source, color_mod);
     }
 
     pub fn fill_rect(&self, dest: Rectangle, color: Vec4) {
         self.queue_2d.fill_rect(dest, color);
     }
 
-    pub fn fill_polygon(
+    /// Fills a mesh of your own, stretched to `radius` pixels and turned by `rotation`
+    pub fn fill_mesh(
         &self,
         mesh_id: MeshId,
         center: Vec2,
@@ -284,7 +287,7 @@ impl RenderContext {
         rotation: f32,
         color: Vec4,
     ) {
-        drop(self.assets.meshes.require(mesh_id, "fill_polygon"));
+        drop(self.assets.meshes.require(mesh_id, "fill_mesh"));
         self.queue_2d.fill_polygon(
             PolygonShape::Mesh(mesh_id),
             center,
@@ -295,9 +298,9 @@ impl RenderContext {
     }
 
     /// Filled regular polygon. `rotation` 0 puts the first vertex at +X.
-    pub fn draw_poly(&self, center: Vec2, sides: u32, radius: f32, rotation: f32, color: Vec4) {
+    pub fn fill_poly(&self, center: Vec2, sides: u32, radius: f32, rotation: f32, color: Vec4) {
         self.queue_2d
-            .draw_poly(center, sides, radius, rotation, color);
+            .fill_poly(center, sides, radius, rotation, color);
     }
 
     /// Draws a filled circle
@@ -311,7 +314,7 @@ impl RenderContext {
     }
 
     /// Draws the outline of a polygon. `thickness` grows inward from `radius`
-    pub fn draw_poly_lines(
+    pub fn draw_poly(
         &self,
         center: Vec2,
         sides: u32,
@@ -321,13 +324,13 @@ impl RenderContext {
         color: Vec4,
     ) {
         self.queue_2d
-            .draw_poly_lines(center, sides, radius, rotation, thickness, color);
+            .draw_poly(center, sides, radius, rotation, thickness, color);
     }
 
     /// Circular ring between two radii
-    pub fn draw_ring(&self, center: Vec2, inner_radius: f32, outer_radius: f32, color: Vec4) {
+    pub fn fill_ring(&self, center: Vec2, inner_radius: f32, outer_radius: f32, color: Vec4) {
         self.queue_2d
-            .draw_ring(center, inner_radius, outer_radius, color);
+            .fill_ring(center, inner_radius, outer_radius, color);
     }
 
     /// Push a rectangle to the clip stack
@@ -597,13 +600,13 @@ mod tests {
         );
 
         let texture = Handle::for_tests(5);
-        queue.copy_texture(rect_at(1.0), texture, rect_at(2.0), RED);
+        queue.draw_texture(texture, rect_at(1.0), rect_at(2.0), RED);
         assert_eq!(
             only_command(&queue),
-            DrawCommand::CopyTexture {
-                dest: rect_at(1.0),
+            DrawCommand::DrawTexture {
                 texture_id: texture,
-                texture_dest: rect_at(2.0),
+                dest: rect_at(1.0),
+                source: rect_at(2.0),
                 color_mod: RED,
             }
         );
@@ -620,10 +623,10 @@ mod tests {
             let x = (byte - 32) as f32 * 8.0;
             Rectangle::new(x, 0.0, 8.0, 16.0)
         };
-        let copy = |x: f32, y: f32, byte: u8| DrawCommand::CopyTexture {
-            dest: Rectangle::new(x, y, 8.0, 16.0),
+        let copy = |x: f32, y: f32, byte: u8| DrawCommand::DrawTexture {
             texture_id: texture,
-            texture_dest: glyph(byte),
+            dest: Rectangle::new(x, y, 8.0, 16.0),
+            source: glyph(byte),
             color_mod: RED,
         };
         let commands: Vec<DrawCommand> =
@@ -687,9 +690,9 @@ mod tests {
         let ngon = |sides, inner_key| PolygonShape::Ngon { sides, inner_key };
         let queue = queue();
 
-        queue.draw_poly(center, 6, 10.0, 0.5, RED);
+        queue.fill_poly(center, 6, 10.0, 0.5, RED);
         assert_eq!(only_command(&queue), polygon(ngon(6, 0), 10.0, 0.5));
-        queue.draw_poly(center, 1, 10.0, 0.0, RED);
+        queue.fill_poly(center, 1, 10.0, 0.0, RED);
         assert_eq!(only_command(&queue), polygon(ngon(3, 0), 10.0, 0.0));
         queue.fill_circle(center, 7.0, RED);
         assert_eq!(
@@ -698,17 +701,17 @@ mod tests {
         );
 
         // Half way in, then so far in it is clamped to the edge
-        queue.draw_ring(center, 5.0, 10.0, RED);
+        queue.fill_ring(center, 5.0, 10.0, RED);
         let half = polygon(ngon(CIRCLE_SIDES, 512), 10.0, 0.0);
         assert_eq!(only_command(&queue), half);
-        queue.draw_ring(center, 20.0, 10.0, RED);
+        queue.fill_ring(center, 20.0, 10.0, RED);
         let full = polygon(ngon(CIRCLE_SIDES, 1024), 10.0, 0.0);
         assert_eq!(only_command(&queue), full);
 
         // Outlines grow inward from the radius
-        queue.draw_poly_lines(center, 5, 10.0, 0.25, 2.0, RED);
+        queue.draw_poly(center, 5, 10.0, 0.25, 2.0, RED);
         assert_eq!(only_command(&queue), polygon(ngon(5, 819), 10.0, 0.25));
-        queue.draw_poly_lines(center, 5, 10.0, 0.0, 12.0, RED);
+        queue.draw_poly(center, 5, 10.0, 0.0, 12.0, RED);
         assert_eq!(only_command(&queue), polygon(ngon(5, 0), 10.0, 0.0));
     }
 }

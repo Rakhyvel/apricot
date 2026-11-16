@@ -47,7 +47,7 @@ fn nine_slice_pieces(
 impl Queue2d {
     fn nine_slice(&self, nine_slice: NineSlice, texture_size: Vec2, dest: Rectangle, tint: Vec4) {
         for (dest, src) in nine_slice_pieces(texture_size, nine_slice.border, dest) {
-            self.copy_texture(dest, nine_slice.texture, src, tint);
+            self.draw_texture(nine_slice.texture, dest, src, tint);
         }
     }
 }
@@ -56,11 +56,11 @@ impl RenderContext {
     /// Draws a nine-slice texture stretched over `dest`. The corners stay their real size, the
     /// edges stretch one way, and the middle stretches both ways. If `dest` is too small to fit
     /// two borders, the corners shrink to fit
-    pub fn render_nine_slice(&self, nine_slice: NineSlice, dest: Rectangle, tint: Vec4) {
+    pub fn draw_nine_slice(&self, nine_slice: NineSlice, dest: Rectangle, tint: Vec4) {
         let texture = self
             .assets
             .textures
-            .require(nine_slice.texture, "render_nine_slice");
+            .require(nine_slice.texture, "draw_nine_slice");
         let (w, h) = texture.get_dimensions().expect("texture has no dimensions");
         self.queue_2d
             .nine_slice(nine_slice, vec2(w as f32, h as f32), dest, tint);
@@ -171,10 +171,10 @@ mod tests {
             queue.take_draws().into_iter().map(|d| d.command).collect();
         let expected: Vec<DrawCommand> = nine_slice_pieces(vec2(20.0, 20.0), 5.0, dest)
             .into_iter()
-            .map(|(dest, src)| DrawCommand::CopyTexture {
+            .map(|(dest, src)| DrawCommand::DrawTexture {
                 dest,
                 texture_id: texture,
-                texture_dest: src,
+                source: src,
                 color_mod: TINT,
             })
             .collect();

@@ -104,55 +104,51 @@ impl Scene for Shapes {
                 })),
             ),
             (
-                "draw_poly (3)",
-                Some(Box::new(|c| r.draw_poly(c, 3, size, spin, pink))),
+                "fill_poly (3)",
+                Some(Box::new(|c| r.fill_poly(c, 3, size, spin, pink))),
             ),
             (
-                "draw_poly (6)",
-                Some(Box::new(|c| r.draw_poly(c, 6, size, -spin, yellow))),
+                "fill_poly (6)",
+                Some(Box::new(|c| r.fill_poly(c, 6, size, -spin, yellow))),
             ),
             (
-                "draw_poly_lines",
-                Some(Box::new(|c| {
-                    r.draw_poly_lines(c, 5, size, spin, 4.0, violet)
-                })),
+                "draw_poly",
+                Some(Box::new(|c| r.draw_poly(c, 5, size, spin, 4.0, violet))),
             ),
             (
-                "draw_poly_lines (pulse)",
+                "draw_poly (pulse)",
                 Some(Box::new(|c| {
                     let thickness = 1.0 + (size - 1.0) * pulse;
-                    r.draw_poly_lines(c, 8, size, -spin * 0.5, thickness, orange)
+                    r.draw_poly(c, 8, size, -spin * 0.5, thickness, orange)
                 })),
             ),
             (
-                "draw_ring",
+                "fill_ring",
                 Some(Box::new(|c| {
-                    r.draw_ring(c, size * (0.3 + 0.6 * pulse), size, teal)
+                    r.fill_ring(c, size * (0.3 + 0.6 * pulse), size, teal)
                 })),
             ),
             (
-                "fill_polygon (custom mesh)",
-                Some(Box::new(|c| {
-                    r.fill_polygon(self.star, c, size, spin, yellow)
-                })),
+                "fill_mesh (custom mesh)",
+                Some(Box::new(|c| r.fill_mesh(self.star, c, size, spin, yellow))),
             ),
             (
-                "copy_texture (tinted)",
+                "draw_texture (tinted)",
                 Some(Box::new(|c| {
-                    r.copy_texture(
-                        Rectangle::new(c.x - size, c.y - size, size * 2.0, size * 2.0),
+                    r.draw_texture(
                         self.checker,
+                        Rectangle::new(c.x - size, c.y - size, size * 2.0, size * 2.0),
                         Rectangle::new(0.0, 0.0, 8.0, 8.0),
                         vec4(1.0, 0.5 + 0.5 * pulse, 1.0 - 0.5 * pulse, 1.0),
                     )
                 })),
             ),
             (
-                "render_nine_slice",
+                "draw_nine_slice",
                 Some(Box::new(|c| {
                     // Shrinks below two borders wide, to show the corners clamping
                     let w = size * 2.0 * (0.15 + 0.85 * pulse);
-                    r.render_nine_slice(
+                    r.draw_nine_slice(
                         NineSlice {
                             texture: self.frame,
                             border: FRAME_BORDER as f32,
@@ -214,14 +210,14 @@ impl Scene for Shapes {
                         size * 2.0,
                         size * 1.2,
                     ));
-                    r.draw_poly(c, 4, size * 1.0, spin, teal);
+                    r.fill_poly(c, 4, size * 1.0, spin, teal);
                     r.push_clip(Rectangle::new(
                         c.x - size * 0.4,
                         c.y - size,
                         size * 0.8,
                         size * 2.0,
                     ));
-                    r.draw_poly(c, 3, size * 1.5, -spin, pink);
+                    r.fill_poly(c, 3, size * 1.5, -spin, pink);
                     r.pop_clip();
                     r.pop_clip();
                 })),

@@ -56,10 +56,11 @@ pub(super) enum DrawCommand {
         rotation: f32,
         color: Vec4,
     },
-    CopyTexture {
-        dest: Rectangle,
+    DrawTexture {
         texture_id: TextureId,
-        texture_dest: Rectangle,
+        dest: Rectangle,
+        /// The part of the texture to draw, in the texture's pixels
+        source: Rectangle,
         color_mod: Vec4,
     },
 }

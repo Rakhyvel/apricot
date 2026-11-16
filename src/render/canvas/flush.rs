@@ -42,11 +42,11 @@ impl RenderContext {
         quad_model(rect)
     }
 
-    fn copy_texture_immediate(
+    fn draw_texture_immediate(
         &self,
-        dest: Rectangle,
         texture_id: TextureId,
-        texture_dest: Rectangle,
+        dest: Rectangle,
+        source: Rectangle,
         color_mod: Vec4,
     ) {
         let model_matrix = self.rect_model_matrix(dest);
@@ -57,11 +57,8 @@ impl RenderContext {
             .require(texture_id, "flush_2d_queue")
             .get_dimensions()
             .expect("texture has no dimensions");
-        let sprite_offset = vec2(texture_dest.pos.x / w as f32, texture_dest.pos.y / h as f32);
-        let sprite_size = vec2(
-            texture_dest.size.x / w as f32,
-            texture_dest.size.y / h as f32,
-        );
+        let sprite_offset = vec2(source.pos.x / w as f32, source.pos.y / h as f32);
+        let sprite_size = vec2(source.size.x / w as f32, source.size.y / h as f32);
 
         self.draw_2d(
             self.builtins.quad,
@@ -134,12 +131,12 @@ impl RenderContext {
                     let mesh_id = self.polygon_mesh(shape);
                     self.fill_polygon_immediate(center, scale, mesh_id, rotation, color)
                 }
-                DrawCommand::CopyTexture {
-                    dest,
+                DrawCommand::DrawTexture {
                     texture_id,
-                    texture_dest,
+                    dest,
+                    source,
                     color_mod,
-                } => self.copy_texture_immediate(dest, texture_id, texture_dest, color_mod),
+                } => self.draw_texture_immediate(texture_id, dest, source, color_mod),
             }
         }
 

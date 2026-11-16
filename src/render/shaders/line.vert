@@ -5,7 +5,7 @@ layout(location = 0) in vec3 a_pos;
 uniform mat4 u_proj_matrix;
 uniform mat4 u_view_matrix;
 uniform mat4 u_model_matrix;
-uniform float u_seam; // 0.0 to 1.0, fraction along the orbit where the craft is
+uniform float u_seam; // 0.0 to 1.0, fraction along the path where the fade starts
 uniform int u_num_vertices;
 uniform int u_fade;
 

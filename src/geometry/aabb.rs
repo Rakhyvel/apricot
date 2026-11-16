@@ -34,7 +34,7 @@ impl AABB {
         Self { min, max }
     }
 
-    /// Create an AABB from an iterator of points. This is slow!
+    /// The smallest AABB around all of `points`
     pub fn from_points(points: impl IntoIterator<Item = nalgebra_glm::Vec3>) -> Self {
         let mut retval = AABB::empty();
         retval.expand_to_fit(points);
@@ -137,7 +137,7 @@ impl AABB {
         }
     }
 
-    /// Expands an AABB to fit all points in some iterator of points. This is __slow__!
+    /// Grows this AABB just enough to hold all of `points`
     pub fn expand_to_fit(&mut self, points: impl IntoIterator<Item = nalgebra_glm::Vec3>) {
         for corner in points.into_iter() {
             self.min = nalgebra_glm::min2(&self.min, &corner);
@@ -194,7 +194,7 @@ impl AABB {
             && self.max.z >= point.z
     }
 
-    /// Produces the corners of an AABB. This is _SLOW_!
+    /// The 8 corners of this AABB
     pub fn corners(&self) -> [nalgebra_glm::Vec3; 8] {
         [
             nalgebra_glm::Vec3::new(self.min.x, self.min.y, self.min.z),

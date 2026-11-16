@@ -79,12 +79,7 @@ impl GlyphTable {
     }
 
     fn get_glyph(&self, char: u8) -> Option<Glyph> {
-        let glyph_idx = glyph_idx_from_byte(char)?;
-        if glyph_idx as usize >= self.glyphs.len() {
-            None
-        } else {
-            Some(self.glyphs[glyph_idx])
-        }
+        self.glyphs.get(glyph_idx_from_byte(char)?).copied()
     }
 }
 
@@ -96,6 +91,16 @@ pub(crate) struct Atlas {
 }
 
 impl Atlas {
+    /// Rasterize `font` in `style`
+    fn styled(
+        mut font: sdl2::ttf::Font,
+        name: &str,
+        style: sdl2::ttf::FontStyle,
+    ) -> Result<Self, Error> {
+        font.set_style(style);
+        Self::new(&font, name)
+    }
+
     fn new(font: &sdl2::ttf::Font, name: &str) -> Result<Self, Error> {
         let height = font.height() as usize;
         let (image, glyphs) = pack_glyphs(font, height, name)?;
@@ -226,12 +231,11 @@ impl FontRasterizer {
         size: u16,
         style: sdl2::ttf::FontStyle,
     ) -> Result<Atlas, Error> {
-        let mut ttf_font = self
+        let ttf_font = self
             .ttf_context
             .load_font(path.as_ref(), size)
             .map_err(|msg| font_error(name, msg))?;
-        ttf_font.set_style(style);
-        Atlas::new(&ttf_font, name)
+        Atlas::styled(ttf_font, name, style)
     }
 
     /// Rasterize a .ttf or .otf font from its bytes at `size`
@@ -243,12 +247,11 @@ impl FontRasterizer {
         style: sdl2::ttf::FontStyle,
     ) -> Result<Atlas, Error> {
         let rwops = sdl2::rwops::RWops::from_bytes(bytes).map_err(|msg| font_error(name, msg))?;
-        let mut ttf_font = self
+        let ttf_font = self
             .ttf_context
             .load_font_from_rwops(rwops, size)
             .map_err(|msg| font_error(name, msg))?;
-        ttf_font.set_style(style);
-        Atlas::new(&ttf_font, name)
+        Atlas::styled(ttf_font, name, style)
     }
 }
 
@@ -307,6 +310,15 @@ mod tests {
         );
         // Rows with no padding come back unchanged
         assert_eq!(pack_rows(&padded[..16], 2, 2, 8), &padded[..16]);
+    }
+
+    #[test]
+    fn every_printable_ascii_byte_has_a_glyph_and_nothing_else_does() {
+        let table = test_table();
+        for byte in 0..=255u8 {
+            let printable = (32..127).contains(&byte);
+            assert_eq!(table.get_glyph(byte).is_some(), printable, "byte {byte}");
+        }
     }
 
     #[test]

@@ -1,5 +1,4 @@
-//! Loading and playing sound effects
-//! TODO: Some kinda synth stuff like DOS games stuff or midi
+//! Loading and playing sound effects, and streaming sound a `Synth` makes
 
 use std::{cell::RefCell, path::Path};
 
@@ -46,24 +45,27 @@ impl Audio {
     /// Load and decode a sound file, like a .wav or .ogg
     pub fn load_sound(&self, path: impl AsRef<Path>) -> Result<SoundId, Error> {
         let path = path.as_ref();
-        let chunk = match self.mixer {
-            Some(_) => Some(Chunk::from_file(path).map_err(|msg| Error::Sound {
+        self.add_sound(|| {
+            Chunk::from_file(path).map_err(|msg| Error::Sound {
                 path: path.into(),
                 msg,
-            })?),
-            None => None,
-        };
-        Ok(self.sounds.borrow_mut().add(Sound(chunk), None))
+            })
+        })
     }
 
     /// Decode a sound from the bytes of a sound file
     pub fn load_sound_from_bytes(&self, bytes: &[u8]) -> Result<SoundId, Error> {
+        self.add_sound(|| {
+            RWops::from_bytes(bytes)
+                .and_then(|rw| rw.load_wav())
+                .map_err(Error::SoundBytes)
+        })
+    }
+
+    /// Add the sound `decode` makes. With no audio device it isn't called, and the sound is empty
+    fn add_sound(&self, decode: impl FnOnce() -> Result<Chunk, Error>) -> Result<SoundId, Error> {
         let chunk = match self.mixer {
-            Some(_) => Some(
-                RWops::from_bytes(bytes)
-                    .and_then(|rw| rw.load_wav())
-                    .map_err(Error::SoundBytes)?,
-            ),
+            Some(_) => Some(decode()?),
             None => None,
         };
         Ok(self.sounds.borrow_mut().add(Sound(chunk), None))

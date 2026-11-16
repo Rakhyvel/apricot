@@ -13,7 +13,7 @@ use apricot::{
     model_set::{Model, ModelSet},
     render::assets::{MeshId, TextureId},
     render::lighting::DirectionalLight,
-    render::lines::{LinePath, LineStyle},
+    render::lines::{LineFade, LinePath, LineStyle},
 };
 use nalgebra_glm::{vec2, vec3, vec4, Mat4};
 
@@ -147,7 +147,9 @@ impl Scene for Models {
             .draw_outlines(renderer, vec4(1.0, 1.0, 1.0, 1.0));
 
         // A trail circling the grid, just above the floor
-        self.ring.style.seam = (self.angle * 0.2).fract();
+        self.ring.style.fade = LineFade::Trail {
+            seam: (self.angle * 0.2).fract(),
+        };
         renderer.draw_line_path(
             &self.ring,
             nalgebra_glm::translation(&vec3(0.0, -0.98, 0.0)),

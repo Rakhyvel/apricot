@@ -166,14 +166,10 @@ impl App {
         self.running.set(false);
     }
 
-    /// Is the mouse over `r`? Anything clipped away by `push_clip` doesn't count
+    /// Is the mouse over `r`? Anything clipped away by `push_clip` doesn't count, but clips only
+    /// exist while a frame is being drawn, so call it from `render` for rectangles inside one
     pub fn mouse_over(&self, r: &Rectangle) -> bool {
-        let pos = self.input.mouse_pos;
-        r.contains_point(&pos)
-            && self
-                .renderer
-                .current_clip()
-                .is_none_or(|c| c.contains_point(&pos))
+        self.renderer.hit_test(r, self.input.mouse_pos)
     }
 
     fn poll_events(&mut self, events: &mut EventPump) {

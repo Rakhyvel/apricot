@@ -201,6 +201,13 @@ impl Queue2d {
         self.clips.borrow().current()
     }
 
+    fn hit_test(&self, rect: &Rectangle, pos: Vec2) -> bool {
+        rect.contains_point(&pos)
+            && self
+                .current_clip()
+                .is_none_or(|clip| clip.contains_point(&pos))
+    }
+
     /// Everything recorded since the last frame, lowest layer first
     fn take_draws(&self) -> Vec<Queued> {
         let mut draws = std::mem::take(&mut *self.draws.borrow_mut());
@@ -345,6 +352,12 @@ impl RenderContext {
         self.queue_2d.current_clip()
     }
 
+    /// Is `pos` over `rect`, and not clipped away by `push_clip`? Clips only exist while a frame
+    /// is being drawn, so outside of drawing there's nothing to clip it
+    pub fn hit_test(&self, rect: &Rectangle, pos: Vec2) -> bool {
+        self.queue_2d.hit_test(rect, pos)
+    }
+
     pub fn draw_rect(&self, rect: Rectangle, thickness: f32, color: Vec4) {
         self.queue_2d.draw_rect(rect, thickness, color);
     }
@@ -440,6 +453,72 @@ mod tests {
         assert!(!clips.end_frame(), "the unpopped clip gets reported");
         assert!(clips.current().is_none(), "the next frame starts unclipped");
         assert!(clips.end_frame());
+    }
+
+    #[test]
+    fn a_point_hits_a_rect_it_is_in_and_misses_one_it_isnt() {
+        let queue = queue();
+        let rect = Rectangle::new(10.0, 20.0, 100.0, 50.0);
+        assert!(
+            queue.hit_test(&rect, vec2(10.0, 20.0)),
+            "the top left counts"
+        );
+        assert!(queue.hit_test(&rect, vec2(60.0, 45.0)));
+        assert!(
+            !queue.hit_test(&rect, vec2(110.0, 45.0)),
+            "the right edge doesn't"
+        );
+        assert!(
+            !queue.hit_test(&rect, vec2(60.0, 70.0)),
+            "the bottom edge doesn't"
+        );
+        assert!(!queue.hit_test(&rect, vec2(5.0, 45.0)));
+    }
+
+    #[test]
+    fn a_point_clipped_away_misses_even_inside_the_rect() {
+        let queue = queue();
+        let rect = Rectangle::new(0.0, 0.0, 100.0, 100.0);
+        let (inside, outside) = (vec2(30.0, 30.0), vec2(80.0, 80.0));
+        assert!(queue.hit_test(&rect, outside), "nothing is clipped yet");
+
+        queue.push_clip(Rectangle::new(0.0, 0.0, 50.0, 50.0));
+        assert!(queue.hit_test(&rect, inside));
+        assert!(
+            !queue.hit_test(&rect, outside),
+            "the rect is there, but clipped away"
+        );
+        assert!(
+            !queue.hit_test(&rect, vec2(50.0, 30.0)),
+            "the clip's far edge doesn't count"
+        );
+
+        // The clip has to let the point through too, not only the rect
+        let elsewhere = Rectangle::new(60.0, 60.0, 30.0, 30.0);
+        assert!(!queue.hit_test(&elsewhere, vec2(70.0, 70.0)));
+
+        queue.pop_clip();
+        assert!(
+            queue.hit_test(&rect, outside),
+            "popping it lets everything through again"
+        );
+    }
+
+    #[test]
+    fn nested_clips_only_let_through_where_they_overlap() {
+        let queue = queue();
+        let rect = Rectangle::new(0.0, 0.0, 200.0, 200.0);
+        queue.push_clip(Rectangle::new(0.0, 0.0, 100.0, 100.0));
+        queue.push_clip(Rectangle::new(50.0, 50.0, 100.0, 100.0));
+        assert!(queue.hit_test(&rect, vec2(75.0, 75.0)));
+        assert!(
+            !queue.hit_test(&rect, vec2(25.0, 25.0)),
+            "only in the outer clip"
+        );
+        assert!(
+            !queue.hit_test(&rect, vec2(125.0, 125.0)),
+            "only in the inner clip"
+        );
     }
 
     #[test]

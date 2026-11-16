@@ -1,4 +1,4 @@
-//! Endless perlin noise terrain you can fly around, built a chunk at a time as you get near it,
+//! Endless noise terrain you can fly around, built a chunk at a time as you get near it,
 //! with trees scattered over the flatter grassy parts.
 //! WASD  - fly around
 //! Space - go up
@@ -130,7 +130,7 @@ impl Terrain {
         let white = renderer.builtins.white_texture;
         for (i, p) in spots.into_iter().enumerate() {
             // A little size variety, so it doesn't look like a tree farm
-            let scale = 0.8 + 0.6 * noise::perlin(p.x, p.y, 0.7, 1, SEED + 1);
+            let scale = 0.8 + 0.6 * noise::value_noise(p.x, p.y, 0.7, 1, SEED + 1);
             let base = vec3(p.x, surface_height(ground, p.x, p.y), p.y);
 
             let trunk = nalgebra_glm::scale(
@@ -235,7 +235,7 @@ impl Scene for Terrain {
 /// How high the ground is at a world position, from `WATER_LEVEL` at the lakes to a bit past 1 on
 /// the tallest peaks. Noise at world coordinates means neighboring chunks always line up
 fn height(x: f32, z: f32) -> f32 {
-    let n = noise::perlin(x, z, 0.02, 6, SEED);
+    let n = noise::value_noise(x, z, 0.02, 6, SEED);
     // Most noise lands near the middle, so stretch it out, then flatten the low parts into lakes.
     // No cap on top, or the peaks get sliced flat
     ((n - 0.35) / 0.8).max(WATER_LEVEL)

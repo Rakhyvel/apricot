@@ -18,7 +18,7 @@ static HASH: [u8; 256] = [
 
 /// Smooth 2D noise at (`x`, `y`), between 0 and 1. Lower `frequency` makes bigger, gentler
 /// hills, and each extra octave adds finer detail on top.
-pub fn perlin(x: f32, y: f32, frequency: f32, octaves: u32, seed: u64) -> f32 {
+pub fn value_noise(x: f32, y: f32, frequency: f32, octaves: u32, seed: u64) -> f32 {
     if octaves == 0 {
         return 0.0;
     }
@@ -77,9 +77,9 @@ mod tests {
     fn perlin_stays_in_range_and_repeats() {
         for i in -50..50 {
             let (x, y) = (i as f32 * 3.7, i as f32 * -1.3);
-            let n = perlin(x, y, 0.05, 6, 7);
-            assert!((0.0..=1.0).contains(&n), "perlin({x}, {y}) = {n}");
-            assert_eq!(n, perlin(x, y, 0.05, 6, 7));
+            let n = value_noise(x, y, 0.05, 6, 7);
+            assert!((0.0..=1.0).contains(&n), "value_noise({x}, {y}) = {n}");
+            assert_eq!(n, value_noise(x, y, 0.05, 6, 7));
         }
     }
 
@@ -87,7 +87,7 @@ mod tests {
     fn perlin_uses_most_of_the_range() {
         for octaves in [1, 3] {
             let samples: Vec<f32> = (0..2000)
-                .map(|i| perlin(i as f32 * 0.37, i as f32 * 0.11, 1.0, octaves, 2))
+                .map(|i| value_noise(i as f32 * 0.37, i as f32 * 0.11, 1.0, octaves, 2))
                 .collect();
             let max = samples.iter().copied().fold(0.0, f32::max);
             let min = samples.iter().copied().fold(1.0, f32::min);
@@ -98,14 +98,14 @@ mod tests {
 
     #[test]
     fn no_octaves_is_flat() {
-        assert_eq!(perlin(3.0, 4.0, 1.0, 0, 1), 0.0);
+        assert_eq!(value_noise(3.0, 4.0, 1.0, 0, 1), 0.0);
     }
 
     #[test]
     fn frequency_scales_the_coordinates() {
         for (x, y) in [(1.3, -2.7), (40.0, 12.5), (-8.2, -0.4)] {
-            let scaled = perlin(x * 0.3, y * 0.3, 1.0, 4, 9);
-            assert_eq!(perlin(x, y, 0.3, 4, 9), scaled, "at ({x}, {y})");
+            let scaled = value_noise(x * 0.3, y * 0.3, 1.0, 4, 9);
+            assert_eq!(value_noise(x, y, 0.3, 4, 9), scaled, "at ({x}, {y})");
         }
     }
 
@@ -117,7 +117,7 @@ mod tests {
             + 0.25 * octave(4.0 * x, 4.0 * y, 4);
         // Each layer's corners go up to 255, so this keeps the total under 1
         let expected = layers / (256.0 + 128.0 + 64.0);
-        assert!((perlin(x, y, 1.0, 3, 4) - expected).abs() < 1e-6);
+        assert!((value_noise(x, y, 1.0, 3, 4) - expected).abs() < 1e-6);
     }
 
     #[test]
@@ -134,7 +134,7 @@ mod tests {
     #[test]
     fn a_seed_can_be_any_u64() {
         for seed in [0, 1, u64::from(u32::MAX), u64::MAX] {
-            let n = perlin(3.3, -4.4, 0.1, 3, seed);
+            let n = value_noise(3.3, -4.4, 0.1, 3, seed);
             assert!((0.0..=1.0).contains(&n), "seed {seed} gave {n}");
         }
     }
@@ -151,8 +151,8 @@ mod tests {
     fn perlin_is_smooth_across_zero() {
         // Neighbors on either side of the origin should be close, not mirrored jumps
         let step = 0.01;
-        let left = perlin(-step, 0.5, 1.0, 1, 3);
-        let right = perlin(step, 0.5, 1.0, 1, 3);
+        let left = value_noise(-step, 0.5, 1.0, 1, 3);
+        let right = value_noise(step, 0.5, 1.0, 1, 3);
         assert!((left - right).abs() < 0.01, "{left} vs {right}");
     }
 }

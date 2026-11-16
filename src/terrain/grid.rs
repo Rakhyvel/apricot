@@ -31,7 +31,7 @@ impl HeightGrid {
         }
     }
 
-    /// A grid filled with `noise::perlin`, scaled by `amplitude`. `offset` moves where in the
+    /// A grid filled with `noise::value_noise`, scaled by `amplitude`. `offset` moves where in the
     /// noise it samples from
     pub fn from_noise(
         width: usize,
@@ -44,7 +44,7 @@ impl HeightGrid {
         let mut grid = Self::new(width);
         for z in 0..width {
             for x in 0..width {
-                let n = noise::perlin(
+                let n = noise::value_noise(
                     x as f32 + offset.x,
                     z as f32 + offset.y,
                     frequency,
@@ -237,7 +237,7 @@ mod tests {
         for z in 0..6 {
             for x in 0..6 {
                 let expected =
-                    noise::perlin(x as f32 + offset.x, z as f32 + offset.y, 0.2, 3, 7) * 2.5;
+                    noise::value_noise(x as f32 + offset.x, z as f32 + offset.y, 0.2, 3, 7) * 2.5;
                 assert_eq!(grid.height(x, z), expected, "at ({x}, {z})");
             }
         }

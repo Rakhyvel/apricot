@@ -242,15 +242,14 @@ impl RenderContext {
 
     pub fn get_current_font(&self) -> std::cell::Ref<'_, Font> {
         self.get_font_from_id(self.get_current_font_id())
-            .expect("the default font was unloaded")
     }
 
     pub fn draw_text(&self, pos: Vec2, text: &str, color: Vec4) {
         let font = self.get_current_font();
-        assert!(
-            self.get_texture_from_id(font.cache_texture).is_some(),
-            "draw_text: {:?} isn't a loaded texture",
-            font.cache_texture
+        drop(
+            self.assets
+                .textures
+                .require(font.cache_texture, "draw_text"),
         );
         self.queue_2d.draw_text(&font, pos, text, color);
     }
@@ -268,10 +267,7 @@ impl RenderContext {
         texture_dest: Rectangle,
         color_mod: &Vec4,
     ) {
-        assert!(
-            self.get_texture_from_id(texture_id).is_some(),
-            "copy_texture: {texture_id:?} isn't a loaded texture"
-        );
+        drop(self.assets.textures.require(texture_id, "copy_texture"));
         self.queue_2d
             .copy_texture(dest, texture_id, texture_dest, *color_mod);
     }
@@ -288,10 +284,7 @@ impl RenderContext {
         rotation: f32,
         color: Vec4,
     ) {
-        assert!(
-            self.get_mesh_from_id(mesh_id).is_some(),
-            "fill_polygon: {mesh_id:?} isn't a loaded mesh"
-        );
+        drop(self.assets.meshes.require(mesh_id, "fill_polygon"));
         self.queue_2d.fill_polygon(
             PolygonShape::Mesh(mesh_id),
             center,

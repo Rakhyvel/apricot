@@ -244,8 +244,9 @@ impl ShadowPass<'_> {
     pub fn draw(&self, mesh_id: MeshId, model: Mat4) {
         let mesh = self
             .renderer
-            .get_mesh_from_id(mesh_id)
-            .expect("invalid MeshId");
+            .assets
+            .meshes
+            .require(mesh_id, "ShadowPass::draw");
         self.renderer
             .draw(self.program, &mesh, model, &self.view_proj)
     }

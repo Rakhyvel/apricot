@@ -73,7 +73,11 @@ impl Audio {
     /// is already busy
     pub fn play_sound(&self, sound: SoundId, volume: f32) {
         let sounds = self.sounds.borrow();
-        let Some(chunk) = &sounds.get(sound).expect("invalid SoundId").0 else {
+        let Some(chunk) = &sounds
+            .get(sound)
+            .unwrap_or_else(|| panic!("play_sound: {sound:?} isn't loaded"))
+            .0
+        else {
             return;
         };
         if let Ok(channel) = mixer::Channel::all().play(chunk, 0) {

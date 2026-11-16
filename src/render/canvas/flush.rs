@@ -23,9 +23,7 @@ impl RenderContext {
         color: Vec4,
     ) {
         let program = self.builtins.program_2d;
-        let texture = self
-            .get_texture_from_id(texture_id)
-            .expect("invalid TextureId");
+        let texture = self.assets.textures.require(texture_id, "flush_2d_queue");
         texture.activate(0);
         self.uniform(program, "u_texture").set_i32(0);
         self.uniform(program, "u_sprite_offset")
@@ -34,7 +32,7 @@ impl RenderContext {
             .set_vec2(&sprite_size);
         self.uniform(program, "u_color").set_vec4(&color);
 
-        let mesh = self.get_mesh_from_id(mesh_id).expect("invalid MeshId");
+        let mesh = self.assets.meshes.require(mesh_id, "flush_2d_queue");
         self.draw(program, &mesh, model, &pixel_view_proj(self.screen_size()));
     }
 
@@ -54,8 +52,9 @@ impl RenderContext {
         let model_matrix = self.rect_model_matrix(dest);
 
         let (w, h) = self
-            .get_texture_from_id(texture_id)
-            .expect("invalid TextureId")
+            .assets
+            .textures
+            .require(texture_id, "flush_2d_queue")
             .get_dimensions()
             .expect("texture has no dimensions");
         let sprite_offset = vec2(texture_dest.pos.x / w as f32, texture_dest.pos.y / h as f32);

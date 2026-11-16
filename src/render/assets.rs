@@ -168,12 +168,33 @@ impl<T> Store<T> {
         self.registry.borrow_mut().remove(id)
     }
 
-    /// Put `item` where `id` points, giving back what was there. `None` if `id` isn't loaded
-    pub(crate) fn replace(&self, id: Handle<T>, item: T) -> Option<T> {
+    /// Take the asset out, giving it back. Panics if `id` isn't loaded, naming `op`
+    #[track_caller]
+    pub(crate) fn take(&self, id: Handle<T>, op: &str) -> T {
+        match self.remove(id) {
+            Some(item) => item,
+            None => not_loaded(op, id),
+        }
+    }
+
+    /// Put `item` where `id` points, giving back what was there. Panics if `id` isn't loaded,
+    /// naming `op`
+    #[track_caller]
+    pub(crate) fn replace(&self, id: Handle<T>, item: T, op: &str) -> T {
         let mut registry = self.registry.borrow_mut();
-        registry
-            .get_mut(id)
-            .map(|slot| std::mem::replace(slot, item))
+        match registry.get_mut(id) {
+            Some(slot) => std::mem::replace(slot, item),
+            None => not_loaded(op, id),
+        }
+    }
+
+    /// The asset `id` refers to. Panics if it isn't loaded, naming `op`
+    #[track_caller]
+    pub(crate) fn require(&self, id: Handle<T>, op: &str) -> Ref<'_, T> {
+        match self.get(id) {
+            Some(item) => item,
+            None => not_loaded(op, id),
+        }
     }
 
     /// The asset `id` refers to. `None` if it's been removed
@@ -199,6 +220,12 @@ impl<T> Store<T> {
             fallback
         }
     }
+}
+
+/// The panic for using a handle whose asset was unloaded, or that came from somewhere else
+#[track_caller]
+fn not_loaded<T>(op: &str, id: Handle<T>) -> ! {
+    panic!("{op}: {id:?} isn't loaded, it was unloaded or never existed")
 }
 
 /// Every asset the renderer holds
@@ -234,18 +261,12 @@ impl Assets {
     }
 
     pub(crate) fn replace_mesh_data(&self, id: MeshId, data: MeshData) {
-        let replaced = self.meshes.replace(id, Mesh::from_data(data));
-        assert!(
-            replaced.is_some(),
-            "replace_mesh_data: {id:?} isn't a loaded mesh"
-        );
+        self.meshes
+            .replace(id, Mesh::from_data(data), "replace_mesh_data");
     }
 
     pub(crate) fn mesh_aabb(&self, id: MeshId) -> AABB {
-        let mesh = self
-            .meshes
-            .get(id)
-            .unwrap_or_else(|| panic!("get_mesh_aabb: {id:?} isn't a loaded mesh"));
+        let mesh = self.meshes.require(id, "get_mesh_aabb");
         mesh.shape().aabb()
     }
 
@@ -256,10 +277,7 @@ impl Assets {
     }
 
     pub(crate) fn update_texture_rgba(&self, id: TextureId, w: u32, h: u32, bytes: &[u8]) {
-        let texture = self
-            .textures
-            .get(id)
-            .unwrap_or_else(|| panic!("update_texture_rgba: {id:?} isn't a loaded texture"));
+        let texture = self.textures.require(id, "update_texture_rgba");
         texture.set_pixels(w as i32, h as i32, bytes);
     }
 
@@ -327,11 +345,11 @@ impl Assets {
         id
     }
 
-    /// Free a font and its atlas texture. Does nothing if it isn't loaded
+    /// Free a font and its atlas texture
+    #[track_caller]
     pub(crate) fn unload_font(&self, id: FontId) {
-        if let Some(font) = self.fonts.remove(id) {
-            self.textures.remove(font.cache_texture);
-        }
+        let font = self.fonts.take(id, "unload_font");
+        self.textures.remove(font.cache_texture);
     }
 }
 
@@ -431,12 +449,44 @@ mod tests {
     fn replace_swaps_what_an_id_points_at_and_gives_back_the_old_one() {
         let store = Store::new();
         let id = named(&store, "old", "a");
-        assert_eq!(store.replace(id, "new".to_string()).as_deref(), Some("old"));
+        assert_eq!(store.replace(id, "new".to_string(), "test"), "old");
         assert_eq!(*store.get(id).unwrap(), "new");
         assert_eq!(*store.get_named("a").unwrap(), "new");
+    }
 
+    #[test]
+    fn require_and_take_work_on_a_live_id() {
+        let store = Store::new();
+        let id = named(&store, "apple", "a");
+        assert_eq!(*store.require(id, "test"), "apple");
+        assert_eq!(store.take(id, "test"), "apple");
+        assert!(store.get(id).is_none());
+    }
+
+    #[test]
+    #[should_panic(expected = "draw_mesh: Handle<String>(0) isn't loaded")]
+    fn requiring_a_dead_id_panics_naming_the_operation_and_the_handle() {
+        let store = Store::new();
+        let id = named(&store, "apple", "a");
         store.remove(id);
-        assert_eq!(store.replace(id, "late".to_string()), None);
-        assert!(store.get(id).is_none(), "a dead id stays dead");
+        let _ = store.require(id, "draw_mesh");
+    }
+
+    #[test]
+    #[should_panic(expected = "unload_mesh: Handle<String>(0) isn't loaded")]
+    fn taking_a_dead_id_panics() {
+        let store = Store::new();
+        let id = named(&store, "apple", "a");
+        store.remove(id);
+        store.take(id, "unload_mesh");
+    }
+
+    #[test]
+    #[should_panic(expected = "replace_mesh_data: Handle<String>(0) isn't loaded")]
+    fn replacing_a_dead_id_panics() {
+        let store = Store::new();
+        let id = named(&store, "apple", "a");
+        store.remove(id);
+        store.replace(id, "late".to_string(), "replace_mesh_data");
     }
 }

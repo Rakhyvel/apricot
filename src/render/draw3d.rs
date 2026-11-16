@@ -15,15 +15,11 @@ const OUTLINE_SCALE: f32 = 1.2;
 impl RenderContext {
     /// The uniform called `name` in `program`. Setting it works any time, whatever's being drawn
     pub fn uniform(&self, program: ProgramId, name: &str) -> Uniform {
-        self.get_program_from_id(program)
-            .expect("invalid ProgramId")
-            .uniform(name)
+        self.get_program_from_id(program).uniform(name)
     }
 
     fn bind(&self, program: ProgramId) {
-        self.get_program_from_id(program)
-            .expect("invalid ProgramId")
-            .bind();
+        self.get_program_from_id(program).bind();
     }
 
     pub fn clear(&self, color: Vec4) {
@@ -80,12 +76,13 @@ impl RenderContext {
         self.upload_light(program);
 
         let texture = self
-            .get_texture_from_id(texture_id)
-            .expect("invalid TextureId");
+            .assets
+            .textures
+            .require(texture_id, "draw_mesh_textured");
         texture.activate(0);
         self.uniform(program, "u_texture").set_i32(0);
 
-        let mesh = self.get_mesh_from_id(mesh_id).expect("invalid MeshId");
+        let mesh = self.assets.meshes.require(mesh_id, "draw_mesh_textured");
         self.draw(program, &mesh, model, &self.camera_view_proj());
         before.restore();
     }
@@ -149,8 +146,9 @@ impl OutlinePass<'_> {
     pub fn draw(&self, mesh_id: MeshId, model: Mat4) {
         let mesh = self
             .renderer
-            .get_mesh_from_id(mesh_id)
-            .expect("invalid MeshId");
+            .assets
+            .meshes
+            .require(mesh_id, "OutlinePass::draw");
         self.renderer.draw(
             self.program,
             &mesh,

@@ -137,14 +137,17 @@ impl RenderContext {
         self.assets.replace_mesh_data(id, data);
     }
 
-    /// Free a mesh. Its id stops working, so anything still drawing it will panic
+    /// Free a mesh. Its id stops working, so anything still drawing it will panic. Panics if
+    /// it was already unloaded
+    #[track_caller]
     pub fn unload_mesh(&self, id: MeshId) {
-        self.assets.meshes.remove(id);
+        self.assets.meshes.take(id, "unload_mesh");
     }
 
-    /// The mesh `id` refers to. `None` if it's been unloaded
-    pub fn get_mesh_from_id(&self, id: MeshId) -> Option<Ref<'_, Mesh>> {
-        self.assets.meshes.get(id)
+    /// The mesh `id` refers to. Panics if it's been unloaded
+    #[track_caller]
+    pub fn get_mesh_from_id(&self, id: MeshId) -> Ref<'_, Mesh> {
+        self.assets.meshes.require(id, "get_mesh_from_id")
     }
 
     /// The mesh added under `name`
@@ -186,14 +189,17 @@ impl RenderContext {
         self.assets.update_texture_rgba(id, w, h, bytes);
     }
 
-    /// Free a texture. Its id stops working, so anything still drawing it will panic
+    /// Free a texture. Its id stops working, so anything still drawing it will panic. Panics if
+    /// it was already unloaded
+    #[track_caller]
     pub fn unload_texture(&self, id: TextureId) {
-        self.assets.textures.remove(id);
+        self.assets.textures.take(id, "unload_texture");
     }
 
-    /// The texture `id` refers to. `None` if it's been unloaded
-    pub fn get_texture_from_id(&self, id: TextureId) -> Option<Ref<'_, Texture>> {
-        self.assets.textures.get(id)
+    /// The texture `id` refers to. Panics if it's been unloaded
+    #[track_caller]
+    pub fn get_texture_from_id(&self, id: TextureId) -> Ref<'_, Texture> {
+        self.assets.textures.require(id, "get_texture_from_id")
     }
 
     /// The texture added under `name`
@@ -222,9 +228,10 @@ impl RenderContext {
         self.assets.add_program_from_source(vert, frag, name)
     }
 
-    /// The program `id` refers to. `None` if it's been unloaded
-    pub fn get_program_from_id(&self, id: ProgramId) -> Option<Ref<'_, Program>> {
-        self.assets.programs.get(id)
+    /// The program `id` refers to. Panics if it's been unloaded
+    #[track_caller]
+    pub fn get_program_from_id(&self, id: ProgramId) -> Ref<'_, Program> {
+        self.assets.programs.require(id, "get_program_from_id")
     }
 
     /// The program added under `name`
@@ -259,14 +266,17 @@ impl RenderContext {
         self.assets.add_font_from_bytes(bytes, name, size, style)
     }
 
-    /// Free a font. If it was the current font, text goes back to the default font
+    /// Free a font. If it was the current font, text goes back to the default font. Panics if it
+    /// was already unloaded
+    #[track_caller]
     pub fn unload_font(&self, id: FontId) {
         self.assets.unload_font(id);
     }
 
-    /// The font `id` refers to. `None` if it's been unloaded
-    pub fn get_font_from_id(&self, id: FontId) -> Option<Ref<'_, Font>> {
-        self.assets.fonts.get(id)
+    /// The font `id` refers to. Panics if it's been unloaded
+    #[track_caller]
+    pub fn get_font_from_id(&self, id: FontId) -> Ref<'_, Font> {
+        self.assets.fonts.require(id, "get_font_from_id")
     }
 
     /// The id of the font added under `name`

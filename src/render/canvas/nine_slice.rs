@@ -58,13 +58,9 @@ impl RenderContext {
     /// two borders, the corners shrink to fit
     pub fn render_nine_slice(&self, nine_slice: NineSlice, dest: Rectangle, tint: Vec4) {
         let texture = self
-            .get_texture_from_id(nine_slice.texture)
-            .unwrap_or_else(|| {
-                panic!(
-                    "render_nine_slice: {:?} isn't a loaded texture",
-                    nine_slice.texture
-                )
-            });
+            .assets
+            .textures
+            .require(nine_slice.texture, "render_nine_slice");
         let (w, h) = texture.get_dimensions().expect("texture has no dimensions");
         self.queue_2d
             .nine_slice(nine_slice, vec2(w as f32, h as f32), dest, tint);

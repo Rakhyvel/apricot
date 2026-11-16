@@ -150,8 +150,9 @@ impl<K: Copy + Eq + Hash> ModelSet<K> {
     pub fn raycast(&self, renderer: &RenderContext, ray: &Ray) -> Option<(K, f32)> {
         self.raycast_with(ray, |mesh, transform| {
             renderer
-                .get_mesh_from_id(mesh)
-                .expect("invalid MeshId")
+                .assets
+                .meshes
+                .require(mesh, "ModelSet::raycast")
                 .shape()
                 .raycast(ray, transform)
         })

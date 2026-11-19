@@ -142,6 +142,7 @@ impl Scene for Models {
         renderer.shadow_pass(&mut self.light, |pass| self.models.draw_shadows(pass));
 
         renderer.clear(vec4(0.53, 0.81, 0.92, 1.0));
+        renderer.draw_sky(self.light.direction());
         self.models.draw(renderer);
         self.models
             .draw_outlines(renderer, vec4(1.0, 1.0, 1.0, 1.0));

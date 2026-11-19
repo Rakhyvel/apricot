@@ -55,7 +55,7 @@ impl SpinningCube {
         };
         renderer.set_camera(fly.camera());
 
-        let light = DirectionalLight::new(vec3(0.5, 1.0, 0.3), 2048)?;
+        let light = DirectionalLight::new(vec3(0.5, 0.1, 0.3), 2048)?;
         app.renderer.set_light(Some(&light));
 
         Ok(Self {
@@ -110,6 +110,9 @@ impl Scene for SpinningCube {
 
         // Render the cube and floor
         renderer.clear(vec4(0.53, 0.81, 0.92, 1.0));
+
+        renderer.draw_sky(self.light.direction());
+
         renderer.draw_mesh(renderer.builtins.cube, cube, vec4(1.0, 0.6, 0.25, 1.0));
         renderer.draw_mesh_textured(
             renderer.builtins.plane,

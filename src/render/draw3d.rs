@@ -61,6 +61,61 @@ impl RenderContext {
         self.draw_mesh_textured_with(mesh_id, texture_id, model, tint, &DrawOptions::default());
     }
 
+    /// Draw a mesh with a given `program` and using given `options`
+    pub fn draw_mesh_with_program(
+        &self,
+        program: ProgramId,
+        mesh_id: MeshId,
+        model: Mat4,
+        options: &DrawOptions,
+    ) {
+        let before = options.apply();
+        self.upload_light(program);
+        self.uniform(program, "u_camera_pos")
+            .set_vec3(&self.camera().position());
+        let mesh = self
+            .assets
+            .meshes
+            .require(mesh_id, "draw_mesh_with_program");
+        self.draw(program, &mesh, model, &self.camera_view_proj());
+        before.restore();
+    }
+
+    pub fn draw_sky(&self, sun_dir: Vec3) {
+        let program = self.builtins.program_sky;
+        self.bind(program);
+
+        self.uniform(program, "u_sun_dir").set_vec3(&sun_dir);
+
+        let cam = self.camera_view_proj();
+        let inv_view_proj = (cam.proj * cam.view).try_inverse().unwrap();
+
+        self.uniform(program, "u_inv_view_proj")
+            .set_mat4(&inv_view_proj);
+        self.uniform(program, "u_camera_pos")
+            .set_vec3(&self.camera.get().position());
+
+        let options = DrawOptions {
+            depth_test: false,
+            culling: false,
+            ..Default::default()
+        };
+
+        let before = options.apply();
+
+        let model_matrix = Mat4::identity();
+
+        let sky_view_proj = ViewProj {
+            view: Mat4::identity(),
+            proj: Mat4::identity(),
+        };
+
+        let mesh = self.assets.meshes.require(self.builtins.quad, "draw_sky");
+        self.draw(program, &mesh, model_matrix, &sky_view_proj);
+
+        before.restore();
+    }
+
     /// Draw `mesh_id` with a texture and custom GL `options`
     pub(crate) fn draw_mesh_textured_with(
         &self,
@@ -74,6 +129,8 @@ impl RenderContext {
         let program = self.builtins.program_3d;
         self.uniform(program, "u_color").set_vec4(&tint);
         self.upload_light(program);
+        self.uniform(program, "u_camera_pos")
+            .set_vec3(&self.camera().position());
 
         let texture = self
             .assets

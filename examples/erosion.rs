@@ -147,6 +147,7 @@ impl Scene for Erosion {
         renderer.shadow_pass(&mut self.light, |pass| pass.draw(self.mesh, terrain));
 
         renderer.clear(vec4(0.6, 0.8, 0.95, 1.0));
+        renderer.draw_sky(self.light.direction());
         renderer.draw_mesh_textured(self.mesh, self.texture, terrain, vec4(1.0, 1.0, 1.0, 1.0));
         // See-through, so drawn after the land
         renderer.draw_mesh(renderer.builtins.plane, sea, vec4(0.15, 0.4, 0.75, 0.7));

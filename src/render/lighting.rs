@@ -41,6 +41,10 @@ impl DirectionalLight {
     fn state(&self) -> LightState {
         self.frustum.state(self.has_shadows)
     }
+
+    pub fn direction(&self) -> Vec3 {
+        self.frustum.direction()
+    }
 }
 
 /// What the shaders need to know about a light, as of its last shadow pass

@@ -216,7 +216,8 @@ impl Scene for Terrain {
 
         renderer.shadow_pass(&mut self.light, |pass| self.models.draw_shadows(pass));
 
-        renderer.clear(vec4(0.6, 0.8, 0.95, 1.0));
+        renderer.clear(vec4(0.0, 0.0, 0.0, 1.0));
+        renderer.draw_sky(self.light.direction());
         self.models.draw(renderer);
 
         renderer.draw_text(

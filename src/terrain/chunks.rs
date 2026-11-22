@@ -68,9 +68,15 @@ impl ChunkGrid {
         })
     }
 
-    pub fn mesh_smooth(&self, chunk: ChunkCoord, height: impl Fn(f32, f32) -> f32) -> MeshData {
+    pub fn mesh_smooth(
+        &self,
+        chunk: ChunkCoord,
+        step: u32,
+        skirt: f32,
+        height: impl Fn(f32, f32) -> f32,
+    ) -> MeshData {
         let origin = self.origin(chunk);
-        super::mesh_smooth(self.chunk_cells, self.chunk_cells, |x, z| {
+        super::mesh_smooth(self.chunk_cells, self.chunk_cells, step, skirt, |x, z| {
             height(origin.x + x, origin.z + z)
         })
     }

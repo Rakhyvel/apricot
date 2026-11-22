@@ -88,34 +88,79 @@ pub fn mesh(cells_x: u32, cells_z: u32, height: impl Fn(f32, f32) -> f32) -> Mes
     data
 }
 
-/// Like `mesh()` but smooth
-pub fn mesh_smooth(cells_x: u32, cells_z: u32, height: impl Fn(f32, f32) -> f32) -> MeshData {
+/// Like `mesh()` but smooth, and supports LOD
+pub fn mesh_smooth(
+    cells_x: u32,
+    cells_z: u32,
+    step: u32,
+    skirt: f32,
+    height: impl Fn(f32, f32) -> f32,
+) -> MeshData {
+    assert!(
+        step > 0 && cells_x % step == 0 && cells_z % step == 0,
+        "step {step} has to divide {cells_x} x {cells_z}"
+    );
+    let (quads_x, quads_z) = (cells_x / step, cells_z / step);
+
+    let vertex = |x: u32, z: u32, drop: f32| {
+        let (fx, fz) = (x as f32, z as f32);
+        // Slope from the samples one cell away, not one step, so coarse terrain keeps its
+        // detailed lighting
+        let normal = vec3(
+            height(fx - 1.0, fz) - height(fx + 1.0, fz),
+            2.0,
+            height(fx, fz - 1.0) - height(fx, fz + 1.0),
+        )
+        .normalize();
+        // Texel centers, so each corner gets exactly its own texel
+        let uv = vec2(
+            (fx + 0.5) / (cells_x + 1) as f32,
+            (fz + 0.5) / (cells_z + 1) as f32,
+        );
+        Vertex::new(vec3(fx, height(fx, fz) - drop, fz), normal, uv)
+    };
+
     let mut data = MeshData::default();
-    for z in 0..=cells_z {
-        for x in 0..=cells_x {
-            let (fx, fz) = (x as f32, z as f32);
-            let normal = vec3(
-                height(fx - 1.0, fz) - height(fx + 1.0, fz),
-                2.0,
-                height(fx, fz - 1.0) - height(fx, fz + 1.0),
-            )
-            .normalize();
-            // Texel centers, so each corner gets exactly its own texel
-            let uv = vec2(
-                (fx + 0.5) / (cells_x + 1) as f32,
-                (fz + 0.5) / (cells_z + 1) as f32,
-            );
-            data.vertices
-                .push(Vertex::new(vec3(fx, height(fx, fz), fz), normal, uv));
+    for j in 0..=quads_z {
+        for i in 0..=quads_x {
+            data.vertices.push(vertex(i * step, j * step, 0.0));
         }
     }
-    let row = cells_x + 1;
-    for z in 0..cells_z {
-        for x in 0..cells_x {
-            let i = z * row + x;
+    let row = quads_x + 1;
+    for j in 0..quads_z {
+        for i in 0..quads_x {
+            let k = j * row + i;
             // Same winding as `mesh`
             data.indices
-                .extend_from_slice(&[i, i + row, i + 1, i + 1, i + row, i + row + 1]);
+                .extend_from_slice(&[k, k + row, k + 1, k + 1, k + row, k + row + 1]);
+        }
+    }
+
+    if skirt > 0.0 {
+        // Walk once around the edge
+        let mut ring = Vec::new();
+        ring.extend((0..quads_x).map(|i| (i, 0)));
+        ring.extend((0..quads_z).map(|j| (quads_x, j)));
+        ring.extend((1..=quads_x).rev().map(|i| (i, quads_z)));
+        ring.extend((1..=quads_z).rev().map(|j| (0, j)));
+
+        // A copy of each edge vertex, dropped down
+        let bottom = data.vertex_count() as u32;
+        for &(i, j) in &ring {
+            data.vertices.push(vertex(i * step, j * step, skirt));
+        }
+
+        // A strip from each edge segment down to its copy, both sides so culling doesn't hide it
+        let n = ring.len() as u32;
+        for a in 0..n {
+            let b = (a + 1) % n;
+            let top_a = ring[a as usize].1 * row + ring[a as usize].0;
+            let top_b = ring[b as usize].1 * row + ring[b as usize].0;
+            let (bot_a, bot_b) = (bottom + a, bottom + b);
+            data.indices
+                .extend_from_slice(&[top_a, bot_a, top_b, top_b, bot_a, bot_b]);
+            data.indices
+                .extend_from_slice(&[top_a, top_b, bot_a, top_b, bot_b, bot_a]);
         }
     }
     data
@@ -243,5 +288,32 @@ mod tests {
         check(&terrain);
         assert_eq!(terrain.indices.len(), 4 * 3 * 2 * 3);
         assert!(terrain.position(0).y.abs() < 1e-6); // corner (0, 0) sits at height(0, 0)
+    }
+
+    #[test]
+    fn coarse_mesh_vertices_sit_on_the_surface() {
+        let height = |x: f32, z: f32| (x * 0.7).sin() * 3.0 + z * 0.5;
+        let mesh = mesh_smooth(8, 8, 4, 0.0, height);
+        assert_eq!(mesh.vertex_count(), 9, "a 3 x 3 grid");
+        for v in &mesh.vertices {
+            let p = v.position;
+            assert!((p[1] - height(p[0], p[2])).abs() < 1e-5);
+        }
+    }
+
+    #[test]
+    fn skirt_hangs_below_every_edge_vertex() {
+        let mesh = mesh_smooth(8, 8, 4, 10.0, |_, _| 5.0);
+        let skirt: Vec<_> = mesh
+            .vertices
+            .iter()
+            .filter(|v| v.position[1] < 5.0)
+            .collect();
+        assert_eq!(
+            skirt.len(),
+            8,
+            "one under each of the 8 edge vertices of a 3 x 3 grid"
+        );
+        assert!(skirt.iter().all(|v| (v.position[1] + 5.0).abs() < 1e-5));
     }
 }

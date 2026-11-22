@@ -21,7 +21,7 @@ pub use texture::Texture;
 pub(crate) fn init(loader: impl FnMut(&'static str) -> *const std::ffi::c_void) {
     gl::load_with(loader);
     unsafe {
-        gl::DepthFunc(gl::LESS);
+        gl::DepthFunc(gl::LEQUAL);
         gl::CullFace(gl::BACK);
         gl::Enable(gl::MULTISAMPLE);
         gl::BlendFunc(gl::SRC_ALPHA, gl::ONE_MINUS_SRC_ALPHA);

@@ -32,7 +32,7 @@ impl Platform {
         gl_attr.set_context_version(3, 3);
         gl_attr.set_double_buffer(true);
         gl_attr.set_multisample_buffers(1);
-        gl_attr.set_multisample_samples(4);
+        gl_attr.set_multisample_samples(2);
         gl_attr.set_depth_size(24);
         gl_attr.set_stencil_size(8); // for model outlines
 

@@ -96,9 +96,9 @@ impl RenderContext {
             .set_vec3(&self.camera.get().position());
 
         let options = DrawOptions {
-            depth_test: false,
+            depth_write: false,
             culling: false,
-            ..Default::default()
+            ..Default::default() // depth test stays on, so only pixels nothing's drawn on get shaded
         };
 
         let before = options.apply();

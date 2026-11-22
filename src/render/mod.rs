@@ -20,7 +20,7 @@ use crate::{
     error::Error,
     geometry::{aabb::AABB, frustum::Frustum, ray::Ray},
     mesh::MeshData,
-    opengl::{Program, Texture},
+    opengl::{self, Program, Texture},
 };
 use assets::{Assets, Builtins, FontId, Mesh, MeshId, ProgramId, TextureId};
 use canvas::Queue2d;
@@ -183,6 +183,11 @@ impl RenderContext {
     /// Make a texture from tightly packed RGBA bytes, `w * h * 4` of them
     pub fn create_texture_rgba(&self, w: u32, h: u32, bytes: &[u8]) -> TextureId {
         self.assets.create_texture_rgba(w, h, bytes)
+    }
+
+    /// Bind `texture` to texture unit `unit` for every draw after this.
+    pub fn bind_texture_unit(&self, unit: u32, texture: TextureId) {
+        opengl::bind_texture_id(unit, self.get_texture_from_id(texture).id);
     }
 
     /// Replace a texture's pixels. Cheap to call every frame as long as the size stays the same

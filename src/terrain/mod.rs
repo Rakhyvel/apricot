@@ -104,12 +104,12 @@ pub fn mesh_smooth(
 
     let vertex = |x: u32, z: u32, drop: f32| {
         let (fx, fz) = (x as f32, z as f32);
-        // Slope from the samples one cell away, not one step, so coarse terrain keeps its
-        // detailed lighting
+        // Slope from neighbords one step away, so coarse tiles get smooth lighting
+        let s = step as f32;
         let normal = vec3(
-            height(fx - 1.0, fz) - height(fx + 1.0, fz),
-            2.0,
-            height(fx, fz - 1.0) - height(fx, fz + 1.0),
+            height(fx - s, fz) - height(fx + s, fz),
+            2.0 * s,
+            height(fx, fz - s) - height(fx, fz + s),
         )
         .normalize();
         // Texel centers, so each corner gets exactly its own texel

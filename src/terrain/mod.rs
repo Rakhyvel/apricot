@@ -88,6 +88,39 @@ pub fn mesh(cells_x: u32, cells_z: u32, height: impl Fn(f32, f32) -> f32) -> Mes
     data
 }
 
+/// Like `mesh()` but smooth
+pub fn mesh_smooth(cells_x: u32, cells_z: u32, height: impl Fn(f32, f32) -> f32) -> MeshData {
+    let mut data = MeshData::default();
+    for z in 0..=cells_z {
+        for x in 0..=cells_x {
+            let (fx, fz) = (x as f32, z as f32);
+            let normal = vec3(
+                height(fx - 1.0, fz) - height(fx + 1.0, fz),
+                2.0,
+                height(fx, fz - 1.0) - height(fx, fz + 1.0),
+            )
+            .normalize();
+            // Texel centers, so each corner gets exactly its own texel
+            let uv = vec2(
+                (fx + 0.5) / (cells_x + 1) as f32,
+                (fz + 0.5) / (cells_z + 1) as f32,
+            );
+            data.vertices
+                .push(Vertex::new(vec3(fx, height(fx, fz), fz), normal, uv));
+        }
+    }
+    let row = cells_x + 1;
+    for z in 0..cells_z {
+        for x in 0..cells_x {
+            let i = z * row + x;
+            // Same winding as `mesh`
+            data.indices
+                .extend_from_slice(&[i, i + row, i + 1, i + 1, i + row, i + row + 1]);
+        }
+    }
+    data
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

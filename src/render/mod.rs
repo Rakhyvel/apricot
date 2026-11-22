@@ -5,6 +5,7 @@ pub mod canvas;
 pub mod draw3d;
 pub mod lighting;
 pub mod lines;
+pub mod target;
 pub mod text;
 
 use std::{

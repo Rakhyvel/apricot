@@ -117,7 +117,7 @@ impl RenderContext {
     }
 
     /// Draw `mesh_id` with a texture and custom GL `options`
-    pub(crate) fn draw_mesh_textured_with(
+    pub fn draw_mesh_textured_with(
         &self,
         mesh_id: MeshId,
         texture_id: TextureId,

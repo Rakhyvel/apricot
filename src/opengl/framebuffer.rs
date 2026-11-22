@@ -63,6 +63,36 @@ impl Fbo {
             status => Err(Error::Framebuffer(status)),
         }
     }
+
+    /// Draw color into `color` and depth into `depth`. Fails if the GPU can't draw that way
+    pub fn attach_color_depth(&self, color: &Texture, depth: &Texture) -> Result<(), Error> {
+        self.bind();
+        let status = unsafe {
+            gl::FramebufferTexture2D(
+                gl::FRAMEBUFFER,
+                gl::COLOR_ATTACHMENT0,
+                gl::TEXTURE_2D,
+                color.id,
+                0,
+            );
+            gl::FramebufferTexture2D(
+                gl::FRAMEBUFFER,
+                gl::DEPTH_ATTACHMENT,
+                gl::TEXTURE_2D,
+                depth.id,
+                0,
+            );
+            gl::DrawBuffer(gl::COLOR_ATTACHMENT0);
+            gl::ReadBuffer(gl::COLOR_ATTACHMENT0);
+            gl::CheckFramebufferStatus(gl::FRAMEBUFFER)
+        };
+        check_gl();
+        self.unbind();
+        match status {
+            gl::FRAMEBUFFER_COMPLETE => Ok(()),
+            status => Err(Error::Framebuffer(status)),
+        }
+    }
 }
 
 impl Drop for Fbo {

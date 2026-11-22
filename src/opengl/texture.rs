@@ -144,6 +144,15 @@ impl Texture {
         self.width = width;
         self.height = height;
     }
+
+    /// Blend between pixels when sampling (true), or show them as hard squares (false)
+    pub fn set_smooth(&self, smooth: bool) {
+        self.bind();
+        set_sampler(
+            gl::CLAMP_TO_EDGE,
+            if smooth { gl::LINEAR } else { gl::NEAREST },
+        );
+    }
 }
 
 /// Set how the bound texture repeats past its edges and blends when scaled
